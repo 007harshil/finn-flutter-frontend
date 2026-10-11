@@ -1,0 +1,55 @@
+import '../../actions/action.dart';
+import '../../features/budgets/application/budget_actions.dart';
+import '../../features/categories/application/category_actions.dart';
+import '../../features/emergency_fund/application/emergency_actions.dart';
+import '../../features/goals/application/goal_actions.dart';
+import '../../features/loans/application/loan_actions.dart';
+import '../../features/net_worth/application/asset_actions.dart';
+import '../../features/pending/application/pending_actions.dart';
+import '../../features/settings/application/profile_actions.dart';
+import '../../features/subscriptions/application/subscription_actions.dart';
+import '../../features/transactions/application/transaction_actions.dart';
+
+/// Every registered operation. Add new actions here so future channels can
+/// discover them through `ActionRegistry`.
+final List<FinancialAction<ActionInput, Object?>> allActions = [
+  const CreateTransactionAction(),
+  const UpdateTransactionAction(),
+  const DeleteTransactionAction(),
+  const CreateCategoryAction(),
+  const UpdateCategoryAction(),
+  const ArchiveCategoryAction(),
+  const DeleteCategoryAction(),
+  const CreateBudgetAction(),
+  const UpdateBudgetAction(),
+  const SetBudgetPausedAction(),
+  const DeleteBudgetAction(),
+  const CreatePendingAction(),
+  const UpdatePendingAction(),
+  const SettlePendingAction(),
+  const CancelPendingAction(),
+  const DeletePendingAction(),
+  const CreateLoanAction(),
+  const UpdateLoanAction(),
+  const RecordLoanPaymentAction(),
+  const DeleteLoanAction(),
+  const CreateSubscriptionAction(),
+  const UpdateSubscriptionAction(),
+  const SetSubscriptionStatusAction(),
+  const MarkSubscriptionPaidAction(),
+  const SkipSubscriptionCycleAction(),
+  const DeleteSubscriptionAction(),
+  const CreateGoalAction(),
+  const UpdateGoalAction(),
+  const GoalMovementAction.contribute(),
+  const GoalMovementAction.withdraw(),
+  const ArchiveGoalAction(),
+  const DeleteGoalAction(),
+  const ConfigureEmergencyFundAction(),
+  const EmergencyFundMovementAction.contribute(),
+  const EmergencyFundMovementAction.withdraw(),
+  const CreateAssetAction(),
+  const UpdateAssetAction(),
+  const DeleteAssetAction(),
+  const UpdateProfileAction(),
+].cast<FinancialAction<ActionInput, Object?>>();
