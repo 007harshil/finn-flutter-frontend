@@ -271,13 +271,13 @@ class ExportService {
           final names = {for (final p in s.pending) p.id: p.counterparty};
           add('pending', const [
             'counterparty', 'direction', 'kind', 'purpose', 'original_amount', 'original_formatted', //
-            'outstanding', 'outstanding_formatted', 'created_date', 'due_date', 'status', 'id',
+            'outstanding', 'outstanding_formatted', 'created_date', 'days_open', 'status', 'id',
           ], [
             for (final p in s.pending)
               [
                 Csv.text(p.counterparty), p.direction.label, p.kind.label, Csv.text(p.purpose), amt(p.originalAmount),
                 fmt(p.originalAmount), amt(views[p.id]?.outstanding ?? Money.zero),
-                fmt(views[p.id]?.outstanding ?? Money.zero), d(p.createdDate), d(p.dueDate),
+                fmt(views[p.id]?.outstanding ?? Money.zero), d(p.createdDate), '${views[p.id]?.daysOpen ?? ''}',
                 views[p.id]?.status.label ?? '', p.id,
               ],
           ]);
@@ -556,10 +556,10 @@ class ExportService {
         body
           ..add(pw.SizedBox(height: 6))
           ..add(table(
-            ['With', 'Direction', 'Purpose', 'Due', 'Outstanding'],
+            ['With', 'Direction', 'Purpose', 'Waiting', 'Outstanding'],
             [
               for (final v in open)
-                [v.payment.counterparty, v.payment.direction.shortLabel, v.payment.purpose, d(v.payment.dueDate), rs(v.outstanding)],
+                [v.payment.counterparty, v.payment.direction.shortLabel, v.payment.purpose, '${v.daysOpen} days', rs(v.outstanding)],
             ],
             numeric: {4},
           ));

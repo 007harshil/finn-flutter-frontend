@@ -14,7 +14,7 @@ import 'home_common.dart';
 /// the detail lives one tap away on each module's own screen, which keeps
 /// Home quick to scan.
 ///
-/// Layout (order: loans, pending, emergency fund, goals, timeline):
+/// Layout (order: loans, pending, emergency fund, goals, timeline, insights):
 /// ```
 /// ┌────────┬───────┐
 /// │ Loans  │Pending│
@@ -22,7 +22,9 @@ import 'home_common.dart';
 /// │        │ Fund  │
 /// ├──────┬─┴───────┤
 /// │Goals │Timeline │
-/// └──────┴─────────┘
+/// ├──────┴─────────┤
+/// │ Insights  ▂▅▃▇ │
+/// └────────────────┘
 /// ```
 class QuickAccessGrid extends StatelessWidget {
   const QuickAccessGrid({super.key});
@@ -30,6 +32,7 @@ class QuickAccessGrid extends StatelessWidget {
   static const _gap = Space.x3;
   static const _shortHeight = 124.0;
   static const _wideHeight = 132.0;
+  static const _bannerHeight = 104.0;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +42,7 @@ class QuickAccessGrid extends StatelessWidget {
     final scale = (MediaQuery.textScalerOf(context).scale(16) / 16).clamp(1.0, 1.8);
     final short = _shortHeight * scale;
     final wide = _wideHeight * scale;
+    final banner = _bannerHeight * scale;
 
     final loans = _TileSpec(
       title: 'Loans & EMIs',
@@ -74,6 +78,14 @@ class QuickAccessGrid extends StatelessWidget {
       icon: LucideIcons.history,
       color: c.accentNetWorth,
       onTap: () => context.push(AppRoutes.timeline),
+    );
+    final insights = _TileSpec(
+      title: 'Insights',
+      hint: 'Patterns & trends',
+      icon: LucideIcons.chartColumnIncreasing,
+      color: c.accentAnalytics,
+      onTap: () => context.push(AppRoutes.analytics),
+      art: _InsightsArt(color: c.accentAnalytics, delay: 80.ms * 5),
     );
 
     return HomeSection(
@@ -122,6 +134,11 @@ class QuickAccessGrid extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: _gap),
+          SizedBox(
+            height: banner,
+            child: _QuickTile(spec: insights, index: 5, size: _TileSize.wide),
+          ),
         ],
       ),
     );
@@ -135,6 +152,7 @@ class _TileSpec {
     required this.icon,
     required this.color,
     required this.onTap,
+    this.art,
   });
 
   final String title;
@@ -142,6 +160,106 @@ class _TileSpec {
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
+
+  /// Illustration on the trailing side in place of the watermark icon.
+  final Widget? art;
+}
+
+/// A week of spending as bars that rise one after another, with a dashed
+/// average line and a trend line drawn across them: what Insights is about,
+/// without showing figures on Home.
+class _InsightsArt extends StatelessWidget {
+  const _InsightsArt({required this.color, required this.delay});
+
+  final Color color;
+  final Duration delay;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final reduce = context.reduceMotion;
+    Widget painter(double t) => CustomPaint(
+          painter: _InsightsArtPainter(
+            progress: t,
+            color: color,
+            faint: color.withValues(alpha: c.isDark ? 0.32 : 0.22),
+            line: c.textPrimary.withValues(alpha: 0.55),
+          ),
+        );
+    if (reduce) return ExcludeSemantics(child: painter(1));
+    return ExcludeSemantics(
+      child: Animate(
+        delay: delay + 250.ms,
+        effects: [CustomEffect(duration: 1100.ms, curve: Curves.easeOutCubic, builder: (_, t, _) => painter(t))],
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _InsightsArtPainter extends CustomPainter {
+  const _InsightsArtPainter({required this.progress, required this.color, required this.faint, required this.line});
+
+  final double progress;
+  final Color color;
+  final Color faint;
+  final Color line;
+
+  static const _bars = [0.42, 0.68, 0.36, 0.86, 0.55, 0.74, 0.5];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = _bars.length;
+    const gap = 6.0;
+    final w = (size.width - gap * (n - 1)) / n;
+    final tops = <Offset>[];
+    for (var i = 0; i < n; i++) {
+      // Each bar starts a little after the previous one.
+      final local = ((progress * (n + 2) - i) / 3).clamp(0.0, 1.0);
+      final h = size.height * _bars[i] * Curves.easeOutBack.transform(local);
+      final x = i * (w + gap);
+      final rect = RRect.fromRectAndCorners(
+        Rect.fromLTWH(x, size.height - h, w, h),
+        topLeft: const Radius.circular(4),
+        topRight: const Radius.circular(4),
+      );
+      canvas.drawRRect(rect, Paint()..color = i == 3 ? color : faint);
+      tops.add(Offset(x + w / 2, size.height - h));
+    }
+    // Dashed average line.
+    final avg = _bars.reduce((a, b) => a + b) / n;
+    final y = size.height * (1 - avg * progress.clamp(0.0, 1.0));
+    final dash = Paint()
+      ..color = line.withValues(alpha: 0.5)
+      ..strokeWidth = 1.2;
+    for (var x = 0.0; x < size.width * progress; x += 7) {
+      canvas.drawLine(Offset(x, y), Offset(x + 3.5, y), dash);
+    }
+    // Trend line traced through the bar tops.
+    if (progress > 0.35) {
+      final path = Path()..moveTo(tops.first.dx, tops.first.dy);
+      for (final p in tops.skip(1)) {
+        path.lineTo(p.dx, p.dy);
+      }
+      final reveal = ((progress - 0.35) / 0.65).clamp(0.0, 1.0);
+      for (final m in path.computeMetrics()) {
+        canvas.drawPath(
+          m.extractPath(0, m.length * reveal),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..color = color,
+        );
+      }
+      if (reveal >= 1) canvas.drawCircle(tops.last, 3.5, Paint()..color = color);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_InsightsArtPainter old) =>
+      old.progress != progress || old.color != color || old.faint != faint || old.line != line;
 }
 
 enum _TileSize { regular, tall, wide }
@@ -191,6 +309,14 @@ class _QuickTileState extends State<_QuickTile> {
         borderRadius: Radii.rXxl,
         child: Stack(
           children: [
+            if (s.art != null)
+              PositionedDirectional(
+                end: Space.x3 + 30,
+                top: Space.x4,
+                bottom: Space.x3,
+                child: AspectRatio(aspectRatio: 1.9, child: s.art),
+              )
+            else
             // Oversized, faint icon bleeding off the corner for texture.
             PositionedDirectional(
               end: -watermark * 0.22,

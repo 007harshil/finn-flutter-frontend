@@ -24,7 +24,7 @@ enum AlertGroup {
 
   static AlertGroup of(AlertType t) => switch (t) {
     AlertType.emiDue || AlertType.emiOverdue => loans,
-    AlertType.pendingOverdue || AlertType.collectDue => payments,
+    AlertType.pendingOwed || AlertType.collectOwed => payments,
     AlertType.subscriptionRenewal || AlertType.subscriptionOverdue => subscriptions,
     AlertType.budgetNearLimit || AlertType.budgetBreached || AlertType.monthlyDeficit => spending,
     AlertType.emergencyFundLow ||

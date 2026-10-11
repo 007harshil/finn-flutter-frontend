@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import '../../../core/money/money.dart';
 import '../../../core/time/dates.dart';
 import '../../transactions/domain/transaction.dart';
+import 'shared_pending.dart';
+
+export 'shared_pending.dart';
 
 enum PendingDirection {
   /// The user has to pay someone.
@@ -41,10 +44,10 @@ class PendingPayment {
     required this.createdDate,
     required this.createdAt,
     required this.updatedAt,
-    this.dueDate,
     this.notes,
     this.isCancelled = false,
     this.version = 1,
+    this.link,
   });
 
   final String id;
@@ -56,7 +59,6 @@ class PendingPayment {
   /// Short description, e.g. "Goa trip hotel share".
   final String purpose;
   final DateTime createdDate;
-  final DateTime? dueDate;
   final String? notes;
 
   /// Written off / no longer expected. Outstanding becomes zero.
@@ -65,17 +67,23 @@ class PendingPayment {
   final DateTime updatedAt;
   final int version;
 
+  /// Set when the counterparty is a FiNN user and the item is shared
+  /// with them (double entry). Null for private items.
+  final PendingLink? link;
+
+  bool get isShared => link != null;
+
   PendingPayment copyWith({
     String? counterparty,
     PendingKind? kind,
     Money? originalAmount,
     String? purpose,
     DateTime? createdDate,
-    DateTime? Function()? dueDate,
     String? Function()? notes,
     bool? isCancelled,
     DateTime? updatedAt,
     int? version,
+    PendingLink? Function()? link,
   }) =>
       PendingPayment(
         id: id,
@@ -85,12 +93,12 @@ class PendingPayment {
         originalAmount: originalAmount ?? this.originalAmount,
         purpose: purpose ?? this.purpose,
         createdDate: createdDate ?? this.createdDate,
-        dueDate: dueDate != null ? dueDate() : this.dueDate,
         notes: notes != null ? notes() : this.notes,
         isCancelled: isCancelled ?? this.isCancelled,
         createdAt: createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         version: version ?? this.version,
+        link: link != null ? link() : this.link,
       );
 
   @override
@@ -172,12 +180,15 @@ class PendingView {
     return PendingStatus.open;
   }
 
-  bool get isOverdue =>
-      status.isActive && payment.dueDate != null && payment.dueDate!.dateOnly.isBefore(today);
-
-  int? get daysUntilDue => payment.dueDate == null ? null : daysBetween(today, payment.dueDate!);
-
+  /// Days since the obligation began. Pending items have no deadline;
+  /// age alone tells the user whom to ask (or pay) first.
   int get daysOpen => daysBetween(payment.createdDate, today);
+
+  /// Most recent settlement, if any.
+  DateTime? get lastPaymentOn => settlements.isEmpty ? null : settlements.first.date;
+
+  /// Days since the last settlement; null when nothing was settled yet.
+  int? get daysSinceLastPayment => lastPaymentOn == null ? null : daysBetween(lastPaymentOn!, today);
 
   /// Days an item stays open before it is gently surfaced as long pending.
   static const longPendingDays = 21;

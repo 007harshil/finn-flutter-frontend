@@ -125,7 +125,12 @@ void main() {
       final v = await item('Concert tickets');
       await env.pumpWidget(tester, PendingDetailScreen(id: v.payment.id));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Creating this did not change your balance'), findsOneWidget);
+      expect(find.text('You have not paid Rahul Verma back yet. 24 days have passed.'), findsOneWidget);
+      expect(find.text('Settle · I paid Rahul Verma'), findsOneWidget);
+      final note = find.textContaining('Creating this did not change your balance');
+      await tester.scrollUntilVisible(note, 300, scrollable: find.byType(Scrollable).first);
+      expect(note, findsOneWidget);
+      expect(find.text('₹2,000 left'), findsOneWidget, reason: 'remaining after the settlement');
       expect(tester.takeException(), isNull);
 
       await env.pumpWidget(tester, SettlePendingSheet(pendingId: v.payment.id));

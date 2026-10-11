@@ -72,19 +72,19 @@ void main() {
   group('pending', () {
     test('items open over 21 days are informative, never late, and show the days passed', () {
       final s = snapshotOf(pending: [
-        pendingPayment(id: 'owe', counterparty: 'Ramesh', created: d(2026, 8, 31), due: d(2026, 9, 5)),
+        pendingPayment(id: 'owe', counterparty: 'Ramesh', created: d(2026, 8, 31)),
         pendingPayment(id: 'collect', direction: PendingDirection.owedToMe, created: d(2026, 9, 1)),
       ]);
       final byKey = {for (final a in alertsFor(s)) a.key: a};
       final owe = byKey['pending_aged:owe']!;
-      expect(owe.type, AlertType.pendingOverdue);
+      expect(owe.type, AlertType.pendingOwed);
       expect(owe.severity, AlertSeverity.info);
       expect(owe.title, 'You owe Ramesh ₹5,000');
-      expect(owe.message, contains('pending for 40 days'));
+      expect(owe.message, contains('40 days have passed'));
       expect(owe.dueDate, isNull);
       expect((owe.visual! as AgedVisual).daysOpen, 40);
       expect((owe.visual! as AgedVisual).outgoing, isTrue);
-      expect(byKey['pending_aged:collect']!.type, AlertType.collectDue);
+      expect(byKey['pending_aged:collect']!.type, AlertType.collectOwed);
       expect(byKey['pending_aged:collect']!.severity, AlertSeverity.info);
     });
 
@@ -97,18 +97,18 @@ void main() {
 
     test('the alert amount is the outstanding balance after partial settlements', () {
       final s = snapshotOf(
-        pending: [pendingPayment(id: 'p', amount: 5000, due: d(2026, 10, 1))],
+        pending: [pendingPayment(id: 'p', amount: 5000)],
         settlements: [settlement('p', 2000, d(2026, 9, 15))],
       );
       expect(alertsFor(s).single.amount, rs(3000));
     });
 
-    test('recent, settled and cancelled obligations raise nothing, whatever the due date', () {
+    test('recent, settled and cancelled obligations raise nothing, however old they are', () {
       final s = snapshotOf(
         pending: [
-          pendingPayment(id: 'recent', created: d(2026, 9, 25), due: d(2026, 10, 1)),
-          pendingPayment(id: 'done', due: d(2026, 10, 1)),
-          pendingPayment(id: 'x', due: d(2026, 10, 1), cancelled: true),
+          pendingPayment(id: 'recent', created: d(2026, 9, 25)),
+          pendingPayment(id: 'done'),
+          pendingPayment(id: 'x', cancelled: true),
         ],
         settlements: [settlement('done', 5000, d(2026, 9, 30))],
       );
@@ -260,7 +260,7 @@ void main() {
           emiLoan(id: 'c', start: d(2026, 9, 1), firstDue: d(2026, 10, 12)),
         ]),
         pending: o([
-          pendingPayment(id: 'p1', due: d(2026, 10, 3)),
+          pendingPayment(id: 'p1'),
           pendingPayment(id: 'p2', direction: PendingDirection.owedToMe, created: d(2026, 7, 1)),
         ]),
         subscriptions: o([subscription(id: 's1', nextDue: d(2026, 10, 11))]),

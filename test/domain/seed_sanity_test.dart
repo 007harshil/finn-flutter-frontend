@@ -17,6 +17,7 @@ void main() {
       loanPayments: store.loanPayments, subscriptions: store.subscriptions, pending: store.pending,
       settlements: store.settlements, assets: store.assets, profile: store.profile,
       emergencyPlan: store.emergencyPlan, alertInbox: store.alertInbox,
+        users: store.users, sharedLedger: store.sharedLedger,
     );
     final s = await repos.loadSnapshot(clock, monthStartDay: 1);
     final b = s.balance;

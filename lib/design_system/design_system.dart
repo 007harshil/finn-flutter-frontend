@@ -4,6 +4,7 @@ library;
 export 'components/amount_text.dart';
 export 'components/buttons.dart';
 export 'components/cards.dart';
+export 'components/chips.dart';
 export 'components/display.dart';
 export 'components/feedback_states.dart';
 export 'components/inputs.dart';

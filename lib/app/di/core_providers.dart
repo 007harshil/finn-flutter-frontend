@@ -63,6 +63,8 @@ final financeRepositoriesProvider = Provider<FinanceRepositories>((ref) {
     profile: store.profile,
     emergencyPlan: store.emergencyPlan,
     alertInbox: store.alertInbox,
+    users: store.users,
+    sharedLedger: store.sharedLedger,
   );
 });
 

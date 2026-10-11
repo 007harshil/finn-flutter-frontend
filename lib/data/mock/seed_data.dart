@@ -15,6 +15,7 @@ import '../../features/settings/domain/financial_profile.dart';
 import '../../features/subscriptions/domain/subscription.dart';
 import '../../features/transactions/domain/transaction.dart';
 import '../local/local_data_store.dart';
+import 'finn_users.dart';
 
 /// Ids of seeded standard categories (stable so tests can reference them).
 abstract final class SeedCategoryIds {
@@ -56,6 +57,9 @@ class SeedData {
   List<Subscription> subscriptions = [];
   List<PendingPayment> pending = [];
   List<PendingSettlement> settlements = [];
+
+  /// Other people's side of shared pending items (mock network).
+  List<MirrorEntry> mirrors = [];
   List<Asset> assets = [];
   FinancialProfile? profile;
   EmergencyFundPlan? emergencyPlan;
@@ -397,18 +401,26 @@ class _Builder {
   }
 
   void _pending() {
-    PendingPayment p(String who, PendingDirection dir, PendingKind kind, int rupees, String purpose, int createdAgo, {int? dueIn, String? notes}) {
+    PendingPayment p(String who, PendingDirection dir, PendingKind kind, int rupees, String purpose, int createdAgo, {String? notes, String? userId, bool createdByMe = true}) {
       final created = today.subtract(Duration(days: createdAgo));
+      final id = _id('pend');
       final item = PendingPayment(
-        id: _id('pend'),
+        id: id,
         counterparty: who,
         direction: dir,
         kind: kind,
         originalAmount: Money.rupees(rupees),
         purpose: purpose,
         createdDate: created,
-        dueDate: dueIn == null ? null : today.add(Duration(days: dueIn)),
         notes: notes,
+        link: userId == null
+            ? null
+            : PendingLink(
+                userId: userId,
+                handle: mockFinnUsers.firstWhere((u) => u.id == userId).handle,
+                sharedId: 'shr_$id',
+                createdByMe: createdByMe,
+              ),
         createdAt: created,
         updatedAt: created,
       );
@@ -441,19 +453,29 @@ class _Builder {
       ));
     }
 
-    p('Priya Nair', PendingDirection.owedToMe, PendingKind.sharedExpense, 6500, 'Goa trip hotel share', 20, dueIn: -5,
+    // Priya, Ananya and Rahul use FiNN: those items are shared (double entry).
+    // Rahul added the concert item himself, so only he can edit it.
+    p('Priya Nair', PendingDirection.owedToMe, PendingKind.sharedExpense, 6500, 'Goa trip hotel share', 20,
+        userId: 'u_priya',
         notes: 'Paid the full booking at Taj Fort Aguada');
-    final rahul = p('Rahul Verma', PendingDirection.iOwe, PendingKind.borrowed, 3200, 'Concert tickets', 24, dueIn: 6);
+    final rahul = p('Rahul Verma', PendingDirection.iOwe, PendingKind.borrowed, 3200, 'Concert tickets', 24,
+        userId: 'u_rahul', createdByMe: false);
     settle(rahul, 1200, 14);
     p('Neha Kapoor', PendingDirection.owedToMe, PendingKind.reimbursement, 850, 'Office lunch', 35);
-    final vikram = p('Vikram Rao', PendingDirection.iOwe, PendingKind.sharedExpense, 1450, 'Flat electricity split', 40, dueIn: -30);
+    final vikram = p('Vikram Rao', PendingDirection.iOwe, PendingKind.sharedExpense, 1450, 'Flat electricity split', 40);
     settle(vikram, 1450, 31);
-    final ananya = p('Ananya Iyer', PendingDirection.owedToMe, PendingKind.lent, 5000, 'Emergency cash', 50, dueIn: 10);
+    final ananya = p('Ananya Iyer', PendingDirection.owedToMe, PendingKind.lent, 5000, 'Emergency cash', 50,
+        userId: 'u_ananya');
     settle(ananya, 2000, 18);
     p('Rahul Verma', PendingDirection.iOwe, PendingKind.sharedExpense, 780, 'Cab to airport', 9);
     if (stressed) {
-      p('Society Office', PendingDirection.iOwe, PendingKind.other, 12000, 'Maintenance arrears', 70, dueIn: -40);
+      p('Society Office', PendingDirection.iOwe, PendingKind.other, 12000, 'Maintenance arrears', 70);
     }
+    final me = mockMe(s.profile?.displayName);
+    s.mirrors = [
+      for (final item in s.pending.where((x) => x.link != null))
+        mirrorOf(item, s.settlements.where((x) => x.pendingId == item.id).toList()..sort((a, b) => b.date.compareTo(a.date)), me: me),
+    ];
   }
 
   void _goals() {

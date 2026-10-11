@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -14,10 +16,11 @@ import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
 import '../../../features/transactions/domain/transaction.dart';
-import '../../../shared/presentation/category_icons.dart';
 import '../../../shared/presentation/transaction_row.dart';
 import '../../categories/domain/category.dart';
 import '../application/transaction_filter.dart';
+import 'widgets/activity_filter_sheet.dart';
+import 'widgets/activity_pulse.dart';
 
 /// Rows rendered per page of the client-side pagination.
 const int _pageSize = 60;
@@ -124,17 +127,9 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     if (picked != null) _filter.setSort(picked);
   }
 
-  Future<void> _pickCategories() async {
-    final filter = ref.read(transactionFilterProvider);
-    final cats = ref.read(categoriesByIdProvider).value ?? const <String, TransactionCategory>{};
-    final picked = await showFinnSheet<Set<String>>(
-      context,
-      builder: (_) => _CategoryFilterSheet(
-        categories: cats.values.where((c) => filter.type == null || c.type == filter.type).toList(),
-        selected: filter.categoryIds,
-      ),
-    );
-    if (picked != null) _filter.setCategories(picked);
+  Future<void> _openFilters() async {
+    final picked = await showActivityFilterSheet(context, ref.read(transactionFilterProvider));
+    if (picked != null && mounted) _filter.applyAdvanced(picked);
   }
 
   @override
@@ -167,7 +162,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       side: side,
                       search: _search,
                       onPickRange: _pickRange,
-                      onPickCategories: _pickCategories,
+                      onOpenFilters: _openFilters,
                     ),
                   ),
                   ..._content(context, feedValue, side),
@@ -223,17 +218,13 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
       final refined = filter.hasRefinements;
       return [
         SliverPadding(
-          padding: pad(Space.x3),
-          sliver: SliverToBoxAdapter(child: _SelectedCategoriesBar(filter: filter)),
-        ),
-        SliverPadding(
           padding: pad(Space.x4),
           sliver: SliverToBoxAdapter(
             child: refined
                 ? EmptyState(
                     icon: LucideIcons.searchX,
                     title: 'No transactions match these filters',
-                    message: 'Try a different search, type or category, or widen the dates.',
+                    message: 'Try a different search or filter, or widen the dates.',
                     actionLabel: 'Clear filters',
                     actionIcon: LucideIcons.filterX,
                     onAction: _clearRefinements,
@@ -258,17 +249,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     return [
       SliverPadding(
         padding: pad(Space.x3),
-        sliver: SliverToBoxAdapter(
-          child: StaggeredEntrance(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _SummaryStrip(feed: feed),
-                _SelectedCategoriesBar(filter: filter),
-              ],
-            ),
-          ),
-        ),
+        sliver: SliverToBoxAdapter(child: StaggeredEntrance(child: ActivityPulse(feed: feed))),
       ),
       SliverPadding(
         padding: EdgeInsets.fromLTRB(side, Space.x2, side, 0),
@@ -367,21 +348,20 @@ class _FilterHeader extends ConsumerWidget {
     required this.side,
     required this.search,
     required this.onPickRange,
-    required this.onPickCategories,
+    required this.onOpenFilters,
   });
 
   final double side;
   final TextEditingController search;
   final VoidCallback onPickRange;
-  final VoidCallback onPickCategories;
+  final VoidCallback onOpenFilters;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
     final month = ref.watch(transactionFilterProvider.select((f) => f.month));
     final range = ref.watch(transactionFilterProvider.select((f) => f.customRange));
-    final type = ref.watch(transactionFilterProvider.select((f) => f.type));
-    final catCount = ref.watch(transactionFilterProvider.select((f) => f.categoryIds.length));
+    final advanced = ref.watch(transactionFilterProvider.select((f) => f.advancedCount));
     final bounds = ref.watch(activityMonthBoundsProvider);
     final notifier = ref.read(transactionFilterProvider.notifier);
 
@@ -391,7 +371,7 @@ class _FilterHeader extends ConsumerWidget {
         border: Border(bottom: BorderSide(color: c.border)),
       ),
       child: Padding(
-        padding: EdgeInsets.fromLTRB(side, Space.x2, side, Space.x3),
+        padding: EdgeInsets.fromLTRB(side, Space.x1, side, Space.x2),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -418,7 +398,7 @@ class _FilterHeader extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: Space.x2),
+            const SizedBox(height: Space.x1_5),
             Row(
               children: [
                 Expanded(
@@ -430,32 +410,247 @@ class _FilterHeader extends ConsumerWidget {
                 ),
                 const SizedBox(width: Space.x2),
                 CountBadge(
-                  count: catCount,
+                  count: advanced,
                   color: c.primary,
-                  semanticsLabel: catCount == 0 ? null : '$catCount categories selected',
+                  semanticsLabel: advanced == 0 ? null : '$advanced filters on',
                   child: FinnIconButton(
+                    key: const ValueKey('activity-filters'),
                     icon: LucideIcons.slidersHorizontal,
-                    tooltip: 'Filter by category',
-                    variant: catCount == 0 ? FinnIconButtonVariant.outline : FinnIconButtonVariant.filled,
-                    onPressed: onPickCategories,
+                    tooltip: 'Filters',
+                    variant: advanced == 0 ? FinnIconButtonVariant.outline : FinnIconButtonVariant.filled,
+                    onPressed: onOpenFilters,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: Space.x2),
-            SegmentedTabs<TransactionType?>(
-              items: const [
-                SegmentItem(null, 'All'),
-                SegmentItem(TransactionType.income, 'Income'),
-                SegmentItem(TransactionType.expense, 'Expense'),
-              ],
-              selected: type,
-              onChanged: (t) => notifier.setType(
-                t,
-                categories: ref.read(categoriesByIdProvider).value ?? const {},
+            const SizedBox(height: Space.x1_5),
+            _QuickFilterRow(onOpenFilters: onOpenFilters),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One slim row: the income/expense toggle, then a removable chip per
+/// active filter so the whole filter state reads at a glance.
+class _QuickFilterRow extends ConsumerWidget {
+  const _QuickFilterRow({required this.onOpenFilters});
+
+  final VoidCallback onOpenFilters;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final f = ref.watch(transactionFilterProvider);
+    final cats = ref.watch(categoriesByIdProvider).value ?? const <String, TransactionCategory>{};
+    final notifier = ref.read(transactionFilterProvider.notifier);
+    String catName(String id) => cats[id]?.name ?? 'Deleted category';
+
+    final chips = <(String, String, VoidCallback)>[
+      if (f.amount != null) ('amount', amountRangeLabel(f.amount), () => notifier.setAmount(null)),
+      if (f.categoryIds.length <= 2)
+        for (final id in f.categoryIds) ('cat:$id', catName(id), () => notifier.toggleCategory(id))
+      else
+        ('cats', '${f.categoryIds.length} categories', () => notifier.setCategories(const {})),
+      if (f.methods.length == 1)
+        ('methods', f.methods.single.label, () => notifier.setMethods(const {}))
+      else if (f.methods.length > 1)
+        ('methods', '${f.methods.length} payment methods', () => notifier.setMethods(const {})),
+      if (f.origins.length == 1)
+        ('origins', originLabel(f.origins.single), () => notifier.setOrigins(const {}))
+      else if (f.origins.length > 1)
+        ('origins', '${f.origins.length} sources', () => notifier.setOrigins(const {})),
+    ];
+
+    return SizedBox(
+      height: 32,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          _TypeToggle(
+            selected: f.type,
+            onChanged: (t) => notifier.setType(t, categories: cats),
+          ),
+          for (final (key, label, onRemove) in chips) ...[
+            const SizedBox(width: Space.x1_5),
+            _ActiveChip(key: ValueKey('active-filter:$key'), label: label, onRemove: onRemove),
+          ],
+          if (chips.isEmpty) ...[
+            const SizedBox(width: Space.x1_5),
+            _AddFilterChip(onTap: onOpenFilters),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact All / In / Out switch with a sliding thumb.
+class _TypeToggle extends StatelessWidget {
+  const _TypeToggle({required this.selected, required this.onChanged});
+
+  final TransactionType? selected;
+  final ValueChanged<TransactionType?> onChanged;
+
+  static const _items = <(TransactionType?, String)>[
+    (null, 'All'),
+    (TransactionType.income, 'Income'),
+    (TransactionType.expense, 'Expense'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final t = context.text;
+    final index = _items.indexWhere((i) => i.$1 == selected);
+    final accent = switch (selected) {
+      TransactionType.income => c.positive,
+      TransactionType.expense => c.negative,
+      null => c.textPrimary,
+    };
+    return Container(
+      width: 204,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(color: c.surfaceMuted, borderRadius: Radii.rFull),
+      child: Stack(
+        children: [
+          AnimatedAlign(
+            alignment: Alignment(-1 + index.toDouble(), 0),
+            duration: context.motion.normal,
+            curve: Curves2.emphasized,
+            child: FractionallySizedBox(
+              widthFactor: 1 / _items.length,
+              heightFactor: 1,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: c.isDark ? c.border : c.surface,
+                  borderRadius: Radii.rFull,
+                  boxShadow: c.isDark ? Elevation.none : Elevation.sm,
+                ),
               ),
             ),
-          ],
+          ),
+          Row(
+            children: [
+              for (final (value, label) in _items)
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    selected: value == selected,
+                    inMutuallyExclusiveGroup: true,
+                    label: label,
+                    excludeSemantics: true,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        if (value == selected) return;
+                        HapticFeedback.selectionClick();
+                        onChanged(value);
+                      },
+                      child: Center(
+                        child: AnimatedDefaultTextStyle(
+                          duration: context.motion.fast,
+                          style: t.micro.copyWith(
+                            color: value == selected ? accent : c.textSecondary,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
+                          ),
+                          child: Text(label.toUpperCase()),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActiveChip extends StatelessWidget {
+  const _ActiveChip({super.key, required this.label, required this.onRemove});
+
+  final String label;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final chip = Semantics(
+      button: true,
+      label: '$label filter. Remove',
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onRemove();
+        },
+        child: Container(
+          padding: const EdgeInsets.only(left: Space.x3, right: Space.x2),
+          decoration: BoxDecoration(
+            color: c.primary.withValues(alpha: 0.1),
+            borderRadius: Radii.rFull,
+            border: Border.all(color: c.primary.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 140),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.text.micro.copyWith(color: c.textPrimary, fontWeight: FontWeight.w800),
+                ),
+              ),
+              const SizedBox(width: Space.x1),
+              Icon(LucideIcons.x, size: 13, color: c.textSecondary),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (context.reduceMotion) return chip;
+    return chip.animate().fadeIn(duration: Durations2.fast).scaleXY(begin: 0.85, curve: Curves2.emphasized);
+  }
+}
+
+class _AddFilterChip extends StatelessWidget {
+  const _AddFilterChip({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Semantics(
+      button: true,
+      label: 'Filter by amount, category, payment method or source',
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: Space.x3),
+          decoration: BoxDecoration(
+            borderRadius: Radii.rFull,
+            border: Border.all(color: c.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.plus, size: 13, color: c.textSecondary),
+              const SizedBox(width: Space.x1),
+              Text(
+                'Amount, category…',
+                style: context.text.micro.copyWith(color: c.textSecondary, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -522,138 +717,8 @@ class _RangePill extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Summary + list pieces
+// List pieces
 // ---------------------------------------------------------------------------
-
-class _SummaryStrip extends StatelessWidget {
-  const _SummaryStrip({required this.feed});
-
-  final TransactionFeed feed;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final f = feed.filter;
-    final period = f.hasCustomRange ? _rangeLabel(f.range) : DateFormats.monthYear.format(f.month.start);
-    final net = feed.net;
-    return FinnCard(
-      padding: const EdgeInsets.fromLTRB(Space.x4, Space.x3, Space.x4, Space.x4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            '${feed.count} transaction${feed.count == 1 ? '' : 's'} · $period'.toUpperCase(),
-            style: t.eyebrow,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: Space.x3),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _SummaryFigure(
-                  label: 'Income',
-                  icon: LucideIcons.arrowDownLeft,
-                  color: c.positive,
-                  amount: feed.income,
-                ),
-              ),
-              Expanded(
-                child: _SummaryFigure(
-                  label: 'Spent',
-                  icon: LucideIcons.arrowUpRight,
-                  color: c.negative,
-                  amount: -feed.expense,
-                ),
-              ),
-              Expanded(
-                child: _SummaryFigure(
-                  label: 'Net',
-                  icon: net.isNegative ? LucideIcons.trendingDown : LucideIcons.trendingUp,
-                  color: net.isNegative ? c.negative : c.positive,
-                  amount: net,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryFigure extends StatelessWidget {
-  const _SummaryFigure({required this.label, required this.icon, required this.color, required this.amount});
-
-  final String label;
-  final IconData icon;
-  final Color color;
-  final Money amount;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.text;
-    return MergeSemantics(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: Space.x1),
-              Flexible(child: Text(label, style: t.caption, maxLines: 1, overflow: TextOverflow.ellipsis)),
-            ],
-          ),
-          const SizedBox(height: Space.x1),
-          AnimatedAmount(
-            amount,
-            sign: amount.isZero ? SignDisplay.auto : SignDisplay.always,
-            decimals: DecimalDisplay.none,
-            fit: true,
-            style: t.amountSmall.copyWith(color: amount.isZero ? null : color),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Removable chips for the selected categories.
-class _SelectedCategoriesBar extends ConsumerWidget {
-  const _SelectedCategoriesBar({required this.filter});
-
-  final TransactionFilter filter;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (filter.categoryIds.isEmpty) return const SizedBox.shrink();
-    final cats = ref.watch(categoriesByIdProvider).value ?? const <String, TransactionCategory>{};
-    final ids = filter.categoryIds.toList()..sort((a, b) => (cats[a]?.name ?? a).compareTo(cats[b]?.name ?? b));
-    return Padding(
-      padding: const EdgeInsets.only(top: Space.x2),
-      child: Row(
-        children: [
-          Expanded(
-            child: FilterChipBar<String>(
-              padding: EdgeInsets.zero,
-              items: [
-                for (final id in ids) FilterChipItem(id, cats[id]?.name ?? 'Deleted category'),
-              ],
-              selected: filter.categoryIds,
-              onChanged: (next) => ref.read(transactionFilterProvider.notifier).setCategories(next),
-            ),
-          ),
-          TextButton(
-            onPressed: () => ref.read(transactionFilterProvider.notifier).setCategories(const {}),
-            child: const Text('Clear'),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _DayHeader extends StatelessWidget {
   const _DayHeader({super.key, required this.date, required this.today, required this.net, required this.count});
@@ -690,81 +755,6 @@ class _DayHeader extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Category multi-select
-// ---------------------------------------------------------------------------
-
-class _CategoryFilterSheet extends StatefulWidget {
-  const _CategoryFilterSheet({required this.categories, required this.selected});
-
-  final List<TransactionCategory> categories;
-  final Set<String> selected;
-
-  @override
-  State<_CategoryFilterSheet> createState() => _CategoryFilterSheetState();
-}
-
-class _CategoryFilterSheetState extends State<_CategoryFilterSheet> {
-  late final Set<String> _selected = {...widget.selected};
-  late final List<TransactionCategory> _sorted = [...widget.categories]..sort((a, b) {
-      if (a.isArchived != b.isArchived) return a.isArchived ? 1 : -1;
-      if (a.type != b.type) return a.type == TransactionType.expense ? -1 : 1;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return FinnSheetScaffold(
-      title: 'Filter by category',
-      description: 'Show only transactions in the categories you pick.',
-      footer: Row(
-        children: [
-          Expanded(
-            child: FinnButton(
-              label: 'Clear',
-              variant: FinnButtonVariant.outline,
-              expand: true,
-              onPressed: _selected.isEmpty ? null : () => setState(_selected.clear),
-            ),
-          ),
-          const SizedBox(width: Space.x3),
-          Expanded(
-            flex: 2,
-            child: FinnButton(
-              label: _selected.isEmpty ? 'Show all' : 'Show ${_selected.length} selected',
-              icon: LucideIcons.check,
-              expand: true,
-              onPressed: () => Navigator.of(context).pop(Set<String>.of(_selected)),
-            ),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final cat in _sorted)
-            CheckboxListTile(
-              key: ValueKey(cat.id),
-              value: _selected.contains(cat.id),
-              onChanged: (v) => setState(() => v == true ? _selected.add(cat.id) : _selected.remove(cat.id)),
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.trailing,
-              activeColor: c.primary,
-              secondary: CategoryAvatar(category: cat, size: 36),
-              title: Text(cat.name, style: t.bodyStrong),
-              subtitle: Text(
-                [cat.type.label, if (cat.isArchived) 'Archived'].join(' · '),
-                style: t.caption,
-              ),
-            ),
-        ],
       ),
     );
   }

@@ -121,7 +121,7 @@ class _AlertGroup {
 
 const _alertGroups = [
   _AlertGroup('Loans & EMIs', LucideIcons.landmark, [AlertType.emiDue, AlertType.emiOverdue]),
-  _AlertGroup('Pending payments', LucideIcons.handCoins, [AlertType.pendingOverdue, AlertType.collectDue]),
+  _AlertGroup('Pending payments', LucideIcons.handCoins, [AlertType.pendingOwed, AlertType.collectOwed]),
   _AlertGroup('Subscriptions', LucideIcons.repeat, [AlertType.subscriptionRenewal, AlertType.subscriptionOverdue]),
   _AlertGroup('Budgets & spending', LucideIcons.chartPie,
       [AlertType.budgetNearLimit, AlertType.budgetBreached, AlertType.monthlyDeficit]),
@@ -136,8 +136,8 @@ const _alertGroups = [
 String _describe(AlertType t) => switch (t) {
       AlertType.emiDue => 'Before an EMI is due',
       AlertType.emiOverdue => 'When an EMI date has passed unpaid',
-      AlertType.pendingOverdue => 'When money you owe is unpaid for over 21 days',
-      AlertType.collectDue => 'When money owed to you is unpaid for over 21 days',
+      AlertType.pendingOwed => 'When money you owe is unpaid for over 21 days',
+      AlertType.collectOwed => 'When money owed to you is unpaid for over 21 days',
       AlertType.subscriptionRenewal => 'Before a subscription renews',
       AlertType.subscriptionOverdue => 'When a renewal has not been paid',
       AlertType.budgetNearLimit => 'When a budget reaches your warning level',

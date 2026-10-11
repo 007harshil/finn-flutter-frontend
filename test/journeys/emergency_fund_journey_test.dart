@@ -2,6 +2,7 @@ import 'package:finn/core/money/money.dart';
 import 'package:finn/core/money/money_format.dart';
 import 'package:finn/features/emergency_fund/domain/emergency_fund.dart';
 import 'package:finn/features/goals/presentation/savings_widgets.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/test_app.dart';
@@ -25,9 +26,8 @@ void main() {
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
 
-    // More → Emergency fund.
-    await tapTab(tester, 'More');
-    await scrollAndTap(tester, find.text('Emergency fund'));
+    // Home quick access → Emergency fund.
+    await scrollAndTap(tester, find.byKey(const ValueKey('quick-tile:Emergency fund')));
     expectHeroShows(before.emergency);
 
     // 1. Configure: essentials ₹40,000 × 6 months (no money moves).

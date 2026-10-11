@@ -3,6 +3,7 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
+import '../../../domain/repositories.dart';
 import '../../../finance/finance_snapshot.dart';
 import '../../categories/domain/category.dart';
 import '../../transactions/application/transaction_actions.dart';
@@ -17,8 +18,8 @@ class PendingInput extends ActionInput {
     required this.amount,
     required this.purpose,
     required this.createdDate,
-    this.dueDate,
     this.notes,
+    this.linkedUserId,
   });
 
   final String counterparty;
@@ -27,8 +28,10 @@ class PendingInput extends ActionInput {
   final Money amount;
   final String purpose;
   final DateTime createdDate;
-  final DateTime? dueDate;
   final String? notes;
+
+  /// FiNN user to share this item with (double entry). Null keeps it private.
+  final String? linkedUserId;
 
   factory PendingInput.fromJson(Map<String, Object?> j) => PendingInput(
         counterparty: In.str(j, 'counterparty'),
@@ -37,8 +40,8 @@ class PendingInput extends ActionInput {
         amount: In.money(j, 'amount'),
         purpose: In.str(j, 'purpose'),
         createdDate: In.date(j, 'createdDate'),
-        dueDate: In.dateOpt(j, 'dueDate'),
         notes: In.strOpt(j, 'notes'),
+        linkedUserId: In.strOpt(j, 'linkedUserId'),
       );
 
   @override
@@ -49,8 +52,8 @@ class PendingInput extends ActionInput {
         'amount': Out.money(amount),
         'purpose': purpose,
         'createdDate': Out.date(createdDate),
-        'dueDate': Out.dateOpt(dueDate),
         'notes': notes,
+        'linkedUserId': linkedUserId,
       };
 }
 
@@ -63,12 +66,22 @@ const _pendingFields = [
   ActionFieldSpec('amount', FieldKind.money, 'Original amount in rupees'),
   ActionFieldSpec('purpose', FieldKind.string, 'Short description'),
   ActionFieldSpec('createdDate', FieldKind.date, 'When the obligation arose'),
-  ActionFieldSpec('dueDate', FieldKind.date, 'When it should be settled', required: false),
   ActionFieldSpec('notes', FieldKind.string, 'Notes', required: false),
+  ActionFieldSpec('linkedUserId', FieldKind.id,
+      'FiNN user to share with; the item then also appears in their account. Find ids with the user directory.',
+      required: false),
 ];
 
-Map<String, String> _validatePending(PendingInput i, FinanceSnapshot s, {Money minimum = Money.zero}) {
+Map<String, String> _validatePending(PendingInput i, FinanceSnapshot s, UserDirectory users, {Money minimum = Money.zero}) {
   final e = <String, String>{};
+  final link = i.linkedUserId;
+  if (link != null) {
+    if (link == users.me.id) {
+      e['linkedUserId'] = 'You cannot share an item with yourself.';
+    } else if (users.known(link) == null) {
+      e['linkedUserId'] = 'That FiNN user could not be found. Search again.';
+    }
+  }
   if (i.counterparty.trim().isEmpty) e['counterparty'] = "Enter the person's name.";
   if (i.counterparty.length > 60) e['counterparty'] = 'Keep the name under 60 characters.';
   if (!i.amount.isPositive) e['amount'] = 'Enter an amount greater than zero.';
@@ -78,9 +91,6 @@ Map<String, String> _validatePending(PendingInput i, FinanceSnapshot s, {Money m
   }
   if (i.purpose.trim().isEmpty) e['purpose'] = 'Add a short description.';
   if (i.createdDate.dateOnly.isAfter(s.today)) e['createdDate'] = 'The date cannot be in the future.';
-  if (i.dueDate != null && i.dueDate!.dateOnly.isBefore(i.createdDate.dateOnly)) {
-    e['dueDate'] = 'The due date must be on or after the start date.';
-  }
   return e;
 }
 
@@ -102,7 +112,7 @@ class CreatePendingAction extends FinancialAction<PendingInput, PendingPayment> 
 
   @override
   Result<ActionPreview> prepare(PendingInput input, FinanceSnapshot s, ActionEnvironment env) {
-    final e = _validatePending(input, s);
+    final e = _validatePending(input, s, env.repos.users);
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
     final owe = input.direction == PendingDirection.iOwe;
     return Result.ok(preview(
@@ -112,7 +122,8 @@ class CreatePendingAction extends FinancialAction<PendingInput, PendingPayment> 
       lines: [
         PreviewLine('Amount', input.amount.format(), emphasis: true),
         PreviewLine('Reason', input.kind.label),
-        if (input.dueDate != null) PreviewLine('Due', DateFormats.dayMonthYear.format(input.dueDate!)),
+        if (input.linkedUserId != null)
+          PreviewLine('Shared with', '${env.repos.users.known(input.linkedUserId!)!.handle} · also in their FiNN'),
         const PreviewLine('Cash balance', 'Unchanged until settled'),
       ],
     ));
@@ -121,20 +132,24 @@ class CreatePendingAction extends FinancialAction<PendingInput, PendingPayment> 
   @override
   Future<Result<PendingPayment>> execute(PendingInput input, FinanceSnapshot s, ActionEnvironment env) async {
     final now = env.clock.now();
+    final user = input.linkedUserId == null ? null : env.repos.users.known(input.linkedUserId!);
     final p = PendingPayment(
       id: env.ids.next('pend'),
-      counterparty: input.counterparty.trim(),
+      counterparty: user?.name ?? input.counterparty.trim(),
       direction: input.direction,
       kind: input.kind,
       originalAmount: input.amount,
       purpose: input.purpose.trim(),
       createdDate: input.createdDate.dateOnly,
-      dueDate: input.dueDate?.dateOnly,
       notes: input.notes,
       createdAt: now,
       updatedAt: now,
+      link: user == null
+          ? null
+          : PendingLink(userId: user.id, handle: user.handle, sharedId: env.ids.next('shr'), createdByMe: true),
     );
     await env.repos.pending.save(p);
+    await syncSharedPending(env, p);
     return Result.ok(p);
   }
 }
@@ -182,7 +197,15 @@ class UpdatePendingAction extends FinancialAction<UpdatePendingInput, PendingPay
     if (v.payment.version != input.expectedVersion) {
       return const Result.err(AppFailure(FailureCode.staleData, 'This item changed since you opened it. Reload and try again.'));
     }
-    final e = _validatePending(input.data, s, minimum: v.settled);
+    final link = v.payment.link;
+    if (link != null && !link.createdByMe) {
+      return Result.err(AppFailure(FailureCode.notPermitted,
+          'Only ${v.payment.counterparty} can change the details of this shared item. You can still record a settlement.'));
+    }
+    if (link != null && input.data.linkedUserId != null && input.data.linkedUserId != link.userId) {
+      return const Result.err(AppFailure(FailureCode.notPermitted, 'The person on a shared item cannot change.'));
+    }
+    final e = _validatePending(input.data, s, env.repos.users, minimum: v.settled);
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
     return Result.ok(preview(
       input,
@@ -200,18 +223,23 @@ class UpdatePendingAction extends FinancialAction<UpdatePendingInput, PendingPay
   Future<Result<PendingPayment>> execute(UpdatePendingInput input, FinanceSnapshot s, ActionEnvironment env) async {
     final p = s.pendingView(input.id)!.payment;
     final d = input.data;
+    // A private item can be shared later; a shared one keeps its person.
+    final user = p.link == null && d.linkedUserId != null ? env.repos.users.known(d.linkedUserId!) : null;
     final updated = p.copyWith(
-      counterparty: d.counterparty.trim(),
+      counterparty: p.link != null ? p.counterparty : (user?.name ?? d.counterparty.trim()),
       kind: d.kind,
       originalAmount: d.amount,
       purpose: d.purpose.trim(),
       createdDate: d.createdDate.dateOnly,
-      dueDate: () => d.dueDate?.dateOnly,
       notes: () => d.notes,
       updatedAt: env.clock.now(),
       version: p.version + 1,
+      link: user == null
+          ? null
+          : () => PendingLink(userId: user.id, handle: user.handle, sharedId: env.ids.next('shr'), createdByMe: true),
     );
     await env.repos.pending.save(updated);
+    await syncSharedPending(env, updated);
     return Result.ok(updated);
   }
 }
@@ -360,6 +388,7 @@ class SettlePendingAction extends FinancialAction<SettlePendingInput, PendingSet
       if (tx != null) await env.repos.transactions.delete(tx.id);
       rethrow;
     }
+    await syncSharedPending(env, v.payment);
     return Result.ok(settlement);
   }
 }
@@ -394,6 +423,10 @@ class CancelPendingAction extends FinancialAction<PendingIdInput, PendingPayment
     final v = s.pendingView(input.id);
     if (v == null) return const Result.err(AppFailure.notFound('This item no longer exists.'));
     if (!v.status.isActive) return const Result.err(AppFailure.validation('This item is already closed.'));
+    if (v.payment.isShared && v.payment.direction == PendingDirection.iOwe) {
+      return Result.err(AppFailure(FailureCode.notPermitted,
+          'This is shared with ${v.payment.counterparty}, who is owed the money. Only they can write it off.'));
+    }
     return Result.ok(preview(
       input,
       title: 'Write off ${v.outstanding.format()}?',
@@ -408,6 +441,7 @@ class CancelPendingAction extends FinancialAction<PendingIdInput, PendingPayment
     final p = s.pendingView(input.id)!.payment;
     final updated = p.copyWith(isCancelled: true, updatedAt: env.clock.now(), version: p.version + 1);
     await env.repos.pending.save(updated);
+    await syncSharedPending(env, updated);
     return Result.ok(updated);
   }
 }
@@ -438,6 +472,10 @@ class DeletePendingAction extends FinancialAction<PendingIdInput, PendingPayment
       return const Result.err(AppFailure(FailureCode.notPermitted,
           'This item has settlements recorded. Write it off instead so your history stays accurate.'));
     }
+    final link = v.payment.link;
+    if (link != null && !link.createdByMe) {
+      return Result.err(AppFailure(FailureCode.notPermitted, 'Only ${v.payment.counterparty} can delete this shared item.'));
+    }
     return Result.ok(preview(
       input,
       title: 'Delete this item?',
@@ -451,6 +489,7 @@ class DeletePendingAction extends FinancialAction<PendingIdInput, PendingPayment
   Future<Result<PendingPayment>> execute(PendingIdInput input, FinanceSnapshot s, ActionEnvironment env) async {
     final p = s.pendingView(input.id)!.payment;
     await env.repos.pending.delete(p.id);
+    await syncSharedPending(env, p, removed: true);
     return Result.ok(p);
   }
 }
@@ -488,4 +527,22 @@ class PendingResolver {
     }
     return Result.ok(candidates.single);
   }
+}
+
+/// Keeps the other side of a shared item in step (double entry): writes
+/// the counterparty's mirror after every change to [p], or removes it when
+/// [removed]. No-op for private items. Reads settlements fresh so the
+/// mirror always matches what was just saved.
+Future<void> syncSharedPending(ActionEnvironment env, PendingPayment p, {bool removed = false}) async {
+  final link = p.link;
+  if (link == null) return;
+  final key = MirrorEntry.keyOf(link.userId, link.sharedId);
+  if (removed) {
+    await env.repos.sharedLedger.delete(key);
+    return;
+  }
+  final current = await env.repos.pending.getById(p.id) ?? p;
+  final settlements = (await env.repos.settlements.getAll()).where((x) => x.pendingId == p.id).toList()
+    ..sort((a, b) => b.date.compareTo(a.date));
+  await env.repos.sharedLedger.save(mirrorOf(current, settlements, me: env.repos.users.me));
 }

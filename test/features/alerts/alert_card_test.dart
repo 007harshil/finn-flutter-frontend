@@ -26,7 +26,7 @@ final _cases = <String, FinancialAlert>{
     amount: const Money.rupees(12400),
   ),
   'collect': _alert(
-    AlertType.collectDue,
+    AlertType.collectOwed,
     AlertSeverity.warning,
     const DueVisual(outgoing: false, party: DueParty.person, counterparty: 'Rahul', daysUntil: 0),
     amount: const Money.rupees(800),
@@ -38,13 +38,13 @@ final _cases = <String, FinancialAlert>{
     amount: const Money.rupees(649),
   ),
   'aged': _alert(
-    AlertType.collectDue,
+    AlertType.collectOwed,
     AlertSeverity.info,
     const AgedVisual(counterparty: 'Asha', daysOpen: 41),
     amount: const Money.rupees(2000),
   ),
   'aged to pay': _alert(
-    AlertType.pendingOverdue,
+    AlertType.pendingOwed,
     AlertSeverity.info,
     const AgedVisual(counterparty: 'Ramesh', daysOpen: 40, outgoing: true),
     amount: const Money.rupees(1500),

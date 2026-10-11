@@ -130,26 +130,7 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          FinnCard(
-            variant: FinnCardVariant.muted,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                PendingDirectionLabel(direction: p.direction),
-                const SizedBox(height: Space.x2),
-                Text('OUTSTANDING', style: t.eyebrow),
-                const SizedBox(height: Space.x0_5),
-                AmountText(v.outstanding, style: t.amountLarge.copyWith(color: p.direction.color(c)), fit: true),
-                const SizedBox(height: Space.x1),
-                Text(
-                  v.settled.isPositive
-                      ? 'of ${p.originalAmount.format()} · ${v.settled.format()} already settled'
-                      : 'Original amount ${p.originalAmount.format()}',
-                  style: t.caption,
-                ),
-              ],
-            ),
-          ),
+          _SettlePreview(view: v, entered: entered),
           if (siblings.isNotEmpty) ...[
             const SizedBox(height: Space.x3),
             InfoBanner(
@@ -161,18 +142,6 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
               ].join('\n'),
             ),
           ],
-          const SizedBox(height: Space.x5),
-          SegmentedTabs<bool>(
-            items: const [SegmentItem(true, 'Full'), SegmentItem(false, 'Partial')],
-            selected: _full,
-            onChanged: (full) {
-              if (full) {
-                _setFull(v);
-              } else {
-                setState(() => _full = false);
-              }
-            },
-          ),
           const SizedBox(height: Space.x4),
           AmountField(
             label: owe ? 'Amount paid' : 'Amount received',
@@ -180,16 +149,32 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
             errorText: _errors['amount'],
             onChanged: (m) => setState(() => _full = m != null && m == v.outstanding),
           ),
+          const SizedBox(height: Space.x2),
+          _QuickAmounts(
+            outstanding: v.outstanding,
+            entered: entered,
+            onPick: (m) {
+              if (m == v.outstanding) {
+                _setFull(v);
+              } else {
+                setState(() {
+                  _full = false;
+                  _amount.text = MoneyFormatter.editable(m);
+                  _errors = const {};
+                });
+              }
+            },
+          ),
           const SizedBox(height: Space.x1_5),
           Text(
             entered > v.outstanding
                 ? 'More than the ${v.outstanding.format()} outstanding.'
                 : (entered.isPositive && leaves.isPositive
                     ? '${leaves.format()} will remain outstanding.'
-                    : 'This settles the item in full.'),
+                    : (_full ? 'This settles the item in full.' : 'Enter the amount that changed hands.')),
             style: t.micro.copyWith(color: entered > v.outstanding ? c.negative : null),
           ),
-          const SizedBox(height: Space.x5),
+          const SizedBox(height: Space.x4),
           DateField(
             label: owe ? 'Paid on' : 'Received on',
             value: _date ?? today,
@@ -198,7 +183,7 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
             errorText: _errors['date'],
             onChanged: (d) => setState(() => _date = d),
           ),
-          const SizedBox(height: Space.x5),
+          const SizedBox(height: Space.x4),
           const PendingFieldLabel('Method'),
           PendingMethodChips(selected: _method, onChanged: (m) => setState(() => _method = m)),
           const SizedBox(height: Space.x4),
@@ -217,6 +202,206 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// What is outstanding and what this settlement does to it: the bar shows
+/// already settled, this payment and what will be left, and follows the
+/// amount as it is typed.
+class _SettlePreview extends StatelessWidget {
+  const _SettlePreview({required this.view, required this.entered});
+
+  final PendingView view;
+  final Money entered;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final t = context.text;
+    final v = view;
+    final p = v.payment;
+    final tone = p.direction.color(c);
+    final whole = p.originalAmount.paise;
+    double frac(Money m) => whole <= 0 ? 0 : (m.paise / whole).clamp(0.0, 1.0);
+    final over = entered > v.outstanding;
+    final now = Money.min(Money.max(entered, Money.zero), v.outstanding);
+    return FinnCard(
+      variant: FinnCardVariant.muted,
+      padding: const EdgeInsets.all(Space.x3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              PendingAvatar(
+                name: p.counterparty,
+                color: tone,
+                progress: v.settledBps / 10000,
+                direction: p.direction,
+              ),
+              const SizedBox(width: Space.x3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('OUTSTANDING', style: t.eyebrow),
+                    AmountText(v.outstanding, style: t.amountLarge.copyWith(color: tone), fit: true),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Space.x2),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('ORIGINAL', style: t.eyebrow),
+                  AmountText(p.originalAmount, style: t.amountSmall.copyWith(color: c.textSecondary)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: Space.x2_5),
+          ExcludeSemantics(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(end: frac(now)),
+              duration: context.motion.normal,
+              curve: Curves2.emphasized,
+              builder: (context, n, _) => CustomPaint(
+                size: const Size(double.infinity, 10),
+                painter: _PreviewPainter(
+                  settled: frac(v.settled),
+                  now: n,
+                  settledColor: tone.withValues(alpha: 0.38),
+                  nowColor: tone,
+                  track: c.surface,
+                  outline: over ? c.negative : null,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: Space.x1_5),
+          Wrap(
+            spacing: Space.x3,
+            runSpacing: Space.x1,
+            children: [
+              if (v.settled.isPositive) _Legend(color: tone.withValues(alpha: 0.38), label: 'Settled before'),
+              _Legend(color: tone, label: 'This settlement'),
+              _Legend(color: c.surface, label: 'Left after', border: c.border),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Legend extends StatelessWidget {
+  const _Legend({required this.color, required this.label, this.border});
+
+  final Color color;
+  final String label;
+  final Color? border;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: border == null ? null : Border.all(color: border!),
+            ),
+          ),
+          const SizedBox(width: Space.x1),
+          Text(label, style: context.text.micro),
+        ],
+      );
+}
+
+class _PreviewPainter extends CustomPainter {
+  const _PreviewPainter({
+    required this.settled,
+    required this.now,
+    required this.settledColor,
+    required this.nowColor,
+    required this.track,
+    this.outline,
+  });
+
+  final double settled;
+  final double now;
+  final Color settledColor;
+  final Color nowColor;
+  final Color track;
+  final Color? outline;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bar = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(size.height / 2));
+    canvas.drawRRect(bar, Paint()..color = track);
+    canvas.save();
+    canvas.clipRRect(bar);
+    final a = settled * size.width;
+    final b = (settled + now).clamp(0.0, 1.0) * size.width;
+    canvas.drawRect(Rect.fromLTRB(0, 0, a, size.height), Paint()..color = settledColor);
+    canvas.drawRect(Rect.fromLTRB(a, 0, b, size.height), Paint()..color = nowColor);
+    canvas.restore();
+    if (outline != null) {
+      canvas.drawRRect(
+        bar.deflate(0.75),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..color = outline!,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PreviewPainter old) =>
+      old.settled != settled ||
+      old.now != now ||
+      old.settledColor != settledColor ||
+      old.nowColor != nowColor ||
+      old.track != track ||
+      old.outline != outline;
+}
+
+/// One-tap amounts: the full outstanding, half, or a quarter.
+class _QuickAmounts extends StatelessWidget {
+  const _QuickAmounts({required this.outstanding, required this.entered, required this.onPick});
+
+  final Money outstanding;
+  final Money entered;
+  final ValueChanged<Money> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final hidden = AmountVisibility.hiddenOf(context);
+    Money part(int d) => Money.fromPaise(outstanding.paise ~/ d).roundToRupee();
+    final options = <(String, Money)>[
+      ('Full', outstanding),
+      if (outstanding >= const Money.rupees(2)) ('Half', part(2)),
+      if (outstanding >= const Money.rupees(4)) ('Quarter', part(4)),
+    ];
+    return FilterChipBar<int>(
+      padding: EdgeInsets.zero,
+      multiSelect: false,
+      items: [
+        for (var i = 0; i < options.length; i++)
+          FilterChipItem(
+            i,
+            hidden ? options[i].$1 : '${options[i].$1} · ${AmountText.formatted(options[i].$2, compact: true)}',
+          ),
+      ],
+      selected: {
+        for (var i = 0; i < options.length; i++)
+          if (options[i].$2 == entered) i,
+      },
+      onChanged: (s) => onPick(options[s.first].$2),
     );
   }
 }

@@ -35,7 +35,7 @@ abstract interface class ValueRepository<T> {  // profile, emergency plan, alert
 }
 ```
 
-Collections: transactions, categories, budgets, goals, savings movements, loans, loan payments, subscriptions, pending payments, settlements, assets. Single values: financial profile, emergency-fund plan, alert inbox (read/dismissed alert keys; UI bookkeeping, may stay local).
+Collections: transactions, categories, budgets, goals, savings movements, loans, loan payments, subscriptions, pending payments, settlements, assets, shared ledger (mirrors of shared pending items). Single values: financial profile, emergency-fund plan, alert inbox (read/dismissed alert keys; UI bookkeeping, may stay local).
 
 ## Swapping in a real API
 
@@ -69,6 +69,15 @@ Collections: transactions, categories, budgets, goals, savings movements, loans,
 - **Optimistic concurrency.** Update actions compare `expectedVersion` with the record in the snapshot and increment `version` on save. A server should enforce the same check and reject stale writes.
 - **Derived values stay derived.** Balances, goal saved amounts, loan outstanding, budget spending, alerts and net worth are computed on the client from records (`FinanceSnapshot`). Do not store them as editable fields. If a server computes them too, it must follow `docs/FINANCIAL_MODEL.md` exactly (same rounding).
 - **Linked transactions.** Transactions with a non-manual `origin` belong to their source record and must be written and deleted together with it.
+
+## Shared pending payments (double entry)
+
+A pending item whose counterparty is a FiNN user is shared: it lives in both accounts, mirrored. If Aarav records "I owe Ramesh ₹1,000", Ramesh's account holds "Aarav owes me ₹1,000". Both entries carry the same `PendingLink.sharedId`. Pending items have no due dates; only age ("40 days have passed") is shown.
+
+- **Contracts** (`lib/domain/repositories.dart`): `UserDirectory` (`me`, `search(query)`, `known(id)`) and `SharedLedgerRepository` (one `MirrorEntry` per counterparty and shared item). The local mock is `LocalUserDirectory` over `lib/data/mock/finn_users.dart` plus the `shared_ledger` collection.
+- **Search.** The form debounces typing (350 ms) before calling `search`; queries shorter than 2 characters return nothing. A backend search should return only name, handle and a phone hint, and be rate limited.
+- **Sync.** Every pending action calls `syncSharedPending` (`pending_actions.dart`) after its own write. It rebuilds the counterparty's mirror from the saved item and its settlements (`mirrorOf`): direction reversed, borrowed ↔ lent, counterparty = `me.name`. Delete removes the mirror. A backend should do this server-side in the same transaction (or via an outbox) and push the change to the other user.
+- **Rules.** Only the creator (`link.createdByMe`) edits details or deletes. Either person records settlements. Only the person who is owed can write the rest off. The person on a shared item never changes. Mirrored settlements never create cash transactions for the other person; their own app decides that.
 
 ## Atomicity
 

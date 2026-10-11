@@ -20,6 +20,8 @@ class FinanceRepositories {
     required this.profile,
     required this.emergencyPlan,
     required this.alertInbox,
+    required this.users,
+    required this.sharedLedger,
   });
 
   final TransactionRepository transactions;
@@ -36,6 +38,12 @@ class FinanceRepositories {
   final ProfileRepository profile;
   final EmergencyPlanRepository emergencyPlan;
   final AlertInboxRepository alertInbox;
+
+  /// People on FiNN, for sharing pending items.
+  final UserDirectory users;
+
+  /// The counterparty side of shared pending items.
+  final SharedLedgerRepository sharedLedger;
 
   /// Reads every collection once and builds a consistent snapshot.
   Future<FinanceSnapshot> loadSnapshot(Clock clock, {required int monthStartDay}) async {

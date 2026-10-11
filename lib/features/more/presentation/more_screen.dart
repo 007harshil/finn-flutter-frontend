@@ -3,20 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
-import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
 import '../../../shared/presentation/async_view.dart';
-import '../../emergency_fund/domain/emergency_fund.dart';
 import '../../home/application/home_overview.dart';
 import '../../net_worth/domain/net_worth.dart';
 
-/// Financial overview hub: net worth teaser and every module with a live
-/// one-line summary, then app-level settings.
+/// Financial overview hub: net worth teaser, subscriptions, then app-level
+/// settings.
 class MoreScreen extends ConsumerWidget {
   const MoreScreen({super.key});
 
@@ -44,29 +41,15 @@ class MoreScreen extends ConsumerWidget {
                       const SizedBox(height: Space.x5),
                       const StaggeredEntrance(index: 0, child: _NetWorthTeaser()),
                       const SizedBox(height: Space.section),
+                      // Other modules open from Home's quick-access grid;
+                      // subscriptions have no tile there, so they live here.
                       const StaggeredEntrance(
                         index: 1,
-                        child: _Group(
-                          title: 'Money modules',
-                          children: [
-                            _LoansTile(),
-                            _SubscriptionsTile(),
-                            _PendingTile(),
-                            _EmergencyTile(),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: Space.section),
-                      const StaggeredEntrance(
-                        index: 2,
-                        child: _Group(
-                          title: 'Understand',
-                          children: [_InsightsTile(), _NetWorthTile(), _TimelineTile()],
-                        ),
+                        child: _Group(title: 'Money', children: [_SubscriptionsTile()]),
                       ),
                       const SizedBox(height: Space.section),
                       StaggeredEntrance(
-                        index: 3,
+                        index: 2,
                         child: _Group(
                           title: 'App',
                           children: [
@@ -288,153 +271,28 @@ class _ModuleTile extends StatelessWidget {
   }
 }
 
-/// Builds a summary line from an async value; blank while loading.
-Widget _summary<T>(AsyncValue<T> v, String Function(T data) text) {
-  final data = v.value;
-  if (data == null) return Text(v.hasError ? 'Unavailable right now' : ' ');
-  return Text(text(data));
-}
-
-String _amount(Money m) => m.format(decimals: DecimalDisplay.none);
-
-class _LoansTile extends ConsumerWidget {
-  const _LoansTile();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return _ModuleTile(
-      icon: LucideIcons.landmark,
-      color: context.colors.accentLoans,
-      title: 'Loans & EMIs',
-      route: AppRoutes.loans,
-      summary: _AmountAware(
-        hiddenText: 'Loans and repayment schedules',
-        child: _summary<DebtOverview>(ref.watch(debtOverviewProvider), (d) {
-          if (!d.hasDebt) return 'No active loans';
-          final next = d.nextDueDate;
-          final due = next == null ? '' : ' · next EMI ${DateFormats.dayMonth.format(next)}';
-          return '${_amount(d.totalOutstanding)} outstanding$due';
-        }),
-      ),
-    );
-  }
-}
-
 class _SubscriptionsTile extends ConsumerWidget {
   const _SubscriptionsTile();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(subscriptionOverviewProvider).value;
+    final String summary;
+    if (AmountVisibility.hiddenOf(context)) {
+      summary = 'Recurring payments and renewals';
+    } else if (s == null) {
+      summary = ' ';
+    } else if (s.activeCount == 0) {
+      summary = 'No active subscriptions';
+    } else {
+      summary = '${s.monthlyCommitment.format(decimals: DecimalDisplay.none)}/month · ${s.activeCount} active';
+    }
     return _ModuleTile(
       icon: LucideIcons.repeat,
       color: context.colors.accentSubscriptions,
       title: 'Subscriptions',
       route: AppRoutes.subscriptions,
-      summary: _AmountAware(
-        hiddenText: 'Recurring payments and renewals',
-        child: _summary<SubscriptionOverview>(ref.watch(subscriptionOverviewProvider), (s) {
-          if (s.activeCount == 0) return 'No active subscriptions';
-          return '${_amount(s.monthlyCommitment)}/month · ${s.activeCount} active';
-        }),
-      ),
+      summary: Text(summary),
     );
   }
-}
-
-class _PendingTile extends ConsumerWidget {
-  const _PendingTile();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return _ModuleTile(
-      icon: LucideIcons.handCoins,
-      color: context.colors.accentPending,
-      title: 'Pending payments',
-      route: AppRoutes.pending,
-      summary: _AmountAware(
-        hiddenText: 'Money you owe and are owed',
-        child: _summary<PendingOverview>(ref.watch(pendingOverviewProvider), (p) {
-          if (p.activeCount == 0) return 'All settled up';
-          return 'To pay ${_amount(p.toPay)} · to collect ${_amount(p.toCollect)}';
-        }),
-      ),
-    );
-  }
-}
-
-class _EmergencyTile extends ConsumerWidget {
-  const _EmergencyTile();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return _ModuleTile(
-      icon: LucideIcons.shieldCheck,
-      color: context.colors.accentEmergency,
-      title: 'Emergency fund',
-      route: AppRoutes.emergencyFund,
-      summary: _summary<EmergencyFundStatus>(ref.watch(emergencyStatusProvider), (s) {
-        if (s.level == EmergencyFundLevel.notConfigured) return 'Not set up yet';
-        final m = s.coverageMonths;
-        return m == null ? s.level.label : '${m.toStringAsFixed(1)} months of essentials covered';
-      }),
-    );
-  }
-}
-
-class _InsightsTile extends StatelessWidget {
-  const _InsightsTile();
-
-  @override
-  Widget build(BuildContext context) => _ModuleTile(
-        icon: LucideIcons.chartColumn,
-        color: context.colors.accentAnalytics,
-        title: 'Insights & analytics',
-        route: AppRoutes.analytics,
-        summary: const Text('Trends, categories and spending patterns'),
-      );
-}
-
-class _NetWorthTile extends ConsumerWidget {
-  const _NetWorthTile();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return _ModuleTile(
-      icon: LucideIcons.scale,
-      color: context.colors.accentNetWorth,
-      title: 'Net worth',
-      route: AppRoutes.netWorth,
-      summary: _AmountAware(
-        hiddenText: 'Assets minus liabilities',
-        child: _summary<NetWorthSnapshot>(ref.watch(netWorthProvider), (n) => '${_amount(n.netWorth)} · assets minus liabilities'),
-      ),
-    );
-  }
-}
-
-class _TimelineTile extends ConsumerWidget {
-  const _TimelineTile();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final month = ref.watch(todayProvider.select((d) => d.monthKey));
-    return _ModuleTile(
-      icon: LucideIcons.history,
-      color: context.colors.accentGoals,
-      title: 'Timeline',
-      route: AppRoutes.timeline,
-      summary: _summary(ref.watch(storyChapterProvider(month)), (ch) => 'This month: ${ch.name}'),
-    );
-  }
-}
-
-/// Swaps a summary containing amounts for neutral text when balances are hidden.
-class _AmountAware extends StatelessWidget {
-  const _AmountAware({required this.child, required this.hiddenText});
-
-  final Widget child;
-  final String hiddenText;
-
-  @override
-  Widget build(BuildContext context) => AmountVisibility.hiddenOf(context) ? Text(hiddenText) : child;
 }

@@ -312,12 +312,12 @@ abstract final class PendingDto {
         'originalPaise': J.money(p.originalAmount),
         'purpose': p.purpose,
         'createdDate': J.date(p.createdDate),
-        'dueDate': p.dueDate == null ? null : J.date(p.dueDate!),
         'notes': p.notes,
         'isCancelled': p.isCancelled,
         'createdAt': J.instant(p.createdAt),
         'updatedAt': J.instant(p.updatedAt),
         'version': p.version,
+        'link': p.link == null ? null : PendingLinkDto.toJson(p.link!),
       };
 
   static PendingPayment fromJson(JsonMap j) => PendingPayment(
@@ -328,12 +328,12 @@ abstract final class PendingDto {
         originalAmount: J.toMoney(j['originalPaise']),
         purpose: j['purpose'] as String,
         createdDate: J.toDate(j['createdDate']),
-        dueDate: J.toDateOrNull(j['dueDate']),
         notes: j['notes'] as String?,
         isCancelled: (j['isCancelled'] as bool?) ?? false,
         createdAt: J.toInstant(j['createdAt']),
         updatedAt: J.toInstant(j['updatedAt']),
         version: (j['version'] as num?)?.toInt() ?? 1,
+        link: j['link'] == null ? null : PendingLinkDto.fromJson((j['link'] as Map).cast<String, Object?>()),
       );
 }
 
@@ -358,6 +358,39 @@ abstract final class SettlementDto {
         transactionId: j['transactionId'] as String?,
         note: j['note'] as String?,
         createdAt: J.toInstant(j['createdAt']),
+      );
+}
+
+abstract final class PendingLinkDto {
+  static JsonMap toJson(PendingLink l) => {
+        'userId': l.userId,
+        'handle': l.handle,
+        'sharedId': l.sharedId,
+        'createdByMe': l.createdByMe,
+      };
+
+  static PendingLink fromJson(JsonMap j) => PendingLink(
+        userId: j['userId'] as String,
+        handle: j['handle'] as String,
+        sharedId: j['sharedId'] as String,
+        createdByMe: (j['createdByMe'] as bool?) ?? true,
+      );
+}
+
+/// The other person's side of a shared pending item (mock network).
+abstract final class MirrorEntryDto {
+  static JsonMap toJson(MirrorEntry m) => {
+        'ownerId': m.ownerId,
+        'payment': PendingDto.toJson(m.payment),
+        'settlements': [for (final s in m.settlements) SettlementDto.toJson(s)],
+      };
+
+  static MirrorEntry fromJson(JsonMap j) => MirrorEntry(
+        ownerId: j['ownerId'] as String,
+        payment: PendingDto.fromJson((j['payment'] as Map).cast<String, Object?>()),
+        settlements: [
+          for (final s in (j['settlements'] as List? ?? const [])) SettlementDto.fromJson((s as Map).cast<String, Object?>()),
+        ],
       );
 }
 

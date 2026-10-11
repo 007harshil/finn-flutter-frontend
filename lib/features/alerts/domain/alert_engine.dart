@@ -100,13 +100,15 @@ class AlertEngine {
       add(
         FinancialAlert(
           key: 'pending_aged:${p.payment.id}',
-          type: owe ? AlertType.pendingOverdue : AlertType.collectDue,
+          type: owe ? AlertType.pendingOwed : AlertType.collectOwed,
           severity: AlertSeverity.info,
           title: owe ? 'You owe $who ${fmt(p.outstanding)}' : '$who owes you ${fmt(p.outstanding)}',
-          message: '${p.payment.purpose} · pending for ${p.daysOpen} days.',
+          message: owe
+              ? 'You have not paid $who back yet. ${p.daysOpen} days have passed · ${p.payment.purpose}.'
+              : '$who has not returned your money. ${p.daysOpen} days have passed · ${p.payment.purpose}.',
           reason: owe
-              ? 'You have not paid this yet. Settle it when you can.'
-              : 'A gentle reminder now avoids it being forgotten.',
+              ? 'There is no deadline. Settle it when you can.'
+              : 'There is no deadline. The longest-waiting items are the ones to ask about first.',
           actionLabel: owe ? 'Settle now' : 'View details',
           target: AlertTarget.pending,
           recordId: p.payment.id,

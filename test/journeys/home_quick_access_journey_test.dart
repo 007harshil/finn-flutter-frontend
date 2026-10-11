@@ -14,9 +14,9 @@ void main() {
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
 
-    await scrollTo(tester, find.byKey(const ValueKey('quick-tile:Timeline')));
+    await scrollTo(tester, find.byKey(const ValueKey('quick-tile:Insights')));
     final pos = {
-      for (final name in ['Loans & EMIs', 'Pending payments', 'Emergency fund', 'Goals', 'Timeline'])
+      for (final name in ['Loans & EMIs', 'Pending payments', 'Emergency fund', 'Goals', 'Timeline', 'Insights'])
         name: tester.getCenter(find.byKey(ValueKey('quick-tile:$name'))),
     };
     // Tall loans tile on the left, pending above emergency fund on the right,
@@ -26,12 +26,14 @@ void main() {
     expect(pos['Goals']!.dy, greaterThan(pos['Emergency fund']!.dy));
     expect(pos['Goals']!.dx, lessThan(pos['Timeline']!.dx));
     expect((pos['Goals']!.dy - pos['Timeline']!.dy).abs(), lessThan(1));
+    expect(pos['Insights']!.dy, greaterThan(pos['Timeline']!.dy), reason: 'insights spans the last row');
 
     final routes = {
       'Loans & EMIs': AppRoutes.loans,
       'Pending payments': AppRoutes.pending,
       'Emergency fund': AppRoutes.emergencyFund,
       'Timeline': AppRoutes.timeline,
+      'Insights': AppRoutes.analytics,
     };
     for (final MapEntry(key: name, value: route) in routes.entries) {
       await scrollAndTap(tester, find.byKey(ValueKey('quick-tile:$name')));

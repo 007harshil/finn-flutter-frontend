@@ -32,7 +32,6 @@ class AppSettings {
     this.monthStartDay = 1,
     this.emiReminderDays = 5,
     this.subscriptionReminderDays = 3,
-    this.pendingReminderDays = 3,
     this.lowEmergencyCoverageMonths = 3,
     this.defaultBudgetWarningBps = 8000,
     this.disabledAlertTypes = const {},
@@ -53,7 +52,6 @@ class AppSettings {
   final int monthStartDay;
   final int emiReminderDays;
   final int subscriptionReminderDays;
-  final int pendingReminderDays;
 
   /// Emergency coverage (months) below which an alert is raised.
   final int lowEmergencyCoverageMonths;
@@ -72,7 +70,6 @@ class AppSettings {
     int? monthStartDay,
     int? emiReminderDays,
     int? subscriptionReminderDays,
-    int? pendingReminderDays,
     int? lowEmergencyCoverageMonths,
     int? defaultBudgetWarningBps,
     Set<AlertType>? disabledAlertTypes,
@@ -87,7 +84,6 @@ class AppSettings {
         monthStartDay: monthStartDay ?? this.monthStartDay,
         emiReminderDays: emiReminderDays ?? this.emiReminderDays,
         subscriptionReminderDays: subscriptionReminderDays ?? this.subscriptionReminderDays,
-        pendingReminderDays: pendingReminderDays ?? this.pendingReminderDays,
         lowEmergencyCoverageMonths: lowEmergencyCoverageMonths ?? this.lowEmergencyCoverageMonths,
         defaultBudgetWarningBps: defaultBudgetWarningBps ?? this.defaultBudgetWarningBps,
         disabledAlertTypes: disabledAlertTypes ?? this.disabledAlertTypes,
@@ -103,7 +99,6 @@ class AppSettings {
         'monthStartDay': monthStartDay,
         'emiReminderDays': emiReminderDays,
         'subscriptionReminderDays': subscriptionReminderDays,
-        'pendingReminderDays': pendingReminderDays,
         'lowEmergencyCoverageMonths': lowEmergencyCoverageMonths,
         'defaultBudgetWarningBps': defaultBudgetWarningBps,
         'disabledAlertTypes': disabledAlertTypes.map((e) => e.name).toList(),
@@ -124,10 +119,11 @@ class AppSettings {
       monthStartDay: i('monthStartDay', 1).clamp(1, 28),
       emiReminderDays: i('emiReminderDays', 5),
       subscriptionReminderDays: i('subscriptionReminderDays', 3),
-      pendingReminderDays: i('pendingReminderDays', 3),
       lowEmergencyCoverageMonths: i('lowEmergencyCoverageMonths', 3),
       defaultBudgetWarningBps: i('defaultBudgetWarningBps', 8000),
       disabledAlertTypes: ((j['disabledAlertTypes'] as List?) ?? const [])
+          // Pending alert types were renamed when pending items lost due dates.
+          .map((e) => switch (e) { 'pendingOverdue' => 'pendingOwed', 'collectDue' => 'collectOwed', _ => e })
           .map((e) => AlertType.values.where((t) => t.name == e).firstOrNull)
           .whereType<AlertType>()
           .toSet(),

@@ -18,9 +18,8 @@ void main() {
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
 
-    // More → Loans & EMIs → Car loan.
-    await tapTab(tester, 'More');
-    await scrollAndTap(tester, find.text('Loans & EMIs'));
+    // Home quick access → Loans & EMIs → Car loan.
+    await scrollAndTap(tester, find.byKey(const ValueKey('quick-tile:Loans & EMIs')));
     await scrollAndTap(tester, find.descendant(of: find.byKey(const ValueKey(loanId)), matching: find.text('Car loan')));
     expect(find.text(AmountText.formatted(loanBefore.outstanding)), findsWidgets);
 
@@ -63,6 +62,9 @@ void main() {
     final txRow = find.byKey(ValueKey<String>(payment.transactionId!));
     await scrollTo(tester, txRow);
     expect(txRow, findsOneWidget);
+    // Loans opened from Home, so the first tap restores that stack; the
+    // second returns to the Home root.
+    await tapTab(tester, 'Home');
     await tapTab(tester, 'Home');
     expect(inHero(rupees(after.balance.available)), findsOneWidget);
     expect(tester.takeException(), isNull);

@@ -20,6 +20,7 @@ import '../../features/timeline/domain/timeline.dart';
 import '../../features/transactions/domain/transaction.dart';
 import '../../finance/finance_snapshot.dart';
 import '../../finance/ledger.dart';
+import '../../domain/repositories.dart';
 import 'core_providers.dart';
 
 // ---------------------------------------------------------------------------
@@ -168,6 +169,20 @@ final pendingViewsProvider = Provider<AsyncValue<List<PendingView>>>((ref) => _d
 
 final pendingViewProvider =
     Provider.family<AsyncValue<PendingView?>, String>((ref, id) => _derive(ref, (s) => s.pendingView(id)));
+
+/// People on FiNN (search + the signed-in user).
+final userDirectoryProvider = Provider<UserDirectory>((ref) => ref.watch(financeRepositoriesProvider).users);
+
+/// Every mirrored (counterparty-side) entry of shared pending items.
+final sharedLedgerStreamProvider =
+    StreamProvider<List<MirrorEntry>>((ref) => ref.watch(financeRepositoriesProvider).sharedLedger.watchAll());
+
+/// The other person's side of a shared item, or null for private items.
+final mirrorProvider = Provider.family<MirrorEntry?, PendingLink>((ref, link) {
+  final all = ref.watch(sharedLedgerStreamProvider).value ?? const <MirrorEntry>[];
+  final key = MirrorEntry.keyOf(link.userId, link.sharedId);
+  return all.where((m) => m.key == key).firstOrNull;
+});
 
 final emergencyStatusProvider = Provider<AsyncValue<EmergencyFundStatus>>((ref) => _derive(ref, (s) => s.emergency));
 

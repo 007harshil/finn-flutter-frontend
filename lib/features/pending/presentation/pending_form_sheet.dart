@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -10,6 +11,7 @@ import '../../../design_system/design_system.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../application/pending_actions.dart';
 import '../domain/pending_payment.dart';
+import 'pending_person_field.dart';
 import 'pending_ui.dart';
 
 /// Distinct counterparty names already used, most recent first.
@@ -44,11 +46,11 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
   late PendingDirection _direction = widget.owedToMe ? PendingDirection.owedToMe : PendingDirection.iOwe;
   PendingKind _kind = PendingKind.other;
   DateTime? _created;
-  DateTime? _due;
   Map<String, String> _errors = const {};
   bool _busy = false;
   bool _loaded = false;
   PendingView? _existing;
+  FinnUser? _linked;
 
   bool get _editing => widget.pendingId != null;
 
@@ -67,11 +69,15 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
     _direction = p.direction;
     _kind = p.kind;
     _name.text = p.counterparty;
+    final link = p.link;
+    _linked = link == null
+        ? null
+        : (ref.read(userDirectoryProvider).known(link.userId) ??
+            FinnUser(id: link.userId, name: p.counterparty, handle: link.handle));
     _amount.text = MoneyFormatter.editable(p.originalAmount);
     _purpose.text = p.purpose;
     _notes.text = p.notes ?? '';
     _created = p.createdDate;
-    _due = p.dueDate;
     _loaded = true;
   }
 
@@ -90,8 +96,8 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
       amount: amount,
       purpose: _purpose.text.trim(),
       createdDate: _created ?? today,
-      dueDate: _due,
       notes: notes.isEmpty ? null : notes,
+      linkedUserId: _linked?.id,
     );
     setState(() {
       _busy = true;
@@ -166,13 +172,19 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
               ),
             )
           else
-            SegmentedTabs<PendingDirection>(
-              items: const [
-                SegmentItem(PendingDirection.iOwe, 'I owe'),
-                SegmentItem(PendingDirection.owedToMe, 'I will receive'),
+            Row(
+              children: [
+                for (final d in PendingDirection.values) ...[
+                  if (d != PendingDirection.values.first) const SizedBox(width: Space.x2),
+                  Expanded(
+                    child: _DirectionTile(
+                      direction: d,
+                      selected: _direction == d,
+                      onTap: () => setState(() => _direction = d),
+                    ),
+                  ),
+                ],
               ],
-              selected: _direction,
-              onChanged: (d) => setState(() => _direction = d),
             ),
           const SizedBox(height: Space.x1_5),
           Text(
@@ -181,33 +193,18 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
                 : (_direction.isOwe ? 'You have to pay this person.' : 'This person has to pay you.'),
             style: t.micro,
           ),
-          const SizedBox(height: Space.x5),
-          FinnTextField(
-            label: _direction.isOwe ? 'Who do you owe?' : 'Who owes you?',
-            hint: 'Name',
+          const SizedBox(height: Space.x4),
+          PendingPersonField(
             controller: _name,
-            prefixIcon: LucideIcons.user,
-            errorText: _errors['counterparty'],
-            textCapitalization: TextCapitalization.words,
-            textInputAction: TextInputAction.next,
-            onChanged: (_) => setState(() {}),
+            label: _direction.isOwe ? 'Who do you owe?' : 'Who owes you?',
+            direction: _direction,
+            linked: _linked,
+            locked: existing?.payment.isShared ?? false,
+            recentNames: suggestions,
+            errorText: _errors['counterparty'] ?? _errors['linkedUserId'],
+            onLinked: (u) => setState(() => _linked = u),
           ),
-          if (suggestions.isNotEmpty) ...[
-            const SizedBox(height: Space.x2),
-            Wrap(
-              spacing: Space.x2,
-              runSpacing: Space.x1,
-              children: [
-                for (final n in suggestions)
-                  ActionChip(
-                    avatar: const Icon(LucideIcons.user, size: 14),
-                    label: Text(n),
-                    onPressed: () => setState(() => _name.text = n),
-                  ),
-              ],
-            ),
-          ],
-          const SizedBox(height: Space.x5),
+          const SizedBox(height: Space.x4),
           const PendingFieldLabel('Reason'),
           FilterChipBar<PendingKind>(
             padding: EdgeInsets.zero,
@@ -216,7 +213,7 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
             selected: {_kind},
             onChanged: (s) => setState(() => _kind = s.first),
           ),
-          const SizedBox(height: Space.x5),
+          const SizedBox(height: Space.x4),
           AmountField(
             label: _editing ? 'Original amount' : 'Amount',
             controller: _amount,
@@ -227,7 +224,7 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
             const SizedBox(height: Space.x1_5),
             Text('${settled.format()} is already settled, so the amount cannot be lower than that.', style: t.micro),
           ],
-          const SizedBox(height: Space.x5),
+          const SizedBox(height: Space.x4),
           FinnTextField(
             label: 'What is it for?',
             hint: 'e.g. Goa trip hotel share',
@@ -237,43 +234,17 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
             textCapitalization: TextCapitalization.sentences,
           ),
           const SizedBox(height: Space.x3),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: DateField(
-                  label: 'Since',
-                  value: _created ?? today,
-                  firstDate: DateTime(today.year - 10),
-                  lastDate: today,
-                  errorText: _errors['createdDate'],
-                  onChanged: (d) => setState(() => _created = d),
-                ),
-              ),
-              const SizedBox(width: Space.x3),
-              Expanded(
-                child: DateField(
-                  label: 'Due (optional)',
-                  hint: 'No due date',
-                  value: _due,
-                  firstDate: _created ?? DateTime(today.year - 10),
-                  lastDate: DateTime(today.year + 10),
-                  errorText: _errors['dueDate'],
-                  onChanged: (d) => setState(() => _due = d),
-                ),
-              ),
-            ],
+          DateField(
+            label: 'Since',
+            value: _created ?? today,
+            firstDate: DateTime(today.year - 10),
+            lastDate: today,
+            errorText: _errors['createdDate'],
+            onChanged: (d) => setState(() => _created = d),
           ),
-          if (_due != null)
-            Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: TextButton.icon(
-                onPressed: () => setState(() => _due = null),
-                icon: const Icon(LucideIcons.x, size: 14),
-                label: const Text('Clear due date'),
-              ),
-            ),
-          const SizedBox(height: Space.x3),
+          const SizedBox(height: Space.x1_5),
+          Text('No deadline needed. FiNN shows how many days have passed since this date.', style: t.micro),
+          const SizedBox(height: Space.x4),
           FinnTextField(
             label: 'Notes (optional)',
             hint: 'Anything to remember',
@@ -288,6 +259,78 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
             message: 'Adding this does not change your balance. When money changes hands, settle it to record the cash movement once.',
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Who pays whom, as two tiles with an arrow showing which way money moves.
+class _DirectionTile extends StatelessWidget {
+  const _DirectionTile({required this.direction, required this.selected, required this.onTap});
+
+  final PendingDirection direction;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final t = context.text;
+    final color = direction.color(c);
+    return Semantics(
+      button: true,
+      selected: selected,
+      inMutuallyExclusiveGroup: true,
+      label: direction.label,
+      excludeSemantics: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: Radii.rLg,
+          onTap: () {
+            if (selected) return;
+            HapticFeedback.selectionClick();
+            onTap();
+          },
+          child: AnimatedContainer(
+            duration: context.motion.normal,
+            curve: Curves2.emphasized,
+            padding: const EdgeInsets.symmetric(horizontal: Space.x3, vertical: Space.x2_5),
+            decoration: BoxDecoration(
+              color: selected ? direction.soft(c) : c.surface,
+              borderRadius: Radii.rLg,
+              border: Border.all(color: selected ? color : c.border, width: selected ? 1.5 : 1),
+            ),
+            child: Row(
+              children: [
+                AnimatedScale(
+                  scale: selected ? 1 : 0.85,
+                  duration: context.motion.normal,
+                  curve: Curves.easeOutBack,
+                  child: IconTile(
+                    icon: direction.icon,
+                    background: selected ? color : c.surfaceMuted,
+                    foreground: selected ? c.onSolid : c.textSecondary,
+                    size: 30,
+                    iconSize: 16,
+                  ),
+                ),
+                const SizedBox(width: Space.x2),
+                Expanded(
+                  child: Text(
+                    direction.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.label.copyWith(
+                      color: selected ? c.textPrimary : c.textSecondary,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

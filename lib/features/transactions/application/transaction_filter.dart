@@ -23,6 +23,27 @@ enum TransactionSort {
   bool get groupsByDate => this == newest || this == oldest;
 }
 
+/// Inclusive amount bounds in paise; a null side is open-ended.
+@immutable
+class AmountRange {
+  const AmountRange({this.minPaise, this.maxPaise})
+      : assert(minPaise == null || maxPaise == null || minPaise <= maxPaise, 'min above max');
+
+  final int? minPaise;
+  final int? maxPaise;
+
+  bool get isOpen => minPaise == null && maxPaise == null;
+
+  bool contains(Money m) =>
+      (minPaise == null || m.paise >= minPaise!) && (maxPaise == null || m.paise <= maxPaise!);
+
+  @override
+  bool operator ==(Object other) => other is AmountRange && other.minPaise == minPaise && other.maxPaise == maxPaise;
+
+  @override
+  int get hashCode => Object.hash(minPaise, maxPaise);
+}
+
 /// Everything the Activity screen filters on. Immutable; persisted in
 /// [transactionFilterProvider] so it survives tab switches.
 @immutable
@@ -33,6 +54,9 @@ class TransactionFilter {
     this.query = '',
     this.type,
     this.categoryIds = const {},
+    this.amount,
+    this.methods = const {},
+    this.origins = const {},
     this.sort = TransactionSort.newest,
   });
 
@@ -46,13 +70,31 @@ class TransactionFilter {
   /// Null means income and expense.
   final TransactionType? type;
   final Set<String> categoryIds;
+
+  /// Amount bounds; null means any amount.
+  final AmountRange? amount;
+
+  /// Payment methods to keep; empty means all. Transactions without a
+  /// method count as [PaymentMethod.other].
+  final Set<PaymentMethod> methods;
+
+  /// Where the transaction came from (manual, subscription, EMI …);
+  /// empty means all.
+  final Set<TransactionOrigin> origins;
   final TransactionSort sort;
 
   DateRange get range => customRange ?? month.range;
   bool get hasCustomRange => customRange != null;
 
   /// Whether anything narrows the list beyond the period.
-  bool get hasRefinements => query.trim().isNotEmpty || type != null || categoryIds.isNotEmpty;
+  bool get hasRefinements => query.trim().isNotEmpty || type != null || advancedCount > 0;
+
+  /// Number of filter groups set in the filter sheet (badge count).
+  int get advancedCount =>
+      (categoryIds.isNotEmpty ? 1 : 0) +
+      (amount != null ? 1 : 0) +
+      (methods.isNotEmpty ? 1 : 0) +
+      (origins.isNotEmpty ? 1 : 0);
 
   TransactionFilter copyWith({
     MonthKey? month,
@@ -60,6 +102,9 @@ class TransactionFilter {
     String? query,
     TransactionType? Function()? type,
     Set<String>? categoryIds,
+    AmountRange? Function()? amount,
+    Set<PaymentMethod>? methods,
+    Set<TransactionOrigin>? origins,
     TransactionSort? sort,
   }) =>
       TransactionFilter(
@@ -68,6 +113,9 @@ class TransactionFilter {
         query: query ?? this.query,
         type: type != null ? type() : this.type,
         categoryIds: categoryIds ?? this.categoryIds,
+        amount: amount != null ? amount() : this.amount,
+        methods: methods ?? this.methods,
+        origins: origins ?? this.origins,
         sort: sort ?? this.sort,
       );
 
@@ -79,11 +127,14 @@ class TransactionFilter {
       other.query == query &&
       other.type == type &&
       setEquals(other.categoryIds, categoryIds) &&
+      other.amount == amount &&
+      setEquals(other.methods, methods) &&
+      setEquals(other.origins, origins) &&
       other.sort == sort;
 
   @override
-  int get hashCode =>
-      Object.hash(month, customRange, query, type, Object.hashAllUnordered(categoryIds), sort);
+  int get hashCode => Object.hash(month, customRange, query, type, Object.hashAllUnordered(categoryIds), amount,
+      Object.hashAllUnordered(methods), Object.hashAllUnordered(origins), sort);
 }
 
 /// Holds the Activity filter. Deliberately not auto-disposed: filters
@@ -117,10 +168,40 @@ class TransactionFilterController extends Notifier<TransactionFilter> {
 
   void setCategories(Set<String> ids) => state = state.copyWith(categoryIds: Set.unmodifiable(ids));
 
+  /// Adds or removes one category (quick toggle from the summary card).
+  void toggleCategory(String id) {
+    final next = Set<String>.of(state.categoryIds);
+    if (!next.remove(id)) next.add(id);
+    setCategories(next);
+  }
+
+  void setAmount(AmountRange? amount) =>
+      state = state.copyWith(amount: () => amount == null || amount.isOpen ? null : amount);
+
+  void setMethods(Set<PaymentMethod> methods) => state = state.copyWith(methods: Set.unmodifiable(methods));
+
+  void setOrigins(Set<TransactionOrigin> origins) => state = state.copyWith(origins: Set.unmodifiable(origins));
+
+  /// Applies everything chosen in the filter sheet at once.
+  void applyAdvanced(TransactionFilter from) => state = state.copyWith(
+        type: () => from.type,
+        categoryIds: Set.unmodifiable(from.categoryIds),
+        amount: () => from.amount == null || from.amount!.isOpen ? null : from.amount,
+        methods: Set.unmodifiable(from.methods),
+        origins: Set.unmodifiable(from.origins),
+      );
+
   void setSort(TransactionSort sort) => state = state.copyWith(sort: sort);
 
-  /// Clears search, type and categories; keeps the period and sort.
-  void clearRefinements() => state = state.copyWith(query: '', type: () => null, categoryIds: const {});
+  /// Clears search, type and every sheet filter; keeps the period and sort.
+  void clearRefinements() => state = state.copyWith(
+        query: '',
+        type: () => null,
+        categoryIds: const {},
+        amount: () => null,
+        methods: const {},
+        origins: const {},
+      );
 
   /// Applies filters requested by a deep link (e.g. "see all income this
   /// month" from Home). Only the provided values change.
@@ -160,7 +241,16 @@ final class FeedTransaction extends FeedEntry {
   final Transaction transaction;
 }
 
-/// Filtered, sorted and grouped transactions plus totals for the strip.
+/// Spending (or earning) of one category within the feed.
+@immutable
+class CategoryShare {
+  const CategoryShare(this.categoryId, this.amount, this.count);
+  final String categoryId;
+  final Money amount;
+  final int count;
+}
+
+/// Filtered, sorted and grouped transactions plus totals for the summary.
 @immutable
 class TransactionFeed {
   const TransactionFeed({
@@ -170,6 +260,12 @@ class TransactionFeed {
     required this.rowEntryEnd,
     required this.income,
     required this.expense,
+    this.previousIncome = Money.zero,
+    this.previousExpense = Money.zero,
+    this.dailyExpense = const [],
+    this.expenseByCategory = const [],
+    this.incomeByCategory = const [],
+    this.largestExpense,
   });
 
   final TransactionFilter filter;
@@ -183,6 +279,19 @@ class TransactionFeed {
   /// Cash-flow totals (loan disbursements excluded, as in analytics).
   final Money income;
   final Money expense;
+
+  /// Same filters over the comparison period (see
+  /// [TransactionQuery.previousPeriod]).
+  final Money previousIncome;
+  final Money previousExpense;
+
+  /// Spending per day of the period in paise, oldest day first.
+  final List<int> dailyExpense;
+
+  /// Category totals, largest first.
+  final List<CategoryShare> expenseByCategory;
+  final List<CategoryShare> incomeByCategory;
+  final Transaction? largestExpense;
 
   Money get net => income - expense;
   int get count => transactions.length;
@@ -198,21 +307,78 @@ class TransactionFeed {
 
 /// Pure filtering/sorting/grouping so it can be tested without widgets.
 abstract final class TransactionQuery {
-  static TransactionFeed build(
-    List<Transaction> sortedNewestFirst,
+  /// What the period is compared against: the previous calendar month (only
+  /// up to the same day when browsing the current month, so a half month is
+  /// not compared with a full one), or the equal-length range before a
+  /// custom range.
+  static DateRange previousPeriod(TransactionFilter filter, DateTime today) {
+    if (filter.hasCustomRange) return filter.range.previous;
+    final prev = filter.month.previous;
+    if (!filter.month.contains(today)) return prev.range;
+    return DateRange(prev.start, DateTime(prev.year, prev.month, today.day.clamp(1, prev.dayCount)));
+  }
+
+  /// Whether [t] passes every filter except the period.
+  static bool passes(
+    Transaction t,
+    TransactionFilter filter,
+    Map<String, TransactionCategory> categories, {
+    String? normalisedQuery,
+    String? amountQuery,
+  }) {
+    if (filter.type != null && t.type != filter.type) return false;
+    if (filter.categoryIds.isNotEmpty && !filter.categoryIds.contains(t.categoryId)) return false;
+    final amount = filter.amount;
+    if (amount != null && !amount.contains(t.amount)) return false;
+    if (filter.methods.isNotEmpty && !filter.methods.contains(t.paymentMethod ?? PaymentMethod.other)) return false;
+    if (filter.origins.isNotEmpty && !filter.origins.contains(t.origin)) return false;
+    final q = normalisedQuery ?? _normalise(filter.query);
+    if (q.isNotEmpty && !_matches(t, q, amountQuery ?? _amountDigits(filter.query), categories)) return false;
+    return true;
+  }
+
+  /// How many transactions [filter] would show (live count in the sheet).
+  static int count(
+    List<Transaction> transactions,
     TransactionFilter filter,
     Map<String, TransactionCategory> categories,
   ) {
     final range = filter.range;
     final q = _normalise(filter.query);
     final amountQuery = _amountDigits(filter.query);
+    var n = 0;
+    for (final t in transactions) {
+      if (range.contains(t.date) && passes(t, filter, categories, normalisedQuery: q, amountQuery: amountQuery)) n++;
+    }
+    return n;
+  }
+
+  static TransactionFeed build(
+    List<Transaction> sortedNewestFirst,
+    TransactionFilter filter,
+    Map<String, TransactionCategory> categories, {
+    DateTime? today,
+  }) {
+    final range = filter.range;
+    final prevRange = previousPeriod(filter, today ?? range.end);
+    final q = _normalise(filter.query);
+    final amountQuery = _amountDigits(filter.query);
     final result = <Transaction>[];
+    var prevIncome = 0;
+    var prevExpense = 0;
     for (final t in sortedNewestFirst) {
-      if (!range.contains(t.date)) continue;
-      if (filter.type != null && t.type != filter.type) continue;
-      if (filter.categoryIds.isNotEmpty && !filter.categoryIds.contains(t.categoryId)) continue;
-      if (q.isNotEmpty && !_matches(t, q, amountQuery, categories)) continue;
-      result.add(t);
+      final inRange = range.contains(t.date);
+      if (!inRange && !prevRange.contains(t.date)) continue;
+      if (!passes(t, filter, categories, normalisedQuery: q, amountQuery: amountQuery)) continue;
+      if (inRange) {
+        result.add(t);
+      } else if (t.countsInCashFlowAnalytics) {
+        if (t.isIncome) {
+          prevIncome += t.amount.paise;
+        } else {
+          prevExpense += t.amount.paise;
+        }
+      }
     }
 
     switch (filter.sort) {
@@ -234,14 +400,28 @@ abstract final class TransactionQuery {
 
     var income = 0;
     var expense = 0;
+    final days = range.dayCount;
+    final daily = List<int>.filled(days, 0);
+    final expenseCats = <String, (int, int)>{};
+    final incomeCats = <String, (int, int)>{};
+    Transaction? largest;
     for (final t in result) {
       if (!t.countsInCashFlowAnalytics) continue;
+      final cats = t.isIncome ? incomeCats : expenseCats;
+      final prev = cats[t.categoryId] ?? (0, 0);
+      cats[t.categoryId] = (prev.$1 + t.amount.paise, prev.$2 + 1);
       if (t.isIncome) {
         income += t.amount.paise;
       } else {
         expense += t.amount.paise;
+        daily[daysBetween(range.start, t.date).clamp(0, days - 1)] += t.amount.paise;
+        if (largest == null || t.amount > largest.amount) largest = t;
       }
     }
+    List<CategoryShare> shares(Map<String, (int, int)> m) => List.unmodifiable(
+          m.entries.map((e) => CategoryShare(e.key, Money.fromPaise(e.value.$1), e.value.$2)).toList()
+            ..sort((a, b) => b.amount.compareTo(a.amount)),
+        );
 
     final entries = <FeedEntry>[];
     final rowEnd = <int>[];
@@ -276,6 +456,12 @@ abstract final class TransactionQuery {
       rowEntryEnd: List.unmodifiable(rowEnd),
       income: Money.fromPaise(income),
       expense: Money.fromPaise(expense),
+      previousIncome: Money.fromPaise(prevIncome),
+      previousExpense: Money.fromPaise(prevExpense),
+      dailyExpense: List.unmodifiable(daily),
+      expenseByCategory: shares(expenseCats),
+      incomeByCategory: shares(incomeCats),
+      largestExpense: largest,
     );
   }
 
@@ -311,7 +497,8 @@ final transactionFeedProvider = Provider<AsyncValue<TransactionFeed>>((ref) {
   if (txs.hasError) return AsyncError(txs.error!, txs.stackTrace ?? StackTrace.current);
   if (cats.hasError) return AsyncError(cats.error!, cats.stackTrace ?? StackTrace.current);
   if (!txs.hasValue || !cats.hasValue) return const AsyncLoading();
-  return AsyncData(TransactionQuery.build(txs.requireValue, filter, cats.requireValue));
+  final today = ref.watch(todayProvider);
+  return AsyncData(TransactionQuery.build(txs.requireValue, filter, cats.requireValue, today: today));
 });
 
 /// Earliest and latest month that can be browsed (bounds the month switcher).

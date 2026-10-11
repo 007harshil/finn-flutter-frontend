@@ -146,7 +146,6 @@ PendingPayment pendingPayment({
   PendingDirection direction = PendingDirection.iOwe,
   int amount = 5000,
   DateTime? created,
-  DateTime? due,
   bool cancelled = false,
   String counterparty = 'Priya',
 }) =>
@@ -158,7 +157,6 @@ PendingPayment pendingPayment({
       originalAmount: rs(amount),
       purpose: 'Goa trip share',
       createdDate: created ?? d(2026, 9, 1),
-      dueDate: due,
       isCancelled: cancelled,
       createdAt: fxStamp,
       updatedAt: fxStamp,

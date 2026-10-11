@@ -9,6 +9,7 @@ import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
 import '../../../shared/presentation/async_view.dart';
+import '../../goals/presentation/savings_visuals.dart';
 import '../../goals/presentation/savings_widgets.dart';
 import '../domain/emergency_fund.dart';
 import '../domain/emergency_fund_calculator.dart';
@@ -66,9 +67,8 @@ class _Body extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = status;
     final c = context.colors;
-    final movements = s.movements;
     final configured = s.level != EmergencyFundLevel.notConfigured;
-    Widget box(Widget child, {double top = Space.x4}) => SliverToBoxAdapter(
+    Widget box(Widget child, {double top = Space.x3}) => SliverToBoxAdapter(
           child: ResponsiveCenter(
             padding: EdgeInsets.fromLTRB(Space.gutter, top, Space.gutter, 0),
             child: child,
@@ -86,39 +86,23 @@ class _Body extends StatelessWidget {
           box(StaggeredEntrance(index: i++, child: _GuidanceBanner(status: s))),
           box(StaggeredEntrance(index: i++, child: _PlanCard(status: s))),
         ],
-        box(StaggeredEntrance(index: i++, child: const _HowItWorks())),
         box(
-          SectionHeader(
-            icon: LucideIcons.clock,
-            title: 'History',
-            subtitle: movements.isEmpty ? null : '${movements.length} movement${movements.length == 1 ? '' : 's'}',
-            tileColor: c.accentEmergency,
+          SavingsHistory(
+            movements: s.movements,
+            accent: c.accentEmergency,
+            emptyText: 'Nothing set aside yet. Your first contribution will show here.',
           ),
           top: Space.section,
         ),
-        if (movements.isEmpty)
-          box(
-            Text(
-              'Nothing set aside yet. Your first contribution will show here.',
-              style: context.text.body.copyWith(color: c.textSecondary),
-            ),
-            top: Space.x2,
-          )
-        else
-          SliverList.builder(
-            itemCount: movements.length,
-            itemBuilder: (context, i) => ResponsiveCenter(
-              key: ValueKey(movements[i].id),
-              padding: const EdgeInsets.symmetric(horizontal: Space.gutter),
-              child: SavingsMovementTile(movement: movements[i]),
-            ),
-          ),
+        box(const _HowItWorks(), top: Space.x5),
         const SliverToBoxAdapter(child: SizedBox(height: Space.x12)),
       ],
     );
   }
 }
 
+/// Level-coloured hero. Each cell is one month of essential spending the
+/// plan wants covered; cells fill in turn up to the months covered today.
 class _HeroCard extends StatelessWidget {
   const _HeroCard({required this.status});
 
@@ -132,9 +116,11 @@ class _HeroCard extends StatelessWidget {
     const soft = Color(0xD9FFFFFF);
     final configured = s.level != EmergencyFundLevel.notConfigured;
     final coverage = s.coverageMonths;
+    final months = s.plan?.targetMonths;
     return GradientHeroCard(
       gradient: emergencyGradient(c, s.level),
       watermark: LucideIcons.shieldCheck,
+      padding: const EdgeInsets.all(Space.x4),
       semanticLabel: configured
           ? 'Emergency fund, ${s.level.label}. ${savingsMoney(context, s.saved)} set aside of '
               '${savingsMoney(context, s.target)}.'
@@ -157,9 +143,8 @@ class _HeroCard extends StatelessWidget {
               OnGradientPill(label: s.level.label.toUpperCase(), icon: emergencyLevelIcon(s.level)),
             ],
           ),
-          const SizedBox(height: Space.x2),
-          AnimatedAmount(s.saved, style: t.amountHero.copyWith(color: Colors.white), fit: true),
           const SizedBox(height: Space.x1),
+          AnimatedAmount(s.saved, style: t.amountHero.copyWith(color: Colors.white), fit: true, animateOnMount: true),
           if (!configured)
             Text(
               'Set a target based on your essential monthly spending to track your coverage.',
@@ -170,14 +155,25 @@ class _HeroCard extends StatelessWidget {
               coverage == null ? 'earmarked' : 'earmarked · covers about ${coverageLabel(coverage)} of essentials',
               style: t.label.copyWith(color: soft),
             ),
-            const SizedBox(height: Space.x4),
-            FinnProgressBar(
-              value: s.progress,
-              color: Colors.white,
-              trackColor: Colors.white24,
-              height: 10,
-              semanticsLabel: 'Emergency fund ${formatBps(s.progressBps, decimals: 0)} funded',
-            ),
+            const SizedBox(height: Space.x3),
+            if (coverage != null && months != null) ...[
+              CoverCells(covered: coverage, months: months, height: 16),
+              const SizedBox(height: Space.x1),
+              Row(
+                children: [
+                  Expanded(child: Text('1 cell = 1 month of essentials', maxLines: 1, overflow: TextOverflow.ellipsis, style: t.micro.copyWith(color: soft))),
+                  const SizedBox(width: Space.x2),
+                  Text('$months mo', style: t.micro.copyWith(color: soft, fontWeight: FontWeight.w800)),
+                ],
+              ),
+            ] else
+              FinnProgressBar(
+                value: s.progress,
+                color: Colors.white,
+                trackColor: Colors.white24,
+                height: 10,
+                semanticsLabel: 'Emergency fund ${formatBps(s.progressBps, decimals: 0)} funded',
+              ),
             const SizedBox(height: Space.x2),
             Row(
               children: [
@@ -290,7 +286,8 @@ class _GuidanceBanner extends StatelessWidget {
   }
 }
 
-/// Plan assumptions, with a nudge when recent spending has shifted.
+/// Plan assumptions as an equation of three tiles (essentials × months =
+/// target), with a nudge when recent spending has shifted.
 class _PlanCard extends StatelessWidget {
   const _PlanCard({required this.status});
 
@@ -302,16 +299,31 @@ class _PlanCard extends StatelessWidget {
     final plan = s.plan!;
     final c = context.colors;
     final t = context.text;
-    final coverage = s.coverageMonths;
     final suggestion = s.suggestedEssentialMonthly;
+    Widget tile(String label, Widget value) => Expanded(
+          child: MergeSemantics(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: Space.x2_5, vertical: Space.x2),
+              decoration: BoxDecoration(color: c.surfaceMuted, borderRadius: Radii.rLg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, maxLines: 2, style: t.eyebrow.copyWith(fontSize: 9.5)),
+                  const SizedBox(height: Space.x1),
+                  FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: value),
+                ],
+              ),
+            ),
+          ),
+        );
     return FinnCard(
+      radius: Radii.xxl,
+      padding: const EdgeInsets.fromLTRB(Space.x4, Space.x2, Space.x4, Space.x4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Icon(LucideIcons.target, size: 16, color: c.textSecondary),
-              const SizedBox(width: Space.x2),
               Expanded(child: Text('Your plan', style: t.sectionTitle)),
               FinnButton(
                 label: 'Edit',
@@ -322,25 +334,35 @@ class _PlanCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: Space.x1),
-          KeyValueRow(
-            label: 'Essentials per month',
-            valueWidget: AmountText(plan.essentialMonthlyExpenses, style: t.bodyStrong),
+          Row(
+            children: [
+              tile('ESSENTIALS PER MONTH', AmountText(plan.essentialMonthlyExpenses, style: t.bodyStrong)),
+              const SizedBox(width: Space.x2),
+              tile(
+                'MONTHS OF COVER',
+                Text('× ${plan.targetMonths} month${plan.targetMonths == 1 ? '' : 's'}', style: t.bodyStrong),
+              ),
+              const SizedBox(width: Space.x2),
+              tile(
+                plan.targetOverride == null ? 'TARGET' : 'TARGET (CUSTOM)',
+                AmountText(s.target, style: t.bodyStrong),
+              ),
+            ],
           ),
-          KeyValueRow(
-            label: 'Months of cover',
-            value: '${plan.targetMonths} month${plan.targetMonths == 1 ? '' : 's'}',
+          const SizedBox(height: Space.x2_5),
+          Row(
+            children: [
+              Icon(LucideIcons.flag, size: 13, color: c.textTertiary),
+              const SizedBox(width: Space.x1_5),
+              Expanded(
+                child: Text(
+                  s.remaining.isPositive ? '${savingsMoney(context, s.remaining)} still to go' : 'Target reached',
+                  style: t.label.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              Text('Plan updated ${DateFormats.dayMonth.format(plan.updatedAt)}', style: t.micro),
+            ],
           ),
-          KeyValueRow(
-            label: plan.targetOverride == null ? 'Target' : 'Target (custom)',
-            valueWidget: AmountText(s.target, style: t.bodyStrong),
-          ),
-          const FinnDivider(),
-          KeyValueRow(label: 'Set aside', valueWidget: AmountText(s.saved, style: t.bodyStrong)),
-          KeyValueRow(label: 'Still to go', valueWidget: AmountText(s.remaining, style: t.bodyStrong)),
-          KeyValueRow(label: 'Coverage now', value: coverage == null ? '—' : coverageLabel(coverage)),
-          const SizedBox(height: Space.x1),
-          Text('Plan updated ${DateFormats.dayMonthYear.format(plan.updatedAt)}', style: t.caption),
           if (s.suggestionDiffersFromPlan && suggestion != null) ...[
             const SizedBox(height: Space.x3),
             InfoBanner(
@@ -357,9 +379,16 @@ class _PlanCard extends StatelessWidget {
   }
 }
 
-/// Plain explanation of earmarked money.
-class _HowItWorks extends StatelessWidget {
+/// Plain explanation of earmarked money, folded away until asked for.
+class _HowItWorks extends StatefulWidget {
   const _HowItWorks();
+
+  @override
+  State<_HowItWorks> createState() => _HowItWorksState();
+}
+
+class _HowItWorksState extends State<_HowItWorks> {
+  bool _open = false;
 
   @override
   Widget build(BuildContext context) {
@@ -367,20 +396,35 @@ class _HowItWorks extends StatelessWidget {
     final t = context.text;
     return FinnCard(
       variant: FinnCardVariant.muted,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(LucideIcons.info, size: 16, color: c.textSecondary),
-          const SizedBox(width: Space.x2),
-          Expanded(
-            child: Text(
-              'Money here is earmarked from your balance — still yours, not spending. '
-              'Adding to it lowers "available to spend"; withdrawing releases it back. '
-              'Your net worth stays the same.',
-              style: t.caption,
+      padding: const EdgeInsets.symmetric(horizontal: Space.x3, vertical: Space.x2_5),
+      onTap: () => setState(() => _open = !_open),
+      child: MotionAnimatedSize(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(LucideIcons.info, size: 16, color: c.textSecondary),
+                const SizedBox(width: Space.x2),
+                Expanded(child: Text('How earmarking works', style: t.label.copyWith(fontWeight: FontWeight.w700))),
+                AnimatedRotation(
+                  turns: _open ? 0.5 : 0,
+                  duration: context.motion.fast,
+                  child: Icon(LucideIcons.chevronDown, size: 16, color: c.textSecondary),
+                ),
+              ],
             ),
-          ),
-        ],
+            if (_open) ...[
+              const SizedBox(height: Space.x2),
+              Text(
+                'Money here is earmarked from your balance — still yours, not spending. '
+                'Adding to it lowers "available to spend"; withdrawing releases it back. '
+                'Your net worth stays the same.',
+                style: t.caption,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

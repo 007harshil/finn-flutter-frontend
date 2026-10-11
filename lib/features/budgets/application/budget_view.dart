@@ -1,0 +1,364 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../app/di/data_providers.dart';
+import '../../../core/money/money.dart';
+import '../../../core/time/dates.dart';
+import '../../../finance/finance_snapshot.dart';
+import '../../transactions/domain/transaction.dart';
+import '../domain/budget.dart';
+
+/// Read models for the redesigned budgets screens. Everything here is a
+/// pure function of a [BudgetUsage] (or the snapshot) so the UI only
+/// renders, never computes money.
+
+/// The one status a person needs per budget. Health (near/over the limit)
+/// and pace (will it run out before the period ends) collapse into a single
+/// word so the list can be scanned without reading numbers.
+enum BudgetState {
+  over('Over limit'),
+  risk('At risk'),
+  onTrack('On track'),
+  paused('Paused');
+
+  const BudgetState(this.label);
+  final String label;
+}
+
+/// Pace and safe-spend figures for one budget in its current period.
+@immutable
+class BudgetPace {
+  const BudgetPace._({
+    required this.usage,
+    required this.state,
+    required this.daysLeft,
+    required this.elapsedDays,
+    required this.projected,
+    required this.safePerDay,
+    required this.runsOutOn,
+  });
+
+  factory BudgetPace.of(BudgetUsage u, DateTime today) {
+    final p = u.period;
+    final t0 = today.dateOnly;
+    final started = !t0.isBefore(p.start);
+    final ended = t0.isAfter(p.end);
+    final elapsed = !started ? 0 : (ended ? p.dayCount : daysBetween(p.start, t0) + 1);
+    final daysLeft = ended ? 0 : (started ? daysBetween(t0, p.end) + 1 : p.dayCount);
+
+    // Straight-line projection of the period's total at today's pace. Only
+    // honest once at least a couple of days have passed.
+    Money? projected;
+    if (elapsed >= 2 && !ended) {
+      projected = u.spent.scale(p.dayCount, elapsed);
+    } else if (ended) {
+      projected = u.spent;
+    }
+
+    final remaining = u.remaining;
+    final safe = remaining.isPositive && daysLeft > 0 ? remaining.scale(1, daysLeft) : null;
+
+    // Day the limit is crossed at today's pace (only when it is still ahead).
+    DateTime? runsOut;
+    if (projected != null && projected > u.budget.limit && !u.isOver && u.spent.isPositive && elapsed > 0) {
+      final day = roundDiv(u.budget.limit.paise * elapsed, u.spent.paise, RoundingMode.up);
+      final d = DateTime(p.start.year, p.start.month, p.start.day + day - 1);
+      if (!d.isAfter(p.end)) runsOut = d;
+    }
+
+    final BudgetState state;
+    if (u.budget.isPaused) {
+      state = BudgetState.paused;
+    } else if (u.isOver) {
+      state = BudgetState.over;
+    } else if (u.health == BudgetHealth.warning || (projected != null && projected > u.budget.limit)) {
+      state = BudgetState.risk;
+    } else {
+      state = BudgetState.onTrack;
+    }
+    return BudgetPace._(
+      usage: u,
+      state: state,
+      daysLeft: daysLeft,
+      elapsedDays: elapsed,
+      projected: projected,
+      safePerDay: safe,
+      runsOutOn: runsOut,
+    );
+  }
+
+  final BudgetUsage usage;
+  final BudgetState state;
+  final int daysLeft;
+  final int elapsedDays;
+
+  /// Period total if spending continues at the same daily rate.
+  final Money? projected;
+
+  /// What can be spent per remaining day without crossing the limit.
+  final Money? safePerDay;
+
+  /// When the limit will be crossed at the current pace (null if never).
+  final DateTime? runsOutOn;
+
+  /// Share of the period gone (0..1), for the "today" marker.
+  double get elapsed => usage.elapsedBps / 10000;
+
+  /// Spent share of the limit; may exceed 1.
+  double get used => usage.budget.limit.isPositive ? usage.spent.paise / usage.budget.limit.paise : 0;
+
+  /// Projected share of the limit; may exceed 1.
+  double? get projectedShare =>
+      projected == null || !usage.budget.limit.isPositive ? null : projected!.paise / usage.budget.limit.paise;
+
+  @override
+  bool operator ==(Object other) => other is BudgetPace && other.usage == usage && other.daysLeft == daysLeft;
+
+  @override
+  int get hashCode => Object.hash(usage, daysLeft);
+}
+
+enum BudgetSort {
+  urgency('Most urgent'),
+  used('Most used'),
+  left('Most left'),
+  limit('Biggest limit'),
+  name('Name');
+
+  const BudgetSort(this.label);
+  final String label;
+}
+
+enum BudgetPeriodFilter {
+  all('All periods'),
+  monthly('Monthly'),
+  custom('Custom');
+
+  const BudgetPeriodFilter(this.label);
+  final String label;
+}
+
+/// What the budgets list shows: one status (null = all), a sort and a
+/// period type.
+@immutable
+class BudgetListFilter {
+  const BudgetListFilter({this.state, this.sort = BudgetSort.urgency, this.period = BudgetPeriodFilter.all});
+
+  final BudgetState? state;
+  final BudgetSort sort;
+  final BudgetPeriodFilter period;
+
+  /// Filters beyond the status tabs (for the options badge).
+  int get optionCount => (sort == BudgetSort.urgency ? 0 : 1) + (period == BudgetPeriodFilter.all ? 0 : 1);
+
+  BudgetListFilter copyWith({BudgetState? Function()? state, BudgetSort? sort, BudgetPeriodFilter? period}) =>
+      BudgetListFilter(
+        state: state != null ? state() : this.state,
+        sort: sort ?? this.sort,
+        period: period ?? this.period,
+      );
+
+  bool accepts(BudgetPace p) {
+    if (state != null && p.state != state) return false;
+    return switch (period) {
+      BudgetPeriodFilter.all => true,
+      BudgetPeriodFilter.monthly => p.usage.budget.periodType == BudgetPeriodType.monthly,
+      BudgetPeriodFilter.custom => p.usage.budget.periodType == BudgetPeriodType.custom,
+    };
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is BudgetListFilter && other.state == state && other.sort == sort && other.period == period;
+
+  @override
+  int get hashCode => Object.hash(state, sort, period);
+}
+
+int _stateRank(BudgetState s) => BudgetState.values.indexOf(s);
+
+/// Applies [f] to [all]; [names] resolves category names for sorting.
+List<BudgetPace> filterBudgets(List<BudgetPace> all, BudgetListFilter f, String Function(BudgetPace) names) {
+  final out = all.where(f.accepts).toList();
+  int byUsed(BudgetPace a, BudgetPace b) => b.usage.utilizationBps.compareTo(a.usage.utilizationBps);
+  out.sort(switch (f.sort) {
+    BudgetSort.urgency => (a, b) {
+        final s = _stateRank(a.state).compareTo(_stateRank(b.state));
+        if (s != 0) return s;
+        // Within a state, the one furthest ahead of the calendar first.
+        final ahead = (b.used - b.elapsed).compareTo(a.used - a.elapsed);
+        return ahead != 0 ? ahead : byUsed(a, b);
+      },
+    BudgetSort.used => byUsed,
+    BudgetSort.left => (a, b) => b.usage.remaining.compareTo(a.usage.remaining),
+    BudgetSort.limit => (a, b) => b.usage.budget.limit.compareTo(a.usage.budget.limit),
+    BudgetSort.name => (a, b) => names(a).toLowerCase().compareTo(names(b).toLowerCase()),
+  });
+  return out;
+}
+
+/// The whole month at a glance: totals of active monthly budgets with the
+/// same pace maths as a single budget.
+@immutable
+class BudgetsPulse {
+  const BudgetsPulse({
+    required this.period,
+    required this.limit,
+    required this.spent,
+    required this.committed,
+    required this.daysLeft,
+    required this.elapsed,
+    required this.projected,
+    required this.paces,
+  });
+
+  final DateRange period;
+  final Money limit;
+  final Money spent;
+  final Money committed;
+  final int daysLeft;
+
+  /// Share of the period gone (0..1).
+  final double elapsed;
+  final Money? projected;
+
+  /// Every budget (active and paused), unsorted.
+  final List<BudgetPace> paces;
+
+  Money get remaining => limit - spent;
+  bool get isOver => spent > limit;
+  bool get hasTotals => limit.isPositive;
+  double get used => limit.isPositive ? spent.paise / limit.paise : 0;
+  double? get projectedShare => projected == null || !limit.isPositive ? null : projected!.paise / limit.paise;
+  Money? get safePerDay => remaining.isPositive && daysLeft > 0 ? remaining.scale(1, daysLeft) : null;
+
+  int count(BudgetState s) => paces.where((p) => p.state == s).length;
+  Map<BudgetState, int> get counts => {for (final s in BudgetState.values) s: count(s)};
+
+  @override
+  bool operator ==(Object other) =>
+      other is BudgetsPulse &&
+      other.period == period &&
+      other.limit == limit &&
+      other.spent == spent &&
+      other.committed == committed &&
+      other.daysLeft == daysLeft &&
+      listEquals(other.paces, paces);
+
+  @override
+  int get hashCode => Object.hash(period, limit, spent, committed, daysLeft, paces.length);
+}
+
+BudgetsPulse buildBudgetsPulse(FinanceSnapshot s) {
+  final period = s.currentBudgetPeriod;
+  final paces = [for (final u in s.budgetUsages) BudgetPace.of(u, s.today)];
+  var limit = Money.zero;
+  var spent = Money.zero;
+  var committed = Money.zero;
+  for (final p in paces) {
+    final u = p.usage;
+    if (u.budget.isPaused || u.budget.periodType != BudgetPeriodType.monthly) continue;
+    limit += u.budget.limit;
+    spent += u.spent;
+    committed += u.committed;
+  }
+  final elapsedDays = (daysBetween(period.start, s.today) + 1).clamp(0, period.dayCount);
+  final daysLeft = (daysBetween(s.today, period.end) + 1).clamp(0, period.dayCount);
+  return BudgetsPulse(
+    period: period,
+    limit: limit,
+    spent: spent,
+    committed: committed,
+    daysLeft: daysLeft,
+    elapsed: elapsedDays / period.dayCount,
+    projected: elapsedDays >= 2 ? spent.scale(period.dayCount, elapsedDays) : null,
+    paces: paces,
+  );
+}
+
+final budgetsPulseProvider =
+    Provider<AsyncValue<BudgetsPulse>>((ref) => ref.watch(financeSnapshotProvider).whenData(buildBudgetsPulse));
+
+final budgetPaceProvider = Provider.family<AsyncValue<BudgetPace?>, String>((ref, id) {
+  return ref.watch(financeSnapshotProvider).whenData((s) {
+    final u = s.budgetUsage(id);
+    return u == null ? null : BudgetPace.of(u, s.today);
+  });
+});
+
+/// Day-by-day spending of one budget in its current period.
+@immutable
+class BudgetBurn {
+  const BudgetBurn({required this.period, required this.daily, required this.todayIndex, required this.transactions});
+
+  final DateRange period;
+
+  /// Paise spent on each day of [period] (index 0 = first day).
+  final List<int> daily;
+
+  /// Index of today in [daily] (−1 before the period, length after it).
+  final int todayIndex;
+
+  /// The period's transactions, newest first.
+  final List<Transaction> transactions;
+
+  /// Running total per day.
+  List<int> get cumulative {
+    var sum = 0;
+    return [for (final d in daily) sum += d];
+  }
+
+  DateTime dayAt(int i) => DateTime(period.start.year, period.start.month, period.start.day + i);
+
+  int indexOf(DateTime d) => daysBetween(period.start, d.dateOnly);
+
+  @override
+  bool operator ==(Object other) =>
+      other is BudgetBurn && other.period == period && listEquals(other.daily, daily) && other.todayIndex == todayIndex;
+
+  @override
+  int get hashCode => Object.hash(period, Object.hashAll(daily), todayIndex);
+}
+
+BudgetBurn buildBudgetBurn(FinanceSnapshot s, BudgetUsage u) {
+  final p = u.period;
+  final daily = List<int>.filled(p.dayCount, 0);
+  final txs = <Transaction>[];
+  for (final id in u.transactionIds) {
+    final t = s.transactionById[id];
+    if (t == null) continue;
+    txs.add(t);
+    final i = daysBetween(p.start, t.date.dateOnly);
+    if (i >= 0 && i < daily.length) daily[i] += t.amount.paise;
+  }
+  txs.sort((a, b) {
+    final d = b.date.compareTo(a.date);
+    return d != 0 ? d : b.createdAt.compareTo(a.createdAt);
+  });
+  final today = daysBetween(p.start, s.today).clamp(-1, p.dayCount);
+  return BudgetBurn(period: p, daily: daily, todayIndex: today, transactions: txs);
+}
+
+final budgetBurnProvider = Provider.family<AsyncValue<BudgetBurn?>, String>((ref, id) {
+  return ref.watch(financeSnapshotProvider).whenData((s) {
+    final u = s.budgetUsage(id);
+    return u == null ? null : buildBudgetBurn(s, u);
+  });
+});
+
+/// "Where it went": spending in a budget grouped by merchant / payee.
+List<(String, Money, int)> topPayees(List<Transaction> txs, {int limit = 4}) {
+  final sums = <String, int>{};
+  final counts = <String, int>{};
+  for (final t in txs) {
+    final key = payeeOf(t);
+    sums[key] = (sums[key] ?? 0) + t.amount.paise;
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  final out = [for (final e in sums.entries) (e.key, Money.fromPaise(e.value), counts[e.key]!)]
+    ..sort((a, b) => b.$2.compareTo(a.$2));
+  return out.take(limit).toList();
+}
+
+/// The label a transaction is grouped under in [topPayees].
+String payeeOf(Transaction t) => t.displayTitle?.trim() ?? 'Other';

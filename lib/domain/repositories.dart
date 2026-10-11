@@ -54,3 +54,24 @@ abstract interface class ProfileRepository implements ValueRepository<FinancialP
 abstract interface class EmergencyPlanRepository implements ValueRepository<EmergencyFundPlan?> {}
 
 abstract interface class AlertInboxRepository implements ValueRepository<AlertInboxState> {}
+
+/// People who use FiNN. Searching never reveals more than name, handle and
+/// a phone hint.
+abstract interface class UserDirectory {
+  /// The signed-in user.
+  FinnUser get me;
+
+  /// Users whose name or handle matches [query]. Callers debounce typing;
+  /// queries shorter than two characters return nothing.
+  Future<List<FinnUser>> search(String query);
+
+  /// A user already known on this device (searched before or linked to an
+  /// item). Synchronous so actions can validate without a round trip.
+  FinnUser? known(String id);
+}
+
+/// The other side of every shared pending item (double entry): one
+/// [MirrorEntry] per counterparty and shared item. A backend stores these in
+/// the counterparty's account; the local mock keeps them on device so both
+/// sides can be inspected.
+abstract interface class SharedLedgerRepository implements CrudRepository<MirrorEntry> {}

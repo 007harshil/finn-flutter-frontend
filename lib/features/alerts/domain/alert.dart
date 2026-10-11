@@ -5,8 +5,8 @@ import '../../../core/money/money.dart';
 enum AlertType {
   emiDue('Upcoming EMI'),
   emiOverdue('Overdue EMI'),
-  pendingOverdue('Pending payment'),
-  collectDue('Money to collect'),
+  pendingOwed('Pending payment'),
+  collectOwed('Money to collect'),
   subscriptionRenewal('Subscription renewal'),
   subscriptionOverdue('Unpaid subscription'),
   budgetNearLimit('Budget near limit'),

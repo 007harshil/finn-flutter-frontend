@@ -140,7 +140,7 @@ Cash is counted once: earmarked goal and emergency savings are part of cash and 
 |---|---|---|
 | Overdue EMI | next instalment due before today | critical (borrowed) / warning (lent) |
 | Upcoming EMI | due within `emiReminderDays` (default 5) | warning |
-| Pending overdue / due soon | due date passed / within `pendingReminderDays` (3) | critical if I owe and overdue, else warning |
+| Pending waiting long | open longer than `PendingView.longPendingDays` (21); no due dates exist | info only — "N days have passed", never late |
 | Money to collect (aged) | owed to me, no due date, open > 30 days | info |
 | Unpaid subscription | due date passed, not marked paid | warning |
 | Subscription renewal | due today or within `subscriptionReminderDays` (3) | info |
