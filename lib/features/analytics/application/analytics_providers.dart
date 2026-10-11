@@ -9,6 +9,8 @@ import '../../../core/time/dates.dart';
 import '../../../finance/finance_snapshot.dart';
 import '../../../finance/ledger.dart';
 import '../../budgets/domain/budget.dart';
+import '../../goals/domain/goal.dart';
+import '../../loans/domain/loan_calculator.dart';
 import '../../subscriptions/domain/subscription.dart';
 import '../../transactions/domain/transaction.dart';
 import '../domain/analytics.dart';
@@ -69,6 +71,44 @@ class InsightsFilterController extends Notifier<InsightsFilter> {
 final insightsFilterProvider =
     NotifierProvider<InsightsFilterController, InsightsFilter>(InsightsFilterController.new);
 
+/// The topic chips on the Insights screen. Each one shows only its own
+/// numbers and charts.
+enum InsightsSection {
+  overview('Overview'),
+  spending('Daily spend'),
+  cashFlow('In vs out'),
+  categories('Categories'),
+  payments('Payments'),
+  budgets('Budgets'),
+  savings('Savings'),
+  loans('Loans'),
+  subscriptions('Subscriptions');
+
+  const InsightsSection(this.label);
+  final String label;
+}
+
+class InsightsSectionController extends Notifier<InsightsSection> {
+  @override
+  InsightsSection build() => InsightsSection.overview;
+
+  void select(InsightsSection s) => state = s;
+}
+
+final insightsSectionProvider =
+    NotifierProvider<InsightsSectionController, InsightsSection>(InsightsSectionController.new);
+
+/// Spending on one calendar day.
+@immutable
+class DaySpend {
+  const DaySpend(this.date, this.amount, {this.isFuture = false});
+  final DateTime date;
+  final Money amount;
+
+  /// Day after today: nothing could have been spent yet.
+  final bool isFuture;
+}
+
 /// Formats amounts inside headline copy (lets the UI mask them).
 typedef MoneyText = String Function(Money m);
 
@@ -101,6 +141,11 @@ class InsightsData {
     required this.activeSubscriptionCount,
     required this.insights,
     required this.today,
+    this.dailySpend = const [],
+    this.weekdayAverages = const [],
+    this.topExpenses = const [],
+    this.goals = const [],
+    this.loans = const [],
   });
 
   final InsightsFilter filter;
@@ -134,6 +179,20 @@ class InsightsData {
   final List<Insight> insights;
   final DateTime today;
 
+  /// Every day of the selected month (single-month view only; empty for
+  /// multi-month views, which use [months]).
+  final List<DaySpend> dailySpend;
+
+  /// Average spend on each weekday in the period, Monday first (7 items).
+  final List<Money> weekdayAverages;
+
+  /// Largest single expenses in the period, biggest first.
+  final List<Transaction> topExpenses;
+  final List<GoalProgress> goals;
+
+  /// Borrowed loans that still have money outstanding.
+  final List<LoanState> loans;
+
   bool get hasActivity => current.transactionCount > 0;
   bool get monthsHaveActivity => months.any((m) => m.income.isPositive || m.expense.isPositive);
   int get windowMonths => months.length;
@@ -145,6 +204,119 @@ class InsightsData {
   int? get savingsRateBps => current.savingsRateBps?.clamp(-10000, 10000);
 
   Money get windowNet => Money.sum(months.map((m) => m.net));
+
+  // ---- Baselines --------------------------------------------------------
+
+  /// Months in the window that have any income or spending.
+  List<MonthlyCashFlow> get activeMonths =>
+      [for (final m in months) if (m.income.isPositive || m.expense.isPositive) m];
+
+  static Money _avg(Iterable<Money> xs) {
+    final l = xs.toList();
+    return l.isEmpty ? Money.zero : Money.sum(l).scale(1, l.length);
+  }
+
+  /// Typical month, averaged over months that have activity.
+  Money get avgMonthlyIncome => _avg(activeMonths.map((m) => m.income));
+  Money get avgMonthlyExpense => _avg(activeMonths.map((m) => m.expense));
+  Money get avgMonthlyNet => _avg(activeMonths.map((m) => m.net));
+
+  /// The day with the most spending (single-month view).
+  DaySpend? get peakDay {
+    DaySpend? best;
+    for (final d in dailySpend) {
+      if (d.amount.isPositive && (best == null || d.amount > best.amount)) best = d;
+    }
+    return best;
+  }
+
+  /// Days in the selected month with no spending at all (up to today).
+  int get noSpendDays => dailySpend.where((d) => !d.isFuture && d.amount.isZero).length;
+
+  /// Days of the selected month that have happened (today included).
+  int get elapsedDays => dailySpend.where((d) => !d.isFuture).length;
+
+  /// Where spending lands at month end if the daily average holds. Only
+  /// for a month still in progress.
+  Money? get projectedMonthSpend {
+    if (filter.period != InsightsPeriod.month || !isPartial || dailySpend.isEmpty) return null;
+    return dailyBurn.times(dailySpend.length);
+  }
+
+  /// Index (0 = Monday) of the weekday with the highest average spend.
+  int? get busiestWeekday {
+    var best = -1;
+    for (var i = 0; i < weekdayAverages.length; i++) {
+      if (weekdayAverages[i].isPositive && (best < 0 || weekdayAverages[i] > weekdayAverages[best])) best = i;
+    }
+    return best < 0 ? null : best;
+  }
+
+  /// Index (0 = Monday) of the weekday with the lowest average spend.
+  int? get quietestWeekday {
+    if (busiestWeekday == null) return null;
+    var best = 0;
+    for (var i = 1; i < weekdayAverages.length; i++) {
+      if (weekdayAverages[i] < weekdayAverages[best]) best = i;
+    }
+    return best;
+  }
+
+  /// Share of spending paid digitally (everything except cash), in bps.
+  int? get digitalShareBps {
+    if (current.expense.isZero) return null;
+    final cash = Money.sum(methods.where((m) => m.key == PaymentMethod.cash).map((m) => m.value));
+    return (current.expense - cash).ratioBps(current.expense);
+  }
+
+  Iterable<BudgetUsage> get _activeBudgets => budgets.where((b) => b.health != BudgetHealth.paused);
+
+  /// Totals across active (not paused) budgets.
+  Money get budgetLimitTotal => Money.sum(_activeBudgets.map((b) => b.budget.limit));
+  Money get budgetSpentTotal => Money.sum(_activeBudgets.map((b) => b.spent));
+
+  /// How far through the budget period today is, in bps.
+  int get budgetElapsedBps {
+    final total = budgetPeriod.dayCount;
+    final end = today.isAfter(budgetPeriod.end) ? budgetPeriod.end : today;
+    final done = end.isBefore(budgetPeriod.start) ? 0 : daysBetween(budgetPeriod.start, end) + 1;
+    return (done * 10000 / total).round().clamp(0, 10000);
+  }
+
+  /// Days left in the budget period, today included.
+  int get budgetDaysLeft {
+    if (today.isAfter(budgetPeriod.end)) return 0;
+    final from = today.isBefore(budgetPeriod.start) ? budgetPeriod.start : today;
+    return daysBetween(from, budgetPeriod.end) + 1;
+  }
+
+  /// Amount that can be spent each remaining day without crossing the
+  /// combined budget limit. Null without active budgets.
+  Money? get budgetSafeDaily {
+    if (budgetLimitTotal.isZero || budgetDaysLeft == 0) return null;
+    final left = budgetLimitTotal - budgetSpentTotal;
+    return left.isNegative ? Money.zero : left.scale(1, budgetDaysLeft);
+  }
+
+  /// Net change in earmarked savings across the window.
+  Money get savingsChange => savings.isEmpty ? Money.zero : savings.last.value - savings.first.value;
+
+  /// Average monthly change in savings across the window.
+  Money get avgMonthlySavingsChange =>
+      savings.length < 2 ? Money.zero : savingsChange.scale(1, savings.length - 1);
+
+  /// Debt repaid across the window (positive when debt went down).
+  Money get debtRepaid => debt.isEmpty ? Money.zero : debt.first.value - debt.last.value;
+
+  Money get avgMonthlyDebtRepaid => debt.length < 2 ? Money.zero : debtRepaid.scale(1, debt.length - 1);
+
+  /// Months until debt reaches zero at the recent repayment pace; null
+  /// when debt is not going down.
+  int? get monthsToDebtFree {
+    final pace = avgMonthlyDebtRepaid;
+    if (debt.isEmpty || !pace.isPositive || debt.last.value.isZero) return null;
+    return (debt.last.value.paise / pace.paise).ceil();
+  }
 
   // ---- Takeaway headlines ----------------------------------------------
 
@@ -254,6 +426,7 @@ InsightsData buildInsightsData(FinanceSnapshot s, InsightsFilter f, {AnalyticsSe
   }
 
   final windowCount = n == 1 ? 6 : n;
+  final spend = _SpendPatterns.of(s, range, single: n == 1 ? anchor : null);
   final current = s.summary(range);
   final previous = s.summary(previousRange);
   final subs = s.subscriptions.where((x) => x.isActive).toList()
@@ -282,7 +455,58 @@ InsightsData buildInsightsData(FinanceSnapshot s, InsightsFilter f, {AnalyticsSe
     activeSubscriptionCount: subs.length,
     insights: service.insights(s, anchor),
     today: today,
+    dailySpend: spend.daily,
+    weekdayAverages: spend.weekday,
+    topExpenses: spend.top,
+    goals: s.goalProgress,
+    loans: [for (final l in s.loanStates) if (l.loan.isBorrowed && !l.isClosed) l],
   );
+}
+
+/// Day-level spending patterns for a period: daily totals, weekday
+/// averages and the largest expenses.
+class _SpendPatterns {
+  const _SpendPatterns(this.daily, this.weekday, this.top);
+
+  final List<DaySpend> daily;
+  final List<Money> weekday;
+  final List<Transaction> top;
+
+  static const _topCount = 5;
+
+  factory _SpendPatterns.of(FinanceSnapshot s, DateRange range, {MonthKey? single}) {
+    final today = s.today;
+    final perDay = <DateTime, int>{};
+    final expenses = <Transaction>[];
+    for (final t in s.transactions) {
+      final d = t.date.dateOnly;
+      if (!t.isExpense || !t.countsInCashFlowAnalytics || !range.contains(d) || d.isAfter(today)) continue;
+      expenses.add(t);
+      perDay[d] = (perDay[d] ?? 0) + t.amount.paise;
+    }
+
+    final daily = <DaySpend>[];
+    if (single != null) {
+      for (var d = single.start; !d.isAfter(single.end); d = DateTime(d.year, d.month, d.day + 1)) {
+        daily.add(DaySpend(d, Money.fromPaise(perDay[d] ?? 0), isFuture: d.isAfter(today)));
+      }
+    }
+
+    final sums = List<int>.filled(7, 0);
+    final counts = List<int>.filled(7, 0);
+    final last = range.end.isAfter(today) ? today : range.end;
+    for (var d = range.start; !d.isAfter(last); d = DateTime(d.year, d.month, d.day + 1)) {
+      final w = d.weekday - 1;
+      counts[w]++;
+      sums[w] += perDay[d] ?? 0;
+    }
+    final weekday = [
+      for (var i = 0; i < 7; i++) counts[i] == 0 ? Money.zero : Money.fromPaise(sums[i]).scale(1, counts[i]),
+    ];
+
+    expenses.sort((a, b) => b.amount.compareTo(a.amount));
+    return _SpendPatterns(daily, weekday, expenses.take(_topCount).toList());
+  }
 }
 
 /// Insights for the current filter. Recomputed only when the snapshot or

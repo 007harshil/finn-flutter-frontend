@@ -7,9 +7,8 @@ import '../application/home_overview.dart';
 import 'widgets/attention_section.dart';
 import 'widgets/hero_balance_card.dart';
 import 'widgets/home_header.dart';
-import 'widgets/module_sections.dart';
 import 'widgets/period_overview.dart';
-import 'widgets/story_sections.dart';
+import 'widgets/quick_access_grid.dart';
 import 'widgets/welcome_section.dart';
 
 /// The financial command centre: where money stands, what needs attention,
@@ -22,16 +21,10 @@ class HomeScreen extends ConsumerWidget {
 
   static const _sections = <Widget>[
     HomeHeader(),
-    HeroBalanceCard(),
-    PeriodOverview(),
+    _MoneyAtAGlance(),
     AttentionSection(),
     UpcomingSection(),
-    NarrativeSection(),
-    RecentStorySection(),
-    DebtSnapshotSection(),
-    GoalsProgressSection(),
-    EmergencyFundSection(),
-    PendingSummarySection(),
+    QuickAccessGrid(),
   ];
 
   static const _freshSections = <Widget>[HomeHeader(), WelcomeCard(), HeroBalanceCard(), SetupChecklistSection()];
@@ -91,6 +84,21 @@ class _HomeBody extends StatelessWidget {
   }
 }
 
+/// Balance and this month's flow read as one block: no divider between
+/// them, only a small gap, so the top of Home answers "where do I stand?"
+/// in one screen.
+class _MoneyAtAGlance extends StatelessWidget {
+  const _MoneyAtAGlance();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [HeroBalanceCard(), SizedBox(height: Space.x3), PeriodOverview()],
+    );
+  }
+}
+
 /// Line between dashboard sections. Stronger than the in-card hairline so
 /// it reads clearly on the page background in both themes.
 class _SectionDivider extends StatelessWidget {
@@ -130,19 +138,9 @@ class _HomeSkeleton extends StatelessWidget {
               SizedBox(height: Space.x2),
               SkeletonBox(width: 220, height: 26),
               SizedBox(height: Space.x5),
-              CardSkeleton(height: 196, radius: Radii.xxxl),
-              SizedBox(height: Space.section),
-              SkeletonBox(width: 160, height: 24),
+              CardSkeleton(height: 168, radius: Radii.xxxl),
               SizedBox(height: Space.x3),
-              SkeletonBox(height: 32),
-              SizedBox(height: Space.x3),
-              Row(
-                children: [
-                  Expanded(child: CardSkeleton(height: 104)),
-                  SizedBox(width: Space.x3),
-                  Expanded(child: CardSkeleton(height: 104)),
-                ],
-              ),
+              CardSkeleton(height: 172),
               SizedBox(height: Space.section),
               SkeletonBox(width: 180, height: 24),
               SizedBox(height: Space.x3),
