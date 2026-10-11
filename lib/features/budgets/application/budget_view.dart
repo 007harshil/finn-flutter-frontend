@@ -101,6 +101,9 @@ class BudgetPace {
   /// When the limit will be crossed at the current pace (null if never).
   final DateTime? runsOutOn;
 
+  /// The period is over: a past month, shown read-only.
+  bool get isPast => daysLeft == 0;
+
   /// Share of the period gone (0..1), for the "today" marker.
   double get elapsed => usage.elapsedBps / 10000;
 
@@ -129,50 +132,29 @@ enum BudgetSort {
   final String label;
 }
 
-enum BudgetPeriodFilter {
-  all('All periods'),
-  monthly('Monthly'),
-  custom('Custom');
-
-  const BudgetPeriodFilter(this.label);
-  final String label;
-}
-
-/// What the budgets list shows: one status (null = all), a sort and a
-/// period type.
+/// What the budgets list shows: one status (null = all) and a sort.
 @immutable
 class BudgetListFilter {
-  const BudgetListFilter({this.state, this.sort = BudgetSort.urgency, this.period = BudgetPeriodFilter.all});
+  const BudgetListFilter({this.state, this.sort = BudgetSort.urgency});
 
   final BudgetState? state;
   final BudgetSort sort;
-  final BudgetPeriodFilter period;
 
-  /// Filters beyond the status tabs (for the options badge).
-  int get optionCount => (sort == BudgetSort.urgency ? 0 : 1) + (period == BudgetPeriodFilter.all ? 0 : 1);
+  /// Options changed beyond the status tabs (for the options badge).
+  int get optionCount => sort == BudgetSort.urgency ? 0 : 1;
 
-  BudgetListFilter copyWith({BudgetState? Function()? state, BudgetSort? sort, BudgetPeriodFilter? period}) =>
-      BudgetListFilter(
+  BudgetListFilter copyWith({BudgetState? Function()? state, BudgetSort? sort}) => BudgetListFilter(
         state: state != null ? state() : this.state,
         sort: sort ?? this.sort,
-        period: period ?? this.period,
       );
 
-  bool accepts(BudgetPace p) {
-    if (state != null && p.state != state) return false;
-    return switch (period) {
-      BudgetPeriodFilter.all => true,
-      BudgetPeriodFilter.monthly => p.usage.budget.periodType == BudgetPeriodType.monthly,
-      BudgetPeriodFilter.custom => p.usage.budget.periodType == BudgetPeriodType.custom,
-    };
-  }
+  bool accepts(BudgetPace p) => state == null || p.state == state;
 
   @override
-  bool operator ==(Object other) =>
-      other is BudgetListFilter && other.state == state && other.sort == sort && other.period == period;
+  bool operator ==(Object other) => other is BudgetListFilter && other.state == state && other.sort == sort;
 
   @override
-  int get hashCode => Object.hash(state, sort, period);
+  int get hashCode => Object.hash(state, sort);
 }
 
 int _stateRank(BudgetState s) => BudgetState.values.indexOf(s);
@@ -197,11 +179,14 @@ List<BudgetPace> filterBudgets(List<BudgetPace> all, BudgetListFilter f, String 
   return out;
 }
 
-/// The whole month at a glance: totals of active monthly budgets with the
-/// same pace maths as a single budget.
+/// One budget month at a glance: totals of active budgets with the same
+/// pace maths as a single budget. Past months are read-only history.
 @immutable
 class BudgetsPulse {
   const BudgetsPulse({
+    required this.month,
+    required this.currentMonth,
+    required this.firstMonth,
     required this.period,
     required this.limit,
     required this.spent,
@@ -212,6 +197,12 @@ class BudgetsPulse {
     required this.paces,
   });
 
+  /// The budget month shown (keyed by the month its period starts in).
+  final MonthKey month;
+  final MonthKey currentMonth;
+
+  /// Earliest month with a budget (navigation lower bound).
+  final MonthKey firstMonth;
   final DateRange period;
   final Money limit;
   final Money spent;
@@ -225,6 +216,8 @@ class BudgetsPulse {
   /// Every budget (active and paused), unsorted.
   final List<BudgetPace> paces;
 
+  /// Past months can be viewed but not changed.
+  bool get isPast => month < currentMonth;
   Money get remaining => limit - spent;
   bool get isOver => spent > limit;
   bool get hasTotals => limit.isPositive;
@@ -238,7 +231,9 @@ class BudgetsPulse {
   @override
   bool operator ==(Object other) =>
       other is BudgetsPulse &&
-      other.period == period &&
+      other.month == month &&
+      other.currentMonth == currentMonth &&
+      other.firstMonth == firstMonth &&
       other.limit == limit &&
       other.spent == spent &&
       other.committed == committed &&
@@ -246,42 +241,55 @@ class BudgetsPulse {
       listEquals(other.paces, paces);
 
   @override
-  int get hashCode => Object.hash(period, limit, spent, committed, daysLeft, paces.length);
+  int get hashCode => Object.hash(month, limit, spent, committed, daysLeft, paces.length);
 }
 
-BudgetsPulse buildBudgetsPulse(FinanceSnapshot s) {
-  final period = s.currentBudgetPeriod;
-  final paces = [for (final u in s.budgetUsages) BudgetPace.of(u, s.today)];
+/// Pulse of budget [month] (default: this month).
+BudgetsPulse buildBudgetsPulse(FinanceSnapshot s, {MonthKey? month}) {
+  final current = s.currentBudgetMonth;
+  final m = month == null || month > current ? current : month;
+  final period = m == current ? s.currentBudgetPeriod : FinanceSnapshot.budgetCalc.periodOf(m, s.monthStartDay);
+  final paces = [for (final u in s.budgetUsagesFor(m)) BudgetPace.of(u, s.today)];
   var limit = Money.zero;
   var spent = Money.zero;
   var committed = Money.zero;
   for (final p in paces) {
     final u = p.usage;
-    if (u.budget.isPaused || u.budget.periodType != BudgetPeriodType.monthly) continue;
+    if (u.budget.isPaused) continue;
     limit += u.budget.limit;
     spent += u.spent;
     committed += u.committed;
   }
-  final elapsedDays = (daysBetween(period.start, s.today) + 1).clamp(0, period.dayCount);
-  final daysLeft = (daysBetween(s.today, period.end) + 1).clamp(0, period.dayCount);
+  final ended = s.today.isAfter(period.end);
+  final elapsedDays = ended ? period.dayCount : (daysBetween(period.start, s.today) + 1).clamp(0, period.dayCount);
+  final daysLeft = ended ? 0 : (daysBetween(s.today, period.end) + 1).clamp(0, period.dayCount);
+  final first = s.firstBudgetMonth;
   return BudgetsPulse(
+    month: m,
+    currentMonth: current,
+    firstMonth: first == null || first > current ? current : first,
     period: period,
     limit: limit,
     spent: spent,
     committed: committed,
     daysLeft: daysLeft,
     elapsed: elapsedDays / period.dayCount,
-    projected: elapsedDays >= 2 ? spent.scale(period.dayCount, elapsedDays) : null,
+    projected: ended ? spent : (elapsedDays >= 2 ? spent.scale(period.dayCount, elapsedDays) : null),
     paces: paces,
   );
 }
 
-final budgetsPulseProvider =
-    Provider<AsyncValue<BudgetsPulse>>((ref) => ref.watch(financeSnapshotProvider).whenData(buildBudgetsPulse));
+/// Pulse per budget month (null = this month).
+final budgetsPulseProvider = Provider.family<AsyncValue<BudgetsPulse>, MonthKey?>(
+    (ref, month) => ref.watch(financeSnapshotProvider).whenData((s) => buildBudgetsPulse(s, month: month)));
 
-final budgetPaceProvider = Provider.family<AsyncValue<BudgetPace?>, String>((ref, id) {
+BudgetUsage? _usageIn(FinanceSnapshot s, String id, MonthKey? month) =>
+    (month == null ? s.budgetUsages : s.budgetUsagesFor(month)).where((u) => u.budget.id == id).firstOrNull;
+
+/// Pace of (budget id, budget month); null month = this month.
+final budgetPaceProvider = Provider.family<AsyncValue<BudgetPace?>, (String, MonthKey?)>((ref, key) {
   return ref.watch(financeSnapshotProvider).whenData((s) {
-    final u = s.budgetUsage(id);
+    final u = _usageIn(s, key.$1, key.$2);
     return u == null ? null : BudgetPace.of(u, s.today);
   });
 });
@@ -339,9 +347,10 @@ BudgetBurn buildBudgetBurn(FinanceSnapshot s, BudgetUsage u) {
   return BudgetBurn(period: p, daily: daily, todayIndex: today, transactions: txs);
 }
 
-final budgetBurnProvider = Provider.family<AsyncValue<BudgetBurn?>, String>((ref, id) {
+/// Burn of (budget id, budget month); null month = this month.
+final budgetBurnProvider = Provider.family<AsyncValue<BudgetBurn?>, (String, MonthKey?)>((ref, key) {
   return ref.watch(financeSnapshotProvider).whenData((s) {
-    final u = s.budgetUsage(id);
+    final u = _usageIn(s, key.$1, key.$2);
     return u == null ? null : buildBudgetBurn(s, u);
   });
 });

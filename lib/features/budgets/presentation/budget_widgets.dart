@@ -46,10 +46,17 @@ extension BudgetStateUi on BudgetState {
       };
 
   /// Short chip label ("2 over").
-  String countLabel(int n) => switch (this) {
+  /// Status word; a finished month reads "Within limit" / "Near limit".
+  String labelFor({bool past = false}) => switch (this) {
+        BudgetState.risk when past => 'Near limit',
+        BudgetState.onTrack when past => 'Within limit',
+        _ => label,
+      };
+
+  String countLabel(int n, {bool past = false}) => switch (this) {
         BudgetState.over => '$n over',
-        BudgetState.risk => '$n at risk',
-        BudgetState.onTrack => '$n on track',
+        BudgetState.risk => past ? '$n near limit' : '$n at risk',
+        BudgetState.onTrack => past ? '$n within limit' : '$n on track',
         BudgetState.paused => '$n paused',
       };
 }
@@ -80,10 +87,12 @@ String daysLeftLabel(int days) => switch (days) {
 
 /// One line that tells what to do with a budget, e.g. "₹1,800 left ·
 /// ₹90/day" or "Runs out ~24 Oct".
-String budgetHint(BuildContext context, BudgetPace p) {
+String budgetHint(BuildContext context, BudgetPace p, {bool past = false}) {
   final u = p.usage;
   String m(Money x) => budgetMoney(context, x);
   return switch (p.state) {
+    BudgetState.over when past => 'Went over by ${m(-u.remaining)}',
+    _ when past => '${m(u.remaining)} left unspent',
     BudgetState.paused => 'Paused · ${m(u.spent)} spent',
     BudgetState.over => 'Over by ${m(-u.remaining)}',
     _ when p.runsOutOn != null => '${m(u.remaining)} left · runs out ~${DateFormats.dayMonth.format(p.runsOutOn!)}',
@@ -250,9 +259,12 @@ class _PacePainter extends CustomPainter {
 /// Compact two-and-a-half-line budget: icon in a usage ring, name, spent,
 /// pace bar, one hint line. Colour, icon and words all carry the status.
 class BudgetRow extends ConsumerWidget {
-  const BudgetRow({super.key, required this.pace, required this.onTap, this.onLongPress});
+  const BudgetRow({super.key, required this.pace, required this.onTap, this.onLongPress, this.past = false});
 
   final BudgetPace pace;
+
+  /// Row of a finished (read-only) month.
+  final bool past;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
 
@@ -266,11 +278,10 @@ class BudgetRow extends ConsumerWidget {
     final name = category?.name ?? 'Deleted category';
     final paused = p.state == BudgetState.paused;
     final color = p.state.color(c);
-    final custom = u.budget.periodType == BudgetPeriodType.custom;
-    final hint = budgetHint(context, p);
+    final hint = budgetHint(context, p, past: past);
     return Semantics(
       button: true,
-      label: '$name budget, ${p.state.label}. Spent ${budgetMoney(context, u.spent)} of '
+      label: '$name budget, ${p.state.labelFor(past: past)}. Spent ${budgetMoney(context, u.spent)} of '
           '${budgetMoney(context, u.budget.limit)}. $hint.',
       excludeSemantics: true,
       child: PressableScale(
@@ -317,13 +328,6 @@ class BudgetRow extends ConsumerWidget {
                             Flexible(
                               child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.bodyStrong),
                             ),
-                            if (custom) ...[
-                              const SizedBox(width: Space.x1),
-                              Tooltip(
-                                message: periodLabel(u.period),
-                                child: Icon(LucideIcons.calendarRange, size: 12, color: c.textTertiary),
-                              ),
-                            ],
                             const Spacer(),
                             const SizedBox(width: Space.x2),
                             AmountText(
@@ -335,8 +339,8 @@ class BudgetRow extends ConsumerWidget {
                         const SizedBox(height: Space.x1_5),
                         PaceTrack(
                           used: p.used,
-                          projected: paused ? null : p.projectedShare,
-                          elapsed: paused ? 0 : p.elapsed,
+                          projected: paused || past ? null : p.projectedShare,
+                          elapsed: paused || past ? 0 : p.elapsed,
                           color: color,
                         ),
                         const SizedBox(height: Space.x1_5),

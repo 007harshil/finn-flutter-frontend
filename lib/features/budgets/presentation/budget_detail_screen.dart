@@ -27,9 +27,12 @@ import 'budget_widgets.dart';
 /// a chart (this period's running total, or the last six periods), and the
 /// spending behind it with quick filters by payee and day.
 class BudgetDetailScreen extends ConsumerWidget {
-  const BudgetDetailScreen({super.key, required this.id});
+  const BudgetDetailScreen({super.key, required this.id, this.month});
 
   final String id;
+
+  /// Budget month to show; null = this month. Past months are read-only.
+  final MonthKey? month;
 
   Future<void> _menu(BuildContext context, WidgetRef ref, Budget b) async {
     final choice = await showFinnActionMenu<int>(
@@ -68,14 +71,20 @@ class BudgetDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final pace = ref.watch(budgetPaceProvider(id));
+    final pace = ref.watch(budgetPaceProvider((id, month)));
+    final past = pace.value?.isPast ?? false;
     final b = pace.value?.usage.budget;
     final categoryName = b == null ? null : ref.watch(categoryProvider(b.categoryId))?.name;
+    final monthName = past ? DateFormats.monthYear.format(pace.value!.usage.period.start) : null;
     return Scaffold(
       appBar: AppBar(
-        title: Text(categoryName == null ? 'Budget' : '$categoryName budget'),
+        title: Text(
+          categoryName == null ? 'Budget' : (past ? '$categoryName · $monthName' : '$categoryName budget'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
-          if (b != null) ...[
+          if (b != null && !past) ...[
             FinnIconButton(
               icon: LucideIcons.pencil,
               tooltip: 'Edit budget',
@@ -139,7 +148,8 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
     final p = widget.pace;
     final c = context.colors;
     final t = context.text;
-    final burn = ref.watch(budgetBurnProvider(p.usage.budget.id)).value;
+    final month = p.usage.period.start.monthKey;
+    final burn = ref.watch(budgetBurnProvider((p.usage.budget.id, month))).value;
     final all = burn?.transactions ?? const <Transaction>[];
     var shown = all.where((tx) {
       if (_payee != null && payeeOf(tx) != _payee) return false;
@@ -156,6 +166,14 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
     return CustomScrollView(
       key: PageStorageKey('budget-${p.usage.budget.id}'),
       slivers: [
+        if (p.isPast)
+          box(
+            const InfoBanner(
+              icon: LucideIcons.lock,
+              message: 'A past month is read-only. Budgets can only be changed for the current month.',
+            ),
+            top: Space.x2,
+          ),
         box(StaggeredEntrance(child: _HeroCard(pace: p)), top: Space.x2),
         if (burn != null)
           box(
@@ -295,13 +313,13 @@ class _HeroCard extends ConsumerWidget {
               const SizedBox(width: Space.x2),
               Expanded(
                 child: Text(
-                  '${u.budget.periodType.label} · ${periodLabel(u.period)}',
+                  '${p.isPast ? 'Closed' : 'Monthly'} · ${periodLabel(u.period)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: t.caption,
                 ),
               ),
-              StatusPill(label: p.state.label, color: color, icon: p.state.icon),
+              StatusPill(label: p.state.labelFor(past: p.isPast), color: color, icon: p.state.icon),
             ],
           ),
           const SizedBox(height: Space.x3),
@@ -354,18 +372,32 @@ class _HeroCard extends ConsumerWidget {
                   color: u.isOver ? c.negative : null,
                 ),
                 VerticalDivider(width: Space.x4, color: c.border),
-                _Stat(
-                  label: 'SAFE PER DAY',
-                  value: safe == null ? '—' : budgetMoney(context, safe),
-                  sub: p.daysLeft == 0 ? 'period ended' : daysLeftLabel(p.daysLeft).toLowerCase(),
-                ),
-                VerticalDivider(width: Space.x4, color: c.border),
-                _Stat(
-                  label: 'AT THIS PACE',
-                  value: projected == null || paused ? '—' : budgetMoney(context, projected),
-                  sub: projected == null || paused ? 'too early' : 'by ${DateFormats.dayMonth.format(u.period.end)}',
-                  color: projected != null && !paused && projected > u.budget.limit ? c.negative : null,
-                ),
+                if (p.isPast) ...[
+                  _Stat(
+                    label: 'DAILY AVERAGE',
+                    value: budgetMoney(context, u.spent.scale(1, u.period.dayCount)),
+                    sub: 'over ${u.period.dayCount} days',
+                  ),
+                  VerticalDivider(width: Space.x4, color: c.border),
+                  _Stat(
+                    label: 'LIMIT THEN',
+                    value: budgetMoney(context, u.budget.limit),
+                    sub: '${formatBps(u.utilizationBps, decimals: 0)} used',
+                  ),
+                ] else ...[
+                  _Stat(
+                    label: 'SAFE PER DAY',
+                    value: safe == null ? '—' : budgetMoney(context, safe),
+                    sub: daysLeftLabel(p.daysLeft).toLowerCase(),
+                  ),
+                  VerticalDivider(width: Space.x4, color: c.border),
+                  _Stat(
+                    label: 'AT THIS PACE',
+                    value: projected == null || paused ? '—' : budgetMoney(context, projected),
+                    sub: projected == null || paused ? 'too early' : 'by ${DateFormats.dayMonth.format(u.period.end)}',
+                    color: projected != null && !paused && projected > u.budget.limit ? c.negative : null,
+                  ),
+                ],
               ],
             ),
           ),
@@ -394,6 +426,11 @@ class _HeroCard extends ConsumerWidget {
     final u = p.usage;
     String m(Money x) => budgetMoney(context, x);
     return switch (p.state) {
+      BudgetState.over when p.isPast => (LucideIcons.triangleAlert, 'Went ${m(-u.remaining)} over the limit that month.'),
+      _ when p.isPast => (
+          LucideIcons.circleCheck,
+          'Stayed within the limit with ${m(u.remaining)} left unspent.'
+        ),
       BudgetState.paused => (LucideIcons.circlePause, 'Paused — no warnings or alerts until you resume.'),
       BudgetState.over => (
           LucideIcons.triangleAlert,
@@ -498,7 +535,8 @@ class _ChartCardState extends ConsumerState<_ChartCard> {
     final p = widget.pace;
     final u = p.usage;
     final color = p.state == BudgetState.over ? c.negative : c.primary;
-    final history = ref.watch(budgetHistoryProvider(u.budget.id)).value ?? const <BudgetPeriodPoint>[];
+    final history =
+        ref.watch(budgetHistoryProvider((u.budget.id, u.period.start.monthKey))).value ?? const <BudgetPeriodPoint>[];
     final showHistory = _view == _ChartView.history && history.isNotEmpty;
     return FinnCard(
       radius: Radii.xxl,
@@ -574,6 +612,14 @@ class _ChartCardState extends ConsumerState<_ChartCard> {
     final plan = u.budget.limit.scale(last + 1, cum.length);
     final now = Money.fromPaise(cum.isEmpty ? 0 : cum[last]);
     final ahead = now - plan;
+    if (widget.pace.isPast) {
+      return _Readout(
+        title: 'Month total',
+        value: budgetMoney(context, now),
+        note: '${formatBps(now.ratioBps(u.budget.limit) ?? 0, decimals: 0)} of the limit',
+        noteColor: now > u.budget.limit ? c.negative : c.positive,
+      );
+    }
     return _Readout(
       title: 'So far',
       value: budgetMoney(context, now),

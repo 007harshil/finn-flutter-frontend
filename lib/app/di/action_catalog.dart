@@ -25,6 +25,7 @@ final List<FinancialAction<ActionInput, Object?>> allActions = [
   const SetBudgetPausedAction(),
   const DeleteBudgetAction(),
   const CreatePendingAction(),
+  const CreateSplitPendingAction(),
   const UpdatePendingAction(),
   const SettlePendingAction(),
   const CancelPendingAction(),

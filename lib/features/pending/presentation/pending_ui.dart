@@ -185,23 +185,61 @@ final class PendingItemEntry extends PendingEntry {
   final PendingView view;
 }
 
+/// One bill split between several people: entered once, so it reads as
+/// one entry. [items] are the people shown under the current filter;
+/// [split] holds every person, for the bill totals.
+final class PendingSplitEntry extends PendingEntry {
+  const PendingSplitEntry({required this.split, required this.items});
+  final PendingSplitView split;
+  final List<PendingView> items;
+
+  int get count => items.length;
+}
+
+/// Rows an entry stands for.
+int pendingEntryCount(PendingEntry e) => switch (e) {
+      PendingItemEntry() => 1,
+      PendingPersonGroup(:final count) || PendingSplitEntry(:final count) => count,
+    };
+
+/// Every split in [pendingViewsProvider], by split id.
+final pendingSplitsProvider = Provider<Map<String, PendingSplitView>>(
+  (ref) => PendingSplitView.collect(ref.watch(pendingViewsProvider).value ?? const []),
+);
+
 /// Items matching [f], in its sort order.
 List<PendingView> filterPending(List<PendingView> all, PendingFilter f) =>
     all.where(f.accepts).toList()..sort((a, b) => _compare(a, b, f));
 
-/// Items for the current filter. When [PendingFilter.groupByPerson] is on,
-/// items that share a person sit together (each item stays separate —
-/// never merged) where that person's first item ranks.
+/// Items for the current filter. People of one split always sit together
+/// as one entry (when two or more of them match). When
+/// [PendingFilter.groupByPerson] is on, the other items that share a person
+/// sit together too (each item stays separate — never merged). A group
+/// ranks where its first item does.
 List<PendingEntry> buildPendingEntries(List<PendingView> all, PendingFilter f) {
   final items = filterPending(all, f);
-  if (!f.groupByPerson) return [for (final v in items) PendingItemEntry(v)];
+  final splitCounts = <String, int>{};
+  for (final v in items) {
+    if (v.payment.split case final s?) splitCounts[s.id] = (splitCounts[s.id] ?? 0) + 1;
+  }
   final groups = <String, List<PendingView>>{};
   for (final v in items) {
-    groups.putIfAbsent(v.payment.counterparty.trim().toLowerCase(), () => []).add(v);
+    final s = v.payment.split;
+    final key = s != null && splitCounts[s.id]! > 1
+        ? 'split:${s.id}'
+        : (f.groupByPerson ? 'person:${v.payment.counterparty.trim().toLowerCase()}' : 'item:${v.payment.id}');
+    groups.putIfAbsent(key, () => []).add(v);
   }
+  final splits = groups.keys.any((k) => k.startsWith('split:')) ? PendingSplitView.collect(all) : const <String, PendingSplitView>{};
   return [
-    for (final g in groups.values)
-      if (g.length == 1)
+    for (final MapEntry(:key, value: g) in groups.entries)
+      if (key.startsWith('split:'))
+        PendingSplitEntry(
+          split: splits[key.substring(6)]!,
+          // People in the order they were added, like the bill.
+          items: [for (final m in splits[key.substring(6)]!.members) if (g.contains(m)) m],
+        )
+      else if (g.length == 1)
         PendingItemEntry(g.single)
       else
         PendingPersonGroup(
@@ -554,6 +592,7 @@ class PendingRow extends StatelessWidget {
     this.onSettle,
     this.onLongPress,
     this.grouped = false,
+    this.inSplit = false,
   });
 
   final PendingView view;
@@ -563,6 +602,9 @@ class PendingRow extends StatelessWidget {
 
   /// Inside a person card: the purpose leads and the person is implied.
   final bool grouped;
+
+  /// Inside a split card: the person leads and the bill is implied.
+  final bool inSplit;
 
   @override
   Widget build(BuildContext context) {
@@ -589,6 +631,7 @@ class PendingRow extends StatelessWidget {
             iconSize: 15,
           )
         : PendingAvatar(
+            size: inSplit ? 32 : 40,
             name: p.counterparty,
             color: tone,
             progress: view.settledBps / 10000,
@@ -596,7 +639,7 @@ class PendingRow extends StatelessWidget {
           );
 
     final row = Padding(
-      padding: EdgeInsets.symmetric(horizontal: Space.x3, vertical: grouped ? Space.x2_5 : Space.x3),
+      padding: EdgeInsets.symmetric(horizontal: Space.x3, vertical: grouped || inSplit ? Space.x2_5 : Space.x3),
       child: Row(
         children: [
           leading,
@@ -618,6 +661,10 @@ class PendingRow extends StatelessWidget {
                               style: grouped ? t.body.copyWith(fontWeight: FontWeight.w700) : t.bodyStrong,
                             ),
                           ),
+                          if (p.isSplit && !grouped && !inSplit) ...[
+                            const SizedBox(width: Space.x1),
+                            Icon(LucideIcons.users, size: 13, color: c.textTertiary),
+                          ],
                           if (p.isShared && !grouped) ...[
                             const SizedBox(width: Space.x1),
                             Icon(LucideIcons.link2, size: 13, color: c.info),
@@ -635,8 +682,8 @@ class PendingRow extends StatelessWidget {
                     Expanded(
                       child: Text(
                         partial
-                            ? '${grouped ? '' : '${p.purpose} · '}${view.settledBps ~/ 100}% settled'
-                            : (grouped ? p.kind.label : p.purpose),
+                            ? '${grouped || inSplit ? '' : '${p.purpose} · '}${view.settledBps ~/ 100}% settled'
+                            : (grouped ? p.kind.label : (inSplit ? p.split!.partLabel : p.purpose)),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: t.caption,

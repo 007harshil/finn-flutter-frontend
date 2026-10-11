@@ -11,6 +11,7 @@ import '../../../design_system/design_system.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../../alerts/presentation/alert_visuals.dart' show MaybeAnimate;
 import '../domain/pending_payment.dart';
+import 'pending_split_ui.dart';
 import 'pending_ui.dart';
 
 /// Money owed between the user and other people. Obligations only — the
@@ -71,7 +72,7 @@ class _PendingScreenState extends ConsumerState<PendingScreen> {
         loading: const _PendingSkeleton(),
         builder: (context, o) {
           final entries = ref.watch(pendingEntriesProvider(_filter)).value ?? const <PendingEntry>[];
-          final shown = entries.fold<int>(0, (n, e) => n + (e is PendingPersonGroup ? e.count : 1));
+          final shown = entries.fold<int>(0, (n, e) => n + pendingEntryCount(e));
           return CustomScrollView(
             key: const PageStorageKey('pending-list'),
             slivers: [
@@ -949,7 +950,8 @@ class _SmallChip extends StatelessWidget {
 // List
 // ---------------------------------------------------------------------------
 
-/// One card in the list: a single item, or a person with several items.
+/// One card in the list: a single item, a person with several items, or
+/// a bill split between several people.
 class _EntryCard extends ConsumerWidget {
   const _EntryCard({required this.entry, required this.index, required this.entered});
 
@@ -980,11 +982,12 @@ class _EntryCard extends ConsumerWidget {
     }
   }
 
-  Widget _row(BuildContext context, PendingView v, {bool grouped = false}) => KeyedSubtree(
+  Widget _row(BuildContext context, PendingView v, {bool grouped = false, bool inSplit = false}) => KeyedSubtree(
         key: ValueKey(v.payment.id),
         child: PendingRow(
           view: v,
           grouped: grouped,
+          inSplit: inSplit,
           onTap: () => context.push(AppRoutes.pendingItem(v.payment.id)),
           onSettle: () => context.push(AppRoutes.settlePending(v.payment.id)),
           onLongPress: () => _quickActions(context, v),
@@ -998,6 +1001,7 @@ class _EntryCard extends ConsumerWidget {
     final id = switch (e) {
       PendingItemEntry(:final view) => view.payment.id,
       PendingPersonGroup(:final name) => 'person-$name',
+      PendingSplitEntry(:final split) => 'split-${split.split.id}',
     };
     final Widget body = switch (e) {
       PendingItemEntry(:final view) => _row(context, view),
@@ -1008,6 +1012,20 @@ class _EntryCard extends ConsumerWidget {
             for (final v in e.items) ...[
               const FinnDivider(indent: Space.x3 + 30 + Space.x3),
               _row(context, v, grouped: true),
+            ],
+          ],
+        ),
+      PendingSplitEntry() => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PendingSplitHeader(
+              split: e.split,
+              shown: e.count,
+              onTap: () => context.push(AppRoutes.pendingItem(e.items.first.payment.id)),
+            ),
+            for (final v in e.items) ...[
+              const FinnDivider(indent: Space.x3 + 32 + Space.x3),
+              _row(context, v, inSplit: true),
             ],
           ],
         ),

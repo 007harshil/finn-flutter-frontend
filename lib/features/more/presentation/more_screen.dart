@@ -11,9 +11,10 @@ import '../../../design_system/design_system.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../../home/application/home_overview.dart';
 import '../../net_worth/domain/net_worth.dart';
+import '../../profile/presentation/profile_entry_card.dart';
 
-/// Financial overview hub: net worth teaser, subscriptions, then app-level
-/// settings.
+/// Profile entry, then the financial overview hub: net worth teaser,
+/// subscriptions, then app-level settings.
 class MoreScreen extends ConsumerWidget {
   const MoreScreen({super.key});
 
@@ -35,6 +36,8 @@ class MoreScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      const StaggeredEntrance(index: 0, child: ProfileEntryCard()),
+                      const SizedBox(height: Space.x6),
                       Semantics(header: true, child: Text('Financial overview', style: t.pageTitle)),
                       const SizedBox(height: Space.x1),
                       Text('Everything you own, owe and have planned, in one place.', style: t.caption),

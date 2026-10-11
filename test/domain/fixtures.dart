@@ -202,7 +202,6 @@ Budget budget({
       id: id ?? _id('bud'),
       categoryId: category,
       limit: rs(limit),
-      periodType: BudgetPeriodType.monthly,
       status: status,
       warningThresholdBps: warningBps,
       createdAt: fxStamp,

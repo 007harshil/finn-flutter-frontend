@@ -38,46 +38,35 @@ class BudgetPeriodPoint {
 /// How many monthly periods the trend chart shows (including the current).
 const budgetHistoryPeriods = 6;
 
-/// Spending in the budget's category over recent periods, oldest first.
-/// Monthly budgets: the last [budgetHistoryPeriods] monthly periods. Custom
-/// budgets: the equal-length period before, then the budget's own period.
-List<BudgetPeriodPoint> buildBudgetHistory(FinanceSnapshot s, Budget budget) {
+/// Spending in the budget's category over the [budgetHistoryPeriods] budget
+/// months ending at [month] (default: this month), oldest first. Each point
+/// carries the limit that applied in that month.
+List<BudgetPeriodPoint> buildBudgetHistory(FinanceSnapshot s, Budget budget, {MonthKey? month}) {
   const calc = FinanceSnapshot.budgetCalc;
-  final current = calc.periodFor(budget, s.today, s.monthStartDay);
-  final periods = <DateRange>[current];
-  if (budget.periodType == BudgetPeriodType.custom) {
-    periods.insert(0, current.previous);
-  } else {
-    var p = current;
-    for (var i = 1; i < budgetHistoryPeriods; i++) {
-      p = calc.monthlyPeriod(p.start.subtract(const Duration(days: 1)), s.monthStartDay);
-      periods.insert(0, p);
-    }
-  }
+  final last = month ?? s.currentBudgetMonth;
   return [
-    for (final p in periods)
-      BudgetPeriodPoint(
-        period: p,
-        spent: calc
-            .usage(
-              budget: budget,
-              transactions: s.transactions,
-              subscriptions: const [],
-              today: s.today,
-              monthStartDay: s.monthStartDay,
-              period: p,
-            )
-            .spent,
-        limit: budget.limit,
-        isCurrent: p == current,
-      ),
+    for (var i = budgetHistoryPeriods - 1; i >= 0; i--)
+      () {
+        final m = last.shift(-i);
+        final u = calc.usage(
+          budget: budget,
+          transactions: s.transactions,
+          subscriptions: const [],
+          today: s.today,
+          monthStartDay: s.monthStartDay,
+          period: calc.periodOf(m, s.monthStartDay),
+        );
+        return BudgetPeriodPoint(period: u.period, spent: u.spent, limit: u.budget.limit, isCurrent: m == last);
+      }(),
   ];
 }
 
-final budgetHistoryProvider = Provider.family<AsyncValue<List<BudgetPeriodPoint>>, String>((ref, id) {
+/// History for (budget id, budget month).
+final budgetHistoryProvider =
+    Provider.family<AsyncValue<List<BudgetPeriodPoint>>, (String, MonthKey?)>((ref, key) {
   return ref.watch(financeSnapshotProvider).whenData((s) {
-    final b = s.budgets.where((x) => x.id == id).firstOrNull;
-    return b == null ? const <BudgetPeriodPoint>[] : buildBudgetHistory(s, b);
+    final b = s.budgets.where((x) => x.id == key.$1).firstOrNull;
+    return b == null ? const <BudgetPeriodPoint>[] : buildBudgetHistory(s, b, month: key.$2);
   });
 });
 
@@ -104,7 +93,7 @@ final budgetedCategoryIdsProvider = Provider<Set<String>>((ref) {
   if (s == null) return const {};
   return {
     for (final b in s.budgets)
-      if (b.periodType == BudgetPeriodType.monthly && !b.isPaused) b.categoryId,
+      if (!b.isPaused) b.categoryId,
   };
 });
 

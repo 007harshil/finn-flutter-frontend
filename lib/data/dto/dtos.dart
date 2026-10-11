@@ -87,9 +87,9 @@ abstract final class BudgetDto {
         'id': b.id,
         'categoryId': b.categoryId,
         'limitPaise': J.money(b.limit),
-        'periodType': b.periodType.name,
-        'customStart': b.customRange == null ? null : J.date(b.customRange!.start),
-        'customEnd': b.customRange == null ? null : J.date(b.customRange!.end),
+        'previousLimits': [
+          for (final c in b.previousLimits) {'until': c.until.id, 'limitPaise': J.money(c.limit)},
+        ],
         'status': b.status.name,
         'warningThresholdBps': b.warningThresholdBps,
         'note': b.note,
@@ -102,12 +102,15 @@ abstract final class BudgetDto {
         id: j['id'] as String,
         categoryId: j['categoryId'] as String,
         limit: J.toMoney(j['limitPaise']),
-        periodType: J.enumByName(BudgetPeriodType.values, j['periodType'], BudgetPeriodType.monthly),
-        customRange: j['customStart'] == null
-            ? null
-            : DateRange(J.toDate(j['customStart']), J.toDate(j['customEnd'])),
         status: J.enumByName(BudgetStatus.values, j['status'], BudgetStatus.active),
         warningThresholdBps: (j['warningThresholdBps'] as num?)?.toInt() ?? 8000,
+        // Older data may carry a custom period; budgets are monthly now, so
+        // those fields are ignored.
+        previousLimits: [
+          for (final c in ((j['previousLimits'] as List?) ?? const []).cast<Map>())
+            if (MonthKey.tryParse(c['until'] as String?) case final until?)
+              BudgetLimitChange(until: until, limit: J.toMoney(c['limitPaise'])),
+        ],
         note: j['note'] as String?,
         createdAt: J.toInstant(j['createdAt']),
         updatedAt: J.toInstant(j['updatedAt']),
@@ -318,6 +321,7 @@ abstract final class PendingDto {
         'updatedAt': J.instant(p.updatedAt),
         'version': p.version,
         'link': p.link == null ? null : PendingLinkDto.toJson(p.link!),
+        'split': p.split == null ? null : PendingSplitDto.toJson(p.split!),
       };
 
   static PendingPayment fromJson(JsonMap j) => PendingPayment(
@@ -334,6 +338,25 @@ abstract final class PendingDto {
         updatedAt: J.toInstant(j['updatedAt']),
         version: (j['version'] as num?)?.toInt() ?? 1,
         link: j['link'] == null ? null : PendingLinkDto.fromJson((j['link'] as Map).cast<String, Object?>()),
+        split: j['split'] == null ? null : PendingSplitDto.fromJson((j['split'] as Map).cast<String, Object?>()),
+      );
+}
+
+abstract final class PendingSplitDto {
+  static JsonMap toJson(PendingSplit s) => {
+        'id': s.id,
+        'method': s.method.name,
+        'includesMe': s.includesMe,
+        'mySharePaise': J.money(s.myShare),
+        'part': s.part,
+      };
+
+  static PendingSplit fromJson(JsonMap j) => PendingSplit(
+        id: j['id'] as String,
+        method: J.enumByName(SplitMethod.values, j['method'], SplitMethod.equally),
+        includesMe: (j['includesMe'] as bool?) ?? false,
+        myShare: J.toMoney(j['mySharePaise'] ?? 0),
+        part: (j['part'] as num?)?.toInt(),
       );
 }
 

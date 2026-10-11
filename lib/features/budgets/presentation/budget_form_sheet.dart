@@ -32,8 +32,6 @@ class _BudgetFormSheetState extends ConsumerState<BudgetFormSheet> {
   final _limit = TextEditingController();
   final _note = TextEditingController();
   String? _categoryId;
-  BudgetPeriodType _period = BudgetPeriodType.monthly;
-  DateRange? _range;
   int _warningBps = defaultBudgetWarningBps;
   Map<String, String> _errors = const {};
   bool _submitting = false;
@@ -58,28 +56,8 @@ class _BudgetFormSheetState extends ConsumerState<BudgetFormSheet> {
     _existing = b;
     _categoryId = b.categoryId;
     _limit.text = MoneyFormatter.editable(b.limit);
-    _period = b.periodType;
-    _range = b.customRange;
     _warningBps = b.warningThresholdBps;
     _note.text = b.note ?? '';
-  }
-
-  Future<void> _pickRange() async {
-    final today = ref.read(todayProvider);
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(today.year - 1, today.month, today.day),
-      lastDate: DateTime(today.year + 2, today.month, today.day),
-      initialDateRange: _range == null
-          ? DateTimeRange(start: today, end: today.add(const Duration(days: 29)))
-          : DateTimeRange(start: _range!.start, end: _range!.end),
-      helpText: 'Budget period',
-    );
-    if (picked == null) return;
-    setState(() {
-      _range = DateRange(picked.start, picked.end);
-      _errors = {..._errors}..remove('customRange');
-    });
   }
 
   Future<void> _submit() async {
@@ -87,7 +65,6 @@ class _BudgetFormSheetState extends ConsumerState<BudgetFormSheet> {
     final local = <String, String>{
       if (_categoryId == null) 'categoryId': 'Choose a category.',
       if (limit == null || !limit.isPositive) 'limit': 'Enter a limit greater than zero.',
-      if (_period == BudgetPeriodType.custom && _range == null) 'customRange': 'Choose the start and end dates.',
     };
     if (local.isNotEmpty) {
       setState(() => _errors = local);
@@ -97,9 +74,6 @@ class _BudgetFormSheetState extends ConsumerState<BudgetFormSheet> {
     final data = BudgetInput(
       categoryId: _categoryId!,
       limit: limit!,
-      periodType: _period,
-      customStart: _period == BudgetPeriodType.custom ? _range?.start : null,
-      customEnd: _period == BudgetPeriodType.custom ? _range?.end : null,
       warningThresholdBps: _warningBps,
       note: note.isEmpty ? null : note,
     );
@@ -229,24 +203,11 @@ class _BudgetFormSheetState extends ConsumerState<BudgetFormSheet> {
           ),
         ],
         const SizedBox(height: Space.x5),
-        Text('Period', style: t.label),
-        const SizedBox(height: Space.x2),
-        SegmentedTabs<BudgetPeriodType>(
-          items: const [
-            SegmentItem(BudgetPeriodType.monthly, 'Monthly'),
-            SegmentItem(BudgetPeriodType.custom, 'Custom range'),
-          ],
-          selected: _period,
-          onChanged: (v) => setState(() => _period = v),
+        _MonthlyNote(
+          period: s.currentBudgetPeriod,
+          categoryName: s.category(_categoryId ?? '')?.name,
+          editing: _isEdit,
         ),
-        const SizedBox(height: Space.x2),
-        if (_period == BudgetPeriodType.monthly)
-          Text(
-            'Resets every month${s.monthStartDay == 1 ? '' : ' on day ${s.monthStartDay}'}.',
-            style: t.caption,
-          )
-        else
-          _RangeField(range: _range, errorText: _errors['customRange'], onTap: _pickRange),
         const SizedBox(height: Space.x5),
         Row(
           children: [
@@ -379,43 +340,47 @@ class _SuggestionChip extends StatelessWidget {
   }
 }
 
-class _RangeField extends StatelessWidget {
-  const _RangeField({required this.range, required this.errorText, required this.onTap});
+/// Budgets are always monthly: this explains what that means for the
+/// month the budget is created in and for expenses.
+class _MonthlyNote extends StatelessWidget {
+  const _MonthlyNote({required this.period, required this.categoryName, required this.editing});
 
-  final DateRange? range;
-  final String? errorText;
-  final VoidCallback onTap;
+  final DateRange period;
+  final String? categoryName;
+
+  /// Editing an existing budget: a new limit applies from this month on.
+  final bool editing;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final r = range;
-    final display = r == null
-        ? null
-        : '${DateFormats.dayMonthYear.format(r.start)} – ${DateFormats.dayMonthYear.format(r.end)} · ${r.dayCount} days';
-    return Semantics(
-      button: true,
-      label: 'Budget dates',
-      value: display ?? 'Not chosen',
-      excludeSemantics: true,
-      child: InkWell(
-        borderRadius: Radii.rLg,
-        onTap: onTap,
-        child: InputDecorator(
-          isEmpty: r == null,
-          decoration: InputDecoration(
-            hintText: 'Choose start and end dates',
-            errorText: errorText,
-            prefixIcon: const Icon(LucideIcons.calendarRange, size: 18),
-            suffixIcon: Icon(LucideIcons.chevronDown, size: 18, color: c.textTertiary),
+    final t = context.text;
+    final range = '${DateFormats.dayMonth.format(period.start)} – ${DateFormats.dayMonth.format(period.end)}';
+    Widget line(IconData icon, String text) => Padding(
+          padding: const EdgeInsets.only(top: Space.x1_5),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 14, color: c.textSecondary),
+              const SizedBox(width: Space.x2),
+              Expanded(child: Text(text, style: t.caption)),
+            ],
           ),
-          child: Text(
-            display ?? '',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: context.text.body.copyWith(fontSize: 15, fontWeight: FontWeight.w600),
-          ),
-        ),
+        );
+    return Container(
+      key: const ValueKey('budget-monthly-note'),
+      padding: const EdgeInsets.fromLTRB(Space.x3, Space.x1_5, Space.x3, Space.x2_5),
+      decoration: BoxDecoration(color: c.surfaceMuted, borderRadius: Radii.rLg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          line(LucideIcons.calendarRange, 'Monthly. Covers all of this month ($range), whatever day you create it, '
+              'and renews every month.'),
+          line(LucideIcons.zap, 'Every expense in ${categoryName ?? 'this category'} counts automatically — '
+              'nothing to add by hand.'),
+          if (editing)
+            line(LucideIcons.history, 'A new limit applies from this month. Earlier months keep the limit they had.'),
+        ],
       ),
     );
   }

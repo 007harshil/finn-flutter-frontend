@@ -14,14 +14,6 @@ import 'action_harness.dart';
 BudgetInput monthly(int limit, {String category = SeedCategoryIds.food, int? warn}) =>
     BudgetInput(categoryId: category, limit: Money.rupees(limit), warningThresholdBps: warn);
 
-BudgetInput custom(DateTime? start, DateTime? end, {int limit = 50000}) => BudgetInput(
-      categoryId: SeedCategoryIds.travel,
-      limit: Money.rupees(limit),
-      periodType: BudgetPeriodType.custom,
-      customStart: start,
-      customEnd: end,
-    );
-
 void main() {
   late ActionHarness h;
   setUp(() async => h = await ActionHarness.create());
@@ -31,7 +23,6 @@ void main() {
       final out = await h.dispatcher.dispatch(const CreateBudgetAction(), monthly(8000), idempotencyKey: 'k');
       final b = (out as ActionCompleted<Budget>).value;
       expect(b.warningThresholdBps, defaultBudgetWarningBps);
-      expect(b.customRange, isNull);
       expect(out.preview.summary, 'Budget for Food & Dining · ₹8,000');
       final s = await h.snapshot();
       expect(s.balance.available, harnessOpening);
@@ -56,14 +47,17 @@ void main() {
       await h.run(const CreateBudgetAction(), monthly(9000, category: SeedCategoryIds.groceries));
     });
 
-    test('custom periods need valid dates of at most 366 days', () async {
-      final b = await h.run(const CreateBudgetAction(), custom(DateTime(2026, 12, 20), DateTime(2027, 1, 5)));
-      expect(b.customRange, DateRange(DateTime(2026, 12, 20), DateTime(2027, 1, 5)));
-      Future<Iterable<String>> fields(BudgetInput i) async => (await h.reject(const CreateBudgetAction(), i)).fieldErrors.keys;
-      expect(await fields(custom(null, DateTime(2027, 1, 5))), ['customRange']);
-      expect(await fields(custom(DateTime(2027, 1, 5), DateTime(2027, 1, 4))), ['customRange']);
-      expect(await fields(custom(DateTime(2026, 1, 1), DateTime(2027, 1, 2))), ['customRange']);
-      await h.run(const CreateBudgetAction(), custom(DateTime(2026, 1, 1), DateTime(2027, 1, 1)));
+    test('a budget always covers the whole month it is created in', () async {
+      // Spending from before the budget existed (3 Oct) still counts.
+      await h.run(
+        const CreateTransactionAction(),
+        TransactionInput(type: TransactionType.expense, amount: const Money.rupees(400), categoryId: SeedCategoryIds.shopping, date: DateTime(2026, 10, 3)),
+      );
+      final b = await h.run(const CreateBudgetAction(), monthly(5000, category: SeedCategoryIds.shopping));
+      final u = (await h.snapshot()).budgetUsage(b.id)!;
+      expect(u.period, MonthKey(2026, 10).range);
+      expect(u.spent, const Money.rupees(400));
+      expect(BudgetInput.fromJson({...monthly(1).toJson(), 'periodType': 'custom'}).toJson().containsKey('periodType'), isFalse);
     });
 
     test('field validation', () async {
@@ -89,6 +83,39 @@ void main() {
       expect(u.warningThresholdBps, 8000, reason: 'unchanged when not supplied');
       final stale = await h.reject(const UpdateBudgetAction(), UpdateBudgetInput(id: food.id, expectedVersion: 1, data: monthly(1)));
       expect(stale.code, FailureCode.staleData);
+      expect(u.previousLimits, isEmpty, reason: 'created this month: no earlier month to keep');
+    });
+
+    test('a new limit applies from this month; earlier months keep theirs (read-only history)', () async {
+      // A budget that has existed since August.
+      final old = Budget(
+        id: 'bud_old',
+        categoryId: SeedCategoryIds.groceries,
+        limit: const Money.rupees(5000),
+        createdAt: DateTime(2026, 8, 20),
+        updatedAt: DateTime(2026, 8, 20),
+      );
+      await h.repos.budgets.save(old);
+      await h.run(
+        const CreateTransactionAction(),
+        TransactionInput(type: TransactionType.expense, amount: const Money.rupees(400), categoryId: SeedCategoryIds.groceries, date: DateTime(2026, 9, 12)),
+      );
+      final input = monthly(7000, category: SeedCategoryIds.groceries);
+      final u = await h.run(const UpdateBudgetAction(), UpdateBudgetInput(id: old.id, expectedVersion: 1, data: input));
+      expect(u.previousLimits, [BudgetLimitChange(until: MonthKey(2026, 9), limit: const Money.rupees(5000))]);
+      // A second edit in the same month keeps the original history.
+      final again = await h.run(
+        const UpdateBudgetAction(),
+        UpdateBudgetInput(id: old.id, expectedVersion: 2, data: monthly(8000, category: SeedCategoryIds.groceries)),
+      );
+      expect(again.previousLimits, u.previousLimits);
+
+      final s = await h.snapshot();
+      final september = s.budgetUsagesFor(MonthKey(2026, 9)).single;
+      expect(september.budget.limit, const Money.rupees(5000));
+      expect(september.spent, const Money.rupees(400));
+      expect(s.budgetUsage(old.id)!.budget.limit, const Money.rupees(8000));
+      expect(s.budgetUsagesFor(MonthKey(2026, 7)), isEmpty, reason: 'the budget did not exist yet');
     });
 
     test('a paused budget frees the category; resuming then conflicts', () async {

@@ -67,8 +67,9 @@ Whole calendar months are compared with the previous calendar month; other range
 
 `BudgetCalculator` (`lib/features/budgets/domain/budget_calculator.dart`). Budgets are spending **limits**; they hold no money.
 
-- Period: monthly, starting on the user's month start day (clamped to 1–28), or a custom range of at most 366 days.
-- **spent** = expense transactions in the budget's category within the period (loan disbursements excluded).
+- Period: always monthly, starting on the user's month start day (clamped to 1–28). A budget covers the whole month it is created in, whatever the day, and renews every month. A budget month is keyed by the month its period starts in.
+- Past months are read-only history (`FinanceSnapshot.budgetUsagesFor`): every budget that existed then (created in or before that month), with the limit it had then. Editing a limit records the old one in `Budget.previousLimits` (`until` = last month), so earlier months keep it; pausing only affects the current month.
+- **spent** = expense transactions in the budget's category within the period (loan disbursements excluded). Never entered by hand: adding, editing or deleting an expense updates its budget automatically.
 - **committed** = expected subscription charges in that category from today to the period end. Shown separately, never added to spent.
 - Health: `paused` → `breached` when spent > limit → `warning` when spent ÷ limit ≥ warning threshold (exact integer comparison, so 79.999% is not 80%) → `healthy`.
 - Warning threshold 50–95%, default 80%. Only one *active* monthly budget per category; a paused budget frees the category.

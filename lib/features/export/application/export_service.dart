@@ -199,7 +199,7 @@ class ExportService {
           ], [
             for (final b in s.budgets)
               [
-                Csv.text(cat(b.categoryId)), amt(b.limit), fmt(b.limit), b.periodType.label,
+                Csv.text(cat(b.categoryId)), amt(b.limit), fmt(b.limit), 'Monthly',
                 d(usage[b.id]?.period.start), d(usage[b.id]?.period.end),
                 amt(usage[b.id]?.spent ?? Money.zero), fmt(usage[b.id]?.spent ?? Money.zero),
                 b.status.name, usage[b.id]?.health.label ?? '', b.id,

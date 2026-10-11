@@ -401,7 +401,7 @@ class _Builder {
   }
 
   void _pending() {
-    PendingPayment p(String who, PendingDirection dir, PendingKind kind, int rupees, String purpose, int createdAgo, {String? notes, String? userId, bool createdByMe = true}) {
+    PendingPayment p(String who, PendingDirection dir, PendingKind kind, int rupees, String purpose, int createdAgo, {String? notes, String? userId, bool createdByMe = true, PendingSplit? split}) {
       final created = today.subtract(Duration(days: createdAgo));
       final id = _id('pend');
       final item = PendingPayment(
@@ -423,6 +423,7 @@ class _Builder {
               ),
         createdAt: created,
         updatedAt: created,
+        split: split,
       );
       s.pending.add(item);
       return item;
@@ -468,6 +469,14 @@ class _Builder {
         userId: 'u_ananya');
     settle(ananya, 2000, 18);
     p('Rahul Verma', PendingDirection.iOwe, PendingKind.sharedExpense, 780, 'Cab to airport', 9);
+    // One bill split four ways (the user included): one item per person.
+    const dinner = PendingSplit(id: 'spl_dinner', method: SplitMethod.equally, includesMe: true, myShare: Money.fromPaise(120000));
+    p('Karan Mehta', PendingDirection.owedToMe, PendingKind.sharedExpense, 1200, 'Team dinner at Toit', 6,
+        userId: 'u_karan', split: dinner);
+    final sneha = p('Sneha Patil', PendingDirection.owedToMe, PendingKind.sharedExpense, 1200, 'Team dinner at Toit', 6,
+        split: dinner);
+    settle(sneha, 1200, 4);
+    p('Arjun Shah', PendingDirection.owedToMe, PendingKind.sharedExpense, 1200, 'Team dinner at Toit', 6, split: dinner);
     if (stressed) {
       p('Society Office', PendingDirection.iOwe, PendingKind.other, 12000, 'Maintenance arrears', 70);
     }
@@ -553,7 +562,6 @@ class _Builder {
           id: _id('bud'),
           categoryId: cat,
           limit: Money.rupees(rupees),
-          periodType: BudgetPeriodType.monthly,
           status: status,
           createdAt: stamp,
           updatedAt: stamp,
@@ -566,14 +574,11 @@ class _Builder {
       b(SeedCategoryIds.entertainment, 2000),
       b(SeedCategoryIds.personalCare, 1500, status: BudgetStatus.paused),
     ]);
-    final trip = today.add(const Duration(days: 40));
     s.budgets.add(Budget(
       id: _id('bud'),
       categoryId: SeedCategoryIds.travel,
-      limit: Money.rupees(45000),
-      periodType: BudgetPeriodType.custom,
-      customRange: DateRange(today.subtract(const Duration(days: 20)), trip),
-      note: 'Year-end Kerala trip',
+      limit: Money.rupees(20000),
+      note: 'Weekend trips and travel bookings',
       createdAt: stamp,
       updatedAt: stamp,
     ));

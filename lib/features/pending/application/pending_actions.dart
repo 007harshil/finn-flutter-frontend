@@ -154,6 +154,283 @@ class CreatePendingAction extends FinancialAction<PendingInput, PendingPayment> 
   }
 }
 
+/// One other person in a split. [value] is what was entered for them; see
+/// [PendingSplit.part] for its meaning per [SplitMethod].
+class SplitPersonInput {
+  const SplitPersonInput({required this.counterparty, this.linkedUserId, this.value = 0});
+
+  final String counterparty;
+
+  /// FiNN user to share this person's item with. Null keeps it private.
+  final String? linkedUserId;
+  final int value;
+
+  factory SplitPersonInput.fromJson(Map<String, Object?> j, SplitMethod method) => SplitPersonInput(
+        counterparty: In.str(j, 'counterparty'),
+        linkedUserId: In.strOpt(j, 'linkedUserId'),
+        value: _splitValueIn(j['value'], method, 'value'),
+      );
+
+  Map<String, Object?> toJson(SplitMethod method) => {
+        'counterparty': counterparty,
+        'linkedUserId': linkedUserId,
+        'value': _splitValueOut(value, method),
+      };
+}
+
+/// JSON values are human units (rupees, percent, share count); inside they
+/// are paise, basis points and counts.
+int _splitValueIn(Object? raw, SplitMethod method, String field) {
+  if (raw == null || !method.takesValues) return 0;
+  final n = raw is num ? raw : num.tryParse(raw.toString().replaceAll(RegExp(r'[₹,%\s]'), ''));
+  if (n == null) _badInput(field, 'a number');
+  return method == SplitMethod.shares ? n.round() : (n * 100).round();
+}
+
+num _splitValueOut(int v, SplitMethod method) => method == SplitMethod.shares ? v : v / 100;
+
+Never _badInput(String field, String expected) =>
+    throw AppFailure.validation('Invalid "$field": expected $expected.', fields: {field: 'Expected $expected'});
+
+/// A bill split between the user and/or several people, entered once.
+class SplitPendingInput extends ActionInput {
+  const SplitPendingInput({
+    required this.direction,
+    required this.kind,
+    required this.total,
+    required this.purpose,
+    required this.createdDate,
+    required this.method,
+    required this.people,
+    this.includeMe = false,
+    this.myValue = 0,
+    this.notes,
+  });
+
+  final PendingDirection direction;
+  final PendingKind kind;
+
+  /// The whole bill, the user's own share included when [includeMe].
+  final Money total;
+  final String purpose;
+  final DateTime createdDate;
+  final SplitMethod method;
+  final List<SplitPersonInput> people;
+
+  /// The user was part of the bill. Only when they paid (owedToMe).
+  final bool includeMe;
+
+  /// The user's own value when [includeMe] (same units as each person's).
+  final int myValue;
+  final String? notes;
+
+  /// Values in split order: the user first when included, then each person.
+  List<int> get values => [if (includeMe) myValue, for (final p in people) p.value];
+
+  factory SplitPendingInput.fromJson(Map<String, Object?> j) {
+    final method = In.enumOpt(j, 'method', SplitMethod.values) ?? SplitMethod.equally;
+    final raw = j['people'];
+    if (raw is! List) _badInput('people', 'a list of people');
+    return SplitPendingInput(
+      direction: In.enumeration(j, 'direction', PendingDirection.values),
+      kind: In.enumOpt(j, 'kind', PendingKind.values) ?? PendingKind.sharedExpense,
+      total: In.money(j, 'total'),
+      purpose: In.str(j, 'purpose'),
+      createdDate: In.date(j, 'createdDate'),
+      method: method,
+      people: [
+        for (final p in raw)
+          if (p is Map) SplitPersonInput.fromJson(p.cast<String, Object?>(), method)
+          else _badInput('people', 'a list of objects'),
+      ],
+      includeMe: In.boolean(j, 'includeMe', fallback: false),
+      myValue: _splitValueIn(j['myValue'], method, 'myValue'),
+      notes: In.strOpt(j, 'notes'),
+    );
+  }
+
+  @override
+  Map<String, Object?> toJson() => {
+        'direction': direction.name,
+        'kind': kind.name,
+        'total': Out.money(total),
+        'purpose': purpose,
+        'createdDate': Out.date(createdDate),
+        'method': method.name,
+        'includeMe': includeMe,
+        'myValue': includeMe ? _splitValueOut(myValue, method) : null,
+        'people': [for (final p in people) p.toJson(method)],
+        'notes': notes,
+      };
+}
+
+/// Most people one split takes.
+const maxSplitPeople = 20;
+
+/// Records one bill with several people. Each person gets their own item
+/// (so each settles on their own); all of them share one split id.
+class CreateSplitPendingAction extends FinancialAction<SplitPendingInput, List<PendingPayment>> {
+  const CreateSplitPendingAction();
+
+  @override
+  ActionDescriptor get descriptor => const ActionDescriptor(
+        id: 'pending.split',
+        module: 'pending',
+        title: 'Split money owed',
+        description: 'Splits one bill between several people: equally, by exact amounts, percentages, shares or '
+            'adjustments. Creates one item per person. Does not change your cash balance.',
+        risk: ActionRisk.low,
+        fields: [
+          ActionFieldSpec('direction', FieldKind.enumeration,
+              'owedToMe = I paid and they owe me their shares; iOwe = I owe each person their share',
+              allowedValues: ['iOwe', 'owedToMe']),
+          ActionFieldSpec('kind', FieldKind.enumeration, 'Reason (default sharedExpense)', required: false,
+              allowedValues: ['borrowed', 'lent', 'sharedExpense', 'reimbursement', 'other']),
+          ActionFieldSpec('total', FieldKind.money, 'Whole bill in rupees, your own share included when includeMe'),
+          ActionFieldSpec('purpose', FieldKind.string, 'Short description'),
+          ActionFieldSpec('createdDate', FieldKind.date, 'When the bill was paid'),
+          ActionFieldSpec('method', FieldKind.enumeration,
+              'equally; exact (value = rupees, must add up to total); percent (value = %, must add up to 100); '
+              'shares (value = whole parts); adjustment (value = rupees added (+) or taken off (−) an equal share)',
+              allowedValues: ['equally', 'exact', 'percent', 'shares', 'adjustment']),
+          ActionFieldSpec('includeMe', FieldKind.boolean,
+              'You were part of the bill too; your share is not owed. Only with owedToMe', required: false),
+          ActionFieldSpec('myValue', FieldKind.string, 'Your own value when includeMe (same unit as people[].value)',
+              required: false),
+          ActionFieldSpec('people', FieldKind.string,
+              'List of {counterparty, linkedUserId?, value?}, 2 to $maxSplitPeople people, you not included'),
+          ActionFieldSpec('notes', FieldKind.string, 'Notes', required: false),
+        ],
+      );
+
+  @override
+  SplitPendingInput decode(Map<String, Object?> json) => SplitPendingInput.fromJson(json);
+
+  @override
+  Result<ActionPreview> prepare(SplitPendingInput input, FinanceSnapshot s, ActionEnvironment env) {
+    final e = validateSplit(input, s, env.repos.users);
+    if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
+    final shares = SplitCalculator.compute(input.total, input.method, input.values).shares;
+    final others = input.includeMe ? shares.sublist(1) : shares;
+    final owe = input.direction == PendingDirection.iOwe;
+    final n = input.people.length;
+    final users = env.repos.users;
+    return Result.ok(preview(
+      input,
+      title: owe ? 'You owe $n people' : 'Split with $n people',
+      summary: '${owe ? 'Owe' : 'Collect'} ${Money.sum(others).format()} '
+          '${owe ? 'to' : 'from'} $n people · ${input.purpose}',
+      lines: [
+        PreviewLine('Total', input.total.format(), emphasis: true),
+        PreviewLine('Split', '${input.method.label} · ${n + (input.includeMe ? 1 : 0)} people'),
+        if (input.includeMe) PreviewLine('Your share', shares.first.format()),
+        for (var i = 0; i < n; i++)
+          PreviewLine(
+            input.people[i].linkedUserId == null
+                ? input.people[i].counterparty.trim()
+                : users.known(input.people[i].linkedUserId!)!.name,
+            others[i].format(),
+          ),
+        const PreviewLine('Cash balance', 'Unchanged until settled'),
+      ],
+    ));
+  }
+
+  @override
+  Future<Result<List<PendingPayment>>> execute(SplitPendingInput input, FinanceSnapshot s, ActionEnvironment env) async {
+    final shares = SplitCalculator.compute(input.total, input.method, input.values).shares;
+    final others = input.includeMe ? shares.sublist(1) : shares;
+    final now = env.clock.now();
+    final split = PendingSplit(
+      id: env.ids.next('spl'),
+      method: input.method,
+      includesMe: input.includeMe,
+      myShare: input.includeMe ? shares.first : Money.zero,
+    );
+    final created = <PendingPayment>[];
+    try {
+      for (var i = 0; i < input.people.length; i++) {
+        final person = input.people[i];
+        final user = person.linkedUserId == null ? null : env.repos.users.known(person.linkedUserId!);
+        // A microsecond apart, so the people keep the order they were added.
+        final at = now.add(Duration(microseconds: i));
+        final p = PendingPayment(
+          id: env.ids.next('pend'),
+          counterparty: user?.name ?? person.counterparty.trim(),
+          direction: input.direction,
+          kind: input.kind,
+          originalAmount: others[i],
+          purpose: input.purpose.trim(),
+          createdDate: input.createdDate.dateOnly,
+          notes: input.notes,
+          createdAt: at,
+          updatedAt: at,
+          link: user == null
+              ? null
+              : PendingLink(userId: user.id, handle: user.handle, sharedId: env.ids.next('shr'), createdByMe: true),
+          split: split.withPart(input.method.takesValues ? person.value : null),
+        );
+        await env.repos.pending.save(p);
+        created.add(p);
+        await syncSharedPending(env, p);
+      }
+    } catch (_) {
+      // All or nothing: never leave half a split behind.
+      for (final p in created) {
+        await env.repos.pending.delete(p.id);
+        await syncSharedPending(env, p, removed: true);
+      }
+      rethrow;
+    }
+    return Result.ok(created);
+  }
+}
+
+/// Field errors for a split, keyed like the form: `people.<i>.counterparty`,
+/// `people.<i>.linkedUserId`, `amount`, `includeMe`, `split`, … Empty when
+/// the split is valid.
+Map<String, String> validateSplit(SplitPendingInput i, FinanceSnapshot s, UserDirectory users) {
+  final e = <String, String>{};
+  if (i.people.length < 2) e['people'] = 'Add at least two people to split with.';
+  if (i.people.length > maxSplitPeople) e['people'] = 'A split can have up to $maxSplitPeople people.';
+  final seen = <String>{};
+  for (var n = 0; n < i.people.length; n++) {
+    final p = i.people[n];
+    final name = p.counterparty.trim();
+    final link = p.linkedUserId;
+    if (link != null) {
+      if (link == users.me.id) {
+        e['people.$n.linkedUserId'] = 'You are already in the split. Use "Include me" instead.';
+      } else if (users.known(link) == null) {
+        e['people.$n.linkedUserId'] = 'That FiNN user could not be found. Search again.';
+      }
+    }
+    if (name.isEmpty && link == null) {
+      e['people.$n.counterparty'] = "Enter each person's name.";
+    } else if (name.length > 60) {
+      e['people.$n.counterparty'] = 'Keep the name under 60 characters.';
+    } else if (!seen.add(link ?? name.toLowerCase())) {
+      e['people.$n.counterparty'] = '${name.isEmpty ? 'This person' : name} is in the split twice.';
+    }
+  }
+  if (i.includeMe && i.direction == PendingDirection.iOwe) {
+    e['includeMe'] = 'Your own share only applies when you paid the bill.';
+  }
+  if (!i.total.isPositive) e['amount'] = 'Enter an amount greater than zero.';
+  if (i.total > maxTransactionAmount) e['amount'] = 'That amount looks too large. Please check it.';
+  if (i.purpose.trim().isEmpty) e['purpose'] = 'Add a short description.';
+  if (i.createdDate.dateOnly.isAfter(s.today)) e['createdDate'] = 'The date cannot be in the future.';
+  if (i.total.isPositive && i.people.isNotEmpty && !e.containsKey('people')) {
+    final out = SplitCalculator.compute(i.total, i.method, i.values);
+    if (!out.isValid) {
+      e['split'] = out.error!;
+    } else if ((i.includeMe ? out.shares.skip(1) : out.shares).any((x) => !x.isPositive)) {
+      e['split'] = 'Everyone in the split needs a share above zero. Remove anyone who is not paying.';
+    }
+  }
+  return e;
+}
+
 class UpdatePendingInput extends ActionInput {
   const UpdatePendingInput({required this.id, required this.expectedVersion, required this.data});
   final String id;
@@ -215,6 +492,12 @@ class UpdatePendingAction extends FinancialAction<UpdatePendingInput, PendingPay
         PreviewLine('Original amount', input.data.amount.format(), emphasis: true),
         PreviewLine('Already settled', v.settled.format()),
         PreviewLine('Outstanding after edit', (input.data.amount - v.settled).format()),
+        if (v.payment.split case final split? when input.data.amount != v.payment.originalAmount)
+          PreviewLine(
+            'Split bill after edit',
+            (PendingSplitView.collect(s.pendingViews)[split.id]!.total - v.payment.originalAmount + input.data.amount)
+                .format(),
+          ),
       ],
     ));
   }
@@ -237,6 +520,17 @@ class UpdatePendingAction extends FinancialAction<UpdatePendingInput, PendingPay
       link: user == null
           ? null
           : () => PendingLink(userId: user.id, handle: user.handle, sharedId: env.ids.next('shr'), createdByMe: true),
+      // A new amount no longer follows the split's rule; the bill total
+      // follows it (it is always the sum of the items).
+      split: p.split == null || d.amount == p.originalAmount
+          ? null
+          : () => PendingSplit(
+                id: p.split!.id,
+                method: SplitMethod.exact,
+                includesMe: p.split!.includesMe,
+                myShare: p.split!.myShare,
+                part: d.amount.paise,
+              ),
     );
     await env.repos.pending.save(updated);
     await syncSharedPending(env, updated);

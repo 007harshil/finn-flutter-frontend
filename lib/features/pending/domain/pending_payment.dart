@@ -3,8 +3,10 @@ import 'package:flutter/foundation.dart';
 import '../../../core/money/money.dart';
 import '../../../core/time/dates.dart';
 import '../../transactions/domain/transaction.dart';
+import 'pending_split.dart';
 import 'shared_pending.dart';
 
+export 'pending_split.dart';
 export 'shared_pending.dart';
 
 enum PendingDirection {
@@ -48,6 +50,7 @@ class PendingPayment {
     this.isCancelled = false,
     this.version = 1,
     this.link,
+    this.split,
   });
 
   final String id;
@@ -71,7 +74,12 @@ class PendingPayment {
   /// with them (double entry). Null for private items.
   final PendingLink? link;
 
+  /// Set when this item is one person's part of a bill split between
+  /// several people. Null for a single-person item.
+  final PendingSplit? split;
+
   bool get isShared => link != null;
+  bool get isSplit => split != null;
 
   PendingPayment copyWith({
     String? counterparty,
@@ -84,6 +92,7 @@ class PendingPayment {
     DateTime? updatedAt,
     int? version,
     PendingLink? Function()? link,
+    PendingSplit? Function()? split,
   }) =>
       PendingPayment(
         id: id,
@@ -99,6 +108,7 @@ class PendingPayment {
         updatedAt: updatedAt ?? this.updatedAt,
         version: version ?? this.version,
         link: link != null ? link() : this.link,
+        split: split != null ? split() : this.split,
       );
 
   @override

@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/money/money_format.dart';
+import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/async_view.dart';
@@ -31,10 +32,19 @@ class BudgetsScreen extends ConsumerStatefulWidget {
 class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
   BudgetListFilter _filter = const BudgetListFilter();
 
+  /// Budget month shown; null = this month. Past months are read-only.
+  MonthKey? _month;
+
   /// Rows that already played their entrance (scrolling back never replays).
   final Set<String> _entered = {};
 
   void _set(BudgetListFilter f) => setState(() => _filter = f);
+
+  void _setMonth(MonthKey m, MonthKey current) => setState(() {
+        _month = m >= current ? null : m;
+        _filter = _filter.copyWith(state: () => null);
+        _entered.clear();
+      });
 
   void _toggleState(BudgetState s) => _set(_filter.copyWith(state: () => _filter.state == s ? null : s));
 
@@ -78,7 +88,7 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pulse = ref.watch(budgetsPulseProvider);
+    final pulse = ref.watch(budgetsPulseProvider(_month));
     return Scaffold(
       body: SafeArea(
         bottom: false,
@@ -91,18 +101,24 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
             return CustomScrollView(
               key: const PageStorageKey('budgets'),
               slivers: [
-                _boxed(_Header(pulse: o), top: Space.x4),
+                _boxed(_Header(pulse: o, onMonth: (m) => _setMonth(m, o.currentMonth)), top: Space.x4),
                 if (o.paces.isEmpty)
                   _boxed(
-                    EmptyState(
-                      icon: LucideIcons.chartPie,
-                      title: 'No budgets yet',
-                      message: 'Set a monthly limit for a category like Food or Shopping. '
-                          'FiNN tracks spending against it automatically.',
-                      actionLabel: 'Create a budget',
-                      actionIcon: LucideIcons.plus,
-                      onAction: () => context.push(AppRoutes.newBudget),
-                    ),
+                    o.isPast
+                        ? const EmptyState(
+                            icon: LucideIcons.calendarX,
+                            title: 'No budgets this month',
+                            message: 'None of your budgets existed yet in this month.',
+                          )
+                        : EmptyState(
+                            icon: LucideIcons.chartPie,
+                            title: 'No budgets yet',
+                            message: 'Set a monthly limit for a category like Food or Shopping. '
+                                'Every expense in that category counts towards it automatically.',
+                            actionLabel: 'Create a budget',
+                            actionIcon: LucideIcons.plus,
+                            onAction: () => context.push(AppRoutes.newBudget),
+                          ),
                     top: Space.x6,
                   )
                 else ...[
@@ -117,7 +133,7 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
                       child: _Controls(pulse: o, filter: _filter, onState: (s) => _set(_filter.copyWith(state: () => s)), onOptions: _openOptions),
                     ),
                   ),
-                  _boxed(_ResultLine(count: shown.length, filter: _filter, onChanged: _set, onSort: _openOptions)),
+                  _boxed(_ResultLine(count: shown.length, filter: _filter, onSort: _openOptions)),
                   if (shown.isEmpty)
                     _boxed(
                       EmptyState(
@@ -138,8 +154,9 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
                         final row = BudgetRow(
                           key: ValueKey(id),
                           pace: p,
-                          onTap: () => context.push(AppRoutes.budget(id)),
-                          onLongPress: () => _quickActions(p),
+                          past: o.isPast,
+                          onTap: () => context.push(AppRoutes.budget(id, month: o.isPast ? o.month : null)),
+                          onLongPress: o.isPast ? null : () => _quickActions(p),
                         );
                         final first = _entered.add(id);
                         return ResponsiveCenter(
@@ -170,30 +187,76 @@ Widget _boxed(Widget child, {double top = 0}) => SliverToBoxAdapter(
       child: ResponsiveCenter(padding: EdgeInsets.fromLTRB(Space.gutter, top, Space.gutter, 0), child: child),
     );
 
+/// Title, "New budget", and a month switcher. Budgets renew every month;
+/// earlier months can be looked at but not changed.
 class _Header extends StatelessWidget {
-  const _Header({required this.pulse});
+  const _Header({required this.pulse, required this.onMonth});
 
   final BudgetsPulse pulse;
+  final ValueChanged<MonthKey> onMonth;
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final t = context.text;
-    return Row(
+    final o = pulse;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        Row(
+          children: [
+            Expanded(child: Semantics(header: true, child: Text('Budgets', style: t.pageTitle))),
+            if (!o.isPast)
+              FinnButton(
+                label: 'New budget',
+                icon: LucideIcons.plus,
+                size: FinnButtonSize.sm,
+                onPressed: () => context.push(AppRoutes.newBudget),
+              )
+            else
+              FinnButton(
+                key: const ValueKey('budget-this-month'),
+                label: 'This month',
+                icon: LucideIcons.calendarCheck,
+                size: FinnButtonSize.sm,
+                variant: FinnButtonVariant.outline,
+                onPressed: () => onMonth(o.currentMonth),
+              ),
+          ],
+        ),
+        const SizedBox(height: Space.x2),
+        GestureDetector(
+          // Swipe the switcher sideways to move between months.
+          onHorizontalDragEnd: (d) {
+            final v = d.primaryVelocity ?? 0;
+            if (v > 200 && o.month > o.firstMonth) onMonth(o.month.previous);
+            if (v < -200 && o.month < o.currentMonth) onMonth(o.month.next);
+          },
+          child: MonthSwitcher(month: o.month, min: o.firstMonth, max: o.currentMonth, onChanged: onMonth),
+        ),
+        const SizedBox(height: Space.x1),
+        AnimatedSwitcher(
+          duration: context.motion.fast,
+          child: Row(
+            key: ValueKey(o.month),
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Semantics(header: true, child: Text('Budgets', style: t.pageTitle)),
-              Text('${periodLabel(pulse.period)} · ${daysLeftLabel(pulse.daysLeft)}', style: t.caption),
+              if (o.isPast) ...[
+                Icon(LucideIcons.lock, size: 12, color: c.textTertiary),
+                const SizedBox(width: Space.x1),
+              ],
+              Flexible(
+                child: Text(
+                  o.isPast
+                      ? 'Read-only · ${periodLabel(o.period)}'
+                      : '${periodLabel(o.period)} · ${daysLeftLabel(o.daysLeft)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.caption,
+                ),
+              ),
             ],
           ),
-        ),
-        FinnButton(
-          label: 'New budget',
-          icon: LucideIcons.plus,
-          size: FinnButtonSize.sm,
-          onPressed: () => context.push(AppRoutes.newBudget),
         ),
       ],
     );
@@ -217,14 +280,16 @@ class _PulseCard extends StatelessWidget {
     final t = context.text;
     final o = pulse;
     final heading = o.projectedShare;
+    final past = o.isPast;
     final (String verdict, Color tone, IconData icon) = o.isOver
-        ? ('Over budget', c.negative, LucideIcons.triangleAlert)
-        : heading != null && heading > 1
+        ? (past ? 'Went over' : 'Over budget', c.negative, LucideIcons.triangleAlert)
+        : !past && heading != null && heading > 1
             ? ('Spending fast', c.warning, LucideIcons.gauge)
-            : ('On pace', c.positive, LucideIcons.circleCheck);
+            : (past ? 'Stayed within' : 'On pace', c.positive, LucideIcons.circleCheck);
     final safe = o.safePerDay;
     final sub = [
       'of ${budgetMoney(context, o.limit)}',
+      if (past) 'spent ${budgetMoney(context, o.spent)}',
       if (safe != null) '${budgetMoney(context, safe)}/day for ${o.daysLeft} ${o.daysLeft == 1 ? 'day' : 'days'}',
     ].join(' · ');
     final shortcuts = [
@@ -239,7 +304,7 @@ class _PulseCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text('LEFT TO SPEND THIS MONTH', style: t.eyebrow)),
+              Expanded(child: Text(past ? 'LEFT UNSPENT THAT MONTH' : 'LEFT TO SPEND THIS MONTH', style: t.eyebrow)),
               StatusPill(label: verdict, color: tone, icon: icon),
             ],
           ),
@@ -272,9 +337,10 @@ class _PulseCard extends StatelessWidget {
           Text(sub, style: t.caption),
           const SizedBox(height: Space.x3),
           PaceTrack(
+            key: ValueKey(o.month),
             used: o.used,
-            projected: o.projectedShare,
-            elapsed: o.elapsed,
+            projected: past ? null : o.projectedShare,
+            elapsed: past ? 0 : o.elapsed,
             color: o.isOver ? c.negative : c.primary,
             height: 12,
           ),
@@ -307,12 +373,12 @@ class _PulseCard extends StatelessWidget {
                     if (i > 0) const SizedBox(width: Space.x2),
                     FinnTapChip(
                       key: ValueKey('budget-attn:${shortcuts[i].name}'),
-                      label: shortcuts[i].countLabel(o.count(shortcuts[i])),
+                      label: shortcuts[i].countLabel(o.count(shortcuts[i]), past: past),
                       icon: shortcuts[i].icon,
                       color: shortcuts[i].color(c),
                       selected: filter.state == shortcuts[i],
                       height: 32,
-                      semantics: '${shortcuts[i].countLabel(o.count(shortcuts[i]))}. '
+                      semantics: '${shortcuts[i].countLabel(o.count(shortcuts[i]), past: past)}. '
                           '${filter.state == shortcuts[i] ? 'Showing only these' : 'Show only these'}',
                       onTap: () => onState(shortcuts[i]),
                     ).maybeAnimate(
@@ -364,7 +430,7 @@ class _PulseLegend extends StatelessWidget {
           const SizedBox(width: Space.x1),
           Text('Spent ${budgetMoney(context, o.spent)}', style: t.micro.copyWith(color: c.textPrimary)),
         ]),
-        if (projected != null && !o.isOver)
+        if (projected != null && !o.isOver && !o.isPast)
           Row(mainAxisSize: MainAxisSize.min, children: [
             swatch(over ? c.negative : c.primary, hatched: true),
             const SizedBox(width: Space.x1),
@@ -373,11 +439,12 @@ class _PulseLegend extends StatelessWidget {
               style: t.micro.copyWith(color: over ? c.negative : c.textSecondary, fontWeight: FontWeight.w700),
             ),
           ]),
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 2, height: 10, color: c.textPrimary),
-          const SizedBox(width: Space.x1),
-          Text('Today · ${formatBps((o.elapsed * 10000).round(), decimals: 0)} of month', style: t.micro),
-        ]),
+        if (!o.isPast)
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 2, height: 10, color: c.textPrimary),
+            const SizedBox(width: Space.x1),
+            Text('Today · ${formatBps((o.elapsed * 10000).round(), decimals: 0)} of month', style: t.micro),
+          ]),
       ],
     );
   }
@@ -434,7 +501,7 @@ class _Controls extends StatelessWidget {
     final tabs = <(BudgetState?, String, int)>[
       (null, 'All', pulse.paces.length),
       for (final s in BudgetState.values)
-        if ((counts[s] ?? 0) > 0 || filter.state == s) (s, s.label, counts[s] ?? 0),
+        if ((counts[s] ?? 0) > 0 || filter.state == s) (s, s.labelFor(past: pulse.isPast), counts[s] ?? 0),
     ];
     return Row(
       children: [
@@ -546,16 +613,14 @@ class _TabChip extends StatelessWidget {
 }
 
 class _ResultLine extends StatelessWidget {
-  const _ResultLine({required this.count, required this.filter, required this.onChanged, required this.onSort});
+  const _ResultLine({required this.count, required this.filter, required this.onSort});
 
   final int count;
   final BudgetListFilter filter;
-  final ValueChanged<BudgetListFilter> onChanged;
   final VoidCallback onSort;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
     final t = context.text;
     final f = filter;
     return SizedBox(
@@ -568,28 +633,13 @@ class _ResultLine extends StatelessWidget {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               reverse: true,
-              child: Row(
-                children: [
-                  if (f.period != BudgetPeriodFilter.all) ...[
-                    FinnTapChip(
-                      label: f.period.label,
-                      trailing: LucideIcons.x,
-                      color: c.primary,
-                      height: 28,
-                      semantics: 'Remove filter ${f.period.label}',
-                      onTap: () => onChanged(f.copyWith(period: BudgetPeriodFilter.all)),
-                    ),
-                    const SizedBox(width: Space.x1_5),
-                  ],
-                  FinnTapChip(
-                    label: f.sort.label,
-                    icon: LucideIcons.arrowDownUp,
-                    trailing: LucideIcons.chevronDown,
-                    height: 28,
-                    semantics: 'Sorted by ${f.sort.label}. Change',
-                    onTap: onSort,
-                  ),
-                ],
+              child: FinnTapChip(
+                label: f.sort.label,
+                icon: LucideIcons.arrowDownUp,
+                trailing: LucideIcons.chevronDown,
+                height: 28,
+                semantics: 'Sorted by ${f.sort.label}. Change',
+                onTap: onSort,
               ),
             ),
           ),
@@ -660,14 +710,6 @@ class _OptionsSheetState extends State<_OptionsSheet> {
                   onTap: () => setState(() => _f = _f.copyWith(sort: s)),
                 ),
             ],
-          ),
-          const SizedBox(height: Space.x5),
-          Text('PERIOD', style: t.eyebrow),
-          const SizedBox(height: Space.x2),
-          SegmentedTabs<BudgetPeriodFilter>(
-            items: [for (final p in BudgetPeriodFilter.values) SegmentItem(p, p.label)],
-            selected: _f.period,
-            onChanged: (p) => setState(() => _f = _f.copyWith(period: p)),
           ),
         ],
       ),

@@ -18,14 +18,13 @@ Budget budget({
   String category = 'cat_food',
   BudgetStatus status = BudgetStatus.active,
   int warning = 8000,
-  DateRange? custom,
+  List<BudgetLimitChange> previousLimits = const [],
 }) =>
     Budget(
       id: 'b1',
       categoryId: category,
       limit: limit,
-      periodType: custom == null ? BudgetPeriodType.monthly : BudgetPeriodType.custom,
-      customRange: custom,
+      previousLimits: previousLimits,
       status: status,
       warningThresholdBps: warning,
       createdAt: stamp,
@@ -108,12 +107,32 @@ void main() {
       }
     });
 
-    test('previousPeriod for monthly and custom budgets', () {
-      expect(calc.previousPeriod(budget(), today, 25), range(d(2026, 8, 25), d(2026, 9, 24)));
-      expect(calc.previousPeriod(budget(), d(2027, 1, 5), 1), range(d(2026, 12, 1), d(2026, 12, 31)));
-      final custom = budget(custom: range(d(2026, 10, 1), d(2026, 10, 10)));
-      expect(calc.periodFor(custom, today, 25), range(d(2026, 10, 1), d(2026, 10, 10)));
-      expect(calc.previousPeriod(custom, today, 25), range(d(2026, 9, 21), d(2026, 9, 30)));
+    test('budget months: periodOf and monthOf agree with the start day', () {
+      expect(calc.periodOf(MonthKey(2026, 9), 25), range(d(2026, 9, 25), d(2026, 10, 24)));
+      expect(calc.periodOf(MonthKey(2026, 12), 1), range(d(2026, 12, 1), d(2026, 12, 31)));
+      expect(calc.monthOf(today, 25), MonthKey(2026, 9));
+      expect(calc.monthOf(today, 1), MonthKey(2026, 10));
+    });
+
+    test('each month uses the limit that applied then', () {
+      final b = budget(previousLimits: [
+        BudgetLimitChange(until: MonthKey(2026, 8), limit: const Money.rupees(6000)),
+      ]);
+      Money limitIn(int month) => calc
+          .usage(
+            budget: b,
+            transactions: const [],
+            subscriptions: const [],
+            today: today,
+            monthStartDay: 1,
+            period: calc.periodOf(MonthKey(2026, month), 1),
+          )
+          .budget
+          .limit;
+      expect(limitIn(7), const Money.rupees(6000));
+      expect(limitIn(8), const Money.rupees(6000));
+      expect(limitIn(9), const Money.rupees(10000));
+      expect(limitIn(10), const Money.rupees(10000));
     });
   });
 

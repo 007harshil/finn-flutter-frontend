@@ -1,6 +1,7 @@
+import 'package:finn/core/time/dates.dart';
 import 'package:finn/data/mock/seed_data.dart';
+import 'package:finn/design_system/design_system.dart';
 import 'package:finn/features/budgets/application/budget_view.dart';
-import 'package:finn/features/budgets/domain/budget.dart';
 import 'package:finn/features/budgets/presentation/budget_charts.dart';
 import 'package:finn/features/budgets/presentation/budget_detail_screen.dart';
 import 'package:finn/features/budgets/presentation/budgets_screen.dart';
@@ -54,6 +55,32 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('previous months open read-only and come back to this month', (tester) async {
+      _tallView(tester);
+      final env = await TestEnv.create();
+      final s = await env.snapshot();
+      final september = s.budgetUsagesFor(MonthKey(2026, 9));
+      await env.pumpWidget(tester, const BudgetsScreen());
+      await tester.pumpAndSettle();
+      expect(find.text('New budget'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Previous month'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Read-only'), findsOneWidget);
+      expect(find.text('New budget'), findsNothing);
+      expect(find.text('LEFT UNSPENT THAT MONTH'), findsOneWidget);
+      for (final u in september) {
+        expect(find.byKey(ValueKey(u.budget.id)), findsOneWidget);
+      }
+      expect(find.byTooltip('Next month'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('budget-this-month')));
+      await tester.pumpAndSettle();
+      expect(find.text('LEFT TO SPEND THIS MONTH'), findsOneWidget);
+      expect(find.text('New budget'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('fits a 320 px screen without overflow', (tester) async {
       tester.view.physicalSize = const Size(320, 1400) * tester.view.devicePixelRatio;
       addTearDown(tester.view.resetPhysicalSize);
@@ -65,12 +92,30 @@ void main() {
   });
 
   group('BudgetDetailScreen', () {
+    testWidgets('a past month is read-only with its own totals', (tester) async {
+      _tallView(tester);
+      final env = await TestEnv.create();
+      final s = await env.snapshot();
+      final u = s.budgetUsagesFor(MonthKey(2026, 9)).firstWhere((u) => u.budget.categoryId == SeedCategoryIds.food);
+      await env.pumpWidget(tester, BudgetDetailScreen(id: u.budget.id, month: MonthKey(2026, 9)));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('read-only'), findsOneWidget);
+      expect(find.byTooltip('Edit budget'), findsNothing);
+      expect(find.byTooltip('More actions'), findsNothing);
+      expect(find.text('LIMIT THEN'), findsOneWidget);
+      expect(find.text('MONTH TOTAL'), findsOneWidget);
+      expect(find.text('SAFE PER DAY'), findsNothing);
+      expect(find.text(AmountText.formatted(u.spent)), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('gauge, pace stats, chart readout and filters', (tester) async {
       _tallView(tester);
       final env = await TestEnv.create();
       final s = await env.snapshot();
       final food = s.budgetUsages.firstWhere(
-        (u) => u.budget.categoryId == SeedCategoryIds.food && u.budget.periodType == BudgetPeriodType.monthly,
+        (u) => u.budget.categoryId == SeedCategoryIds.food,
       );
       await env.pumpWidget(tester, BudgetDetailScreen(id: food.budget.id));
       await tester.pumpAndSettle();

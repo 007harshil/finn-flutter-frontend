@@ -9,6 +9,12 @@ import '../../features/transactions/domain/transaction.dart';
 abstract final class AppRoutes {
   static const onboarding = '/onboarding';
 
+  // Authentication (outside the shell; every other route requires sign-in)
+  static const login = '/login';
+  static const verifyOtpPath = '/login/verify';
+  static String loginWithEmail(String email) => '$login?email=${Uri.encodeQueryComponent(email)}';
+  static String verifyOtp(String email) => '$verifyOtpPath?email=${Uri.encodeQueryComponent(email)}';
+
   // Home branch
   static const home = '/home';
   static const alerts = '/home/alerts';
@@ -32,7 +38,9 @@ abstract final class AppRoutes {
   // Budgets branch
   static const budgets = '/budgets';
   static const newBudget = '/budgets/new';
-  static String budget(String id) => '/budgets/$id';
+  /// A budget; [month] opens a past month read-only.
+  static String budget(String id, {MonthKey? month}) =>
+      month == null ? '/budgets/$id' : '/budgets/$id?month=${month.id}';
   static String editBudget(String id) => '/budgets/$id/edit';
 
   // Goals branch (includes the emergency fund)
@@ -49,6 +57,7 @@ abstract final class AppRoutes {
 
   // More branch
   static const more = '/more';
+  static const account = '/more/account';
   static const loans = '/more/loans';
   static const newLoan = '/more/loans/new';
   static String loan(String id) => '/more/loans/$id';

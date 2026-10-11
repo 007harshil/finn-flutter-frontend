@@ -3,64 +3,79 @@ import 'package:flutter/foundation.dart';
 import '../../../core/money/money.dart';
 import '../../../core/time/dates.dart';
 
-enum BudgetPeriodType {
-  /// Repeats every calendar month (respecting the user's month start day).
-  monthly('Monthly'),
-
-  /// A single explicit date range.
-  custom('Custom period');
-
-  const BudgetPeriodType(this.label);
-  final String label;
-}
-
 enum BudgetStatus { active, paused }
 
-/// A spending limit for one category. Spending is *never stored* on the
-/// budget: it is always derived from eligible transactions, so edits,
-/// deletions and re-categorisation are reflected automatically.
+/// The limit a budget had up to and including [until] (a budget month,
+/// keyed by the month its period starts in). Recorded when the limit is
+/// edited so past months keep showing the limit that applied then.
+@immutable
+class BudgetLimitChange {
+  const BudgetLimitChange({required this.until, required this.limit});
+
+  final MonthKey until;
+  final Money limit;
+
+  @override
+  bool operator ==(Object other) => other is BudgetLimitChange && other.until == until && other.limit == limit;
+
+  @override
+  int get hashCode => Object.hash(until, limit);
+}
+
+/// A monthly spending limit for one category. Budgets are always monthly:
+/// a budget covers the whole month it is created in (whatever the day) and
+/// renews every month. Spending is *never stored* on the budget: it is
+/// derived from expenses in the category, so adding, editing or deleting an
+/// expense updates the budget automatically.
 @immutable
 class Budget {
   const Budget({
     required this.id,
     required this.categoryId,
     required this.limit,
-    required this.periodType,
     required this.createdAt,
     required this.updatedAt,
-    this.customRange,
     this.status = BudgetStatus.active,
     this.warningThresholdBps = 8000,
     this.note,
+    this.previousLimits = const [],
     this.version = 1,
   });
 
   final String id;
   final String categoryId;
-  final Money limit;
-  final BudgetPeriodType periodType;
 
-  /// Only for [BudgetPeriodType.custom].
-  final DateRange? customRange;
+  /// The current limit (this month onwards).
+  final Money limit;
   final BudgetStatus status;
 
   /// Utilisation (basis points) at which the budget enters "warning".
   final int warningThresholdBps;
   final String? note;
+
+  /// Earlier limits, oldest first; see [limitFor].
+  final List<BudgetLimitChange> previousLimits;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
 
   bool get isPaused => status == BudgetStatus.paused;
 
+  /// The limit that applied in budget month [month].
+  Money limitFor(MonthKey month) {
+    for (final c in previousLimits) {
+      if (month <= c.until) return c.limit;
+    }
+    return limit;
+  }
+
   Budget copyWith({
     String? categoryId,
     Money? limit,
-    BudgetPeriodType? periodType,
-    DateRange? Function()? customRange,
     BudgetStatus? status,
     int? warningThresholdBps,
     String? Function()? note,
+    List<BudgetLimitChange>? previousLimits,
     DateTime? updatedAt,
     int? version,
   }) =>
@@ -68,21 +83,21 @@ class Budget {
         id: id,
         categoryId: categoryId ?? this.categoryId,
         limit: limit ?? this.limit,
-        periodType: periodType ?? this.periodType,
-        customRange: customRange != null ? customRange() : this.customRange,
         status: status ?? this.status,
         warningThresholdBps: warningThresholdBps ?? this.warningThresholdBps,
         note: note != null ? note() : this.note,
+        previousLimits: previousLimits ?? this.previousLimits,
         createdAt: createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         version: version ?? this.version,
       );
 
   @override
-  bool operator ==(Object other) => other is Budget && other.id == id && other.version == version;
+  bool operator ==(Object other) =>
+      other is Budget && other.id == id && other.version == version && other.limit == limit && other.status == status;
 
   @override
-  int get hashCode => Object.hash(id, version);
+  int get hashCode => Object.hash(id, version, limit, status);
 }
 
 enum BudgetHealth {

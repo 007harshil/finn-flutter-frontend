@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../core/time/dates.dart';
 import '../../features/alerts/presentation/alerts_screen.dart';
 import '../../features/analytics/presentation/analytics_screen.dart';
+import '../../features/auth/application/auth_controller.dart';
+import '../../features/auth/presentation/login_screen.dart';
+import '../../features/auth/presentation/verify_otp_screen.dart';
 import '../../features/budgets/presentation/budget_detail_screen.dart';
 import '../../features/budgets/presentation/budget_form_sheet.dart';
 import '../../features/budgets/presentation/budgets_screen.dart';
@@ -31,6 +34,7 @@ import '../../features/pending/presentation/pending_detail_screen.dart';
 import '../../features/pending/presentation/pending_form_sheet.dart';
 import '../../features/pending/presentation/pending_screen.dart';
 import '../../features/pending/presentation/settle_pending_sheet.dart';
+import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/settings/presentation/activity_log_screen.dart';
 import '../../features/settings/presentation/notification_settings_screen.dart';
 import '../../features/settings/presentation/profile_sheet.dart';
@@ -50,11 +54,15 @@ import 'sheet_page.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
-/// Builds the app router. Redirects to onboarding until it is completed.
+/// Builds the app router. Redirects to sign-in until signed in, then to
+/// onboarding until it is completed.
 final routerProvider = Provider<GoRouter>((ref) {
   final onboarded = ValueNotifier<bool>(ref.read(settingsProvider).onboardingComplete);
   ref.listen(settingsProvider.select((s) => s.onboardingComplete), (_, v) => onboarded.value = v);
   ref.onDispose(onboarded.dispose);
+  final signedIn = ValueNotifier<bool>(ref.read(authControllerProvider) != null);
+  ref.listen(authControllerProvider.select((s) => s != null), (_, v) => signedIn.value = v);
+  ref.onDispose(signedIn.dispose);
 
   GoRoute sheet(String path, Widget Function(GoRouterState s) build) => GoRoute(
         path: path,
@@ -74,8 +82,11 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: AppRoutes.home,
-    refreshListenable: onboarded,
+    refreshListenable: Listenable.merge([onboarded, signedIn]),
     redirect: (context, state) {
+      final atAuth = state.matchedLocation == AppRoutes.login || state.matchedLocation == AppRoutes.verifyOtpPath;
+      if (!signedIn.value) return atAuth ? null : AppRoutes.login;
+      if (atAuth) return onboarded.value ? AppRoutes.home : AppRoutes.onboarding;
       final atOnboarding = state.matchedLocation == AppRoutes.onboarding;
       if (!onboarded.value && !atOnboarding) return AppRoutes.onboarding;
       if (onboarded.value && atOnboarding) return AppRoutes.home;
@@ -84,6 +95,17 @@ final routerProvider = Provider<GoRouter>((ref) {
     errorBuilder: (context, state) => const _NotFoundScreen(),
     routes: [
       GoRoute(path: '/', redirect: (_, _) => AppRoutes.home),
+      GoRoute(
+        path: AppRoutes.login,
+        builder: (_, s) => LoginScreen(initialEmail: s.uri.queryParameters['email']),
+        routes: [
+          GoRoute(
+            path: 'verify',
+            redirect: (_, s) => (s.uri.queryParameters['email'] ?? '').isEmpty ? AppRoutes.login : null,
+            builder: (_, s) => VerifyOtpScreen(email: s.uri.queryParameters['email']!),
+          ),
+        ],
+      ),
       GoRoute(path: AppRoutes.onboarding, builder: (_, _) => const OnboardingScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AppShell(shell: shell),
@@ -119,7 +141,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               builder: (_, _) => const BudgetsScreen(),
               routes: [
                 sheet('new', (_) => const BudgetFormSheet()),
-                page(':budgetId', (s) => BudgetDetailScreen(id: s.pathParameters['budgetId']!), routes: [
+                page(':budgetId', (s) => BudgetDetailScreen(
+                      id: s.pathParameters['budgetId']!,
+                      month: MonthKey.tryParse(s.uri.queryParameters['month']),
+                    ), routes: [
                   sheet('edit', (s) => BudgetFormSheet(budgetId: s.pathParameters['budgetId'])),
                 ]),
               ],
@@ -150,6 +175,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               path: AppRoutes.more,
               builder: (_, _) => const MoreScreen(),
               routes: [
+                page('account', (_) => const ProfileScreen()),
                 page('loans', (_) => const LoansScreen(), routes: [
                   sheet('new', (_) => const LoanFormSheet()),
                   page(':loanId', (s) => LoanDetailScreen(id: s.pathParameters['loanId']!), routes: [

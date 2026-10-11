@@ -78,8 +78,7 @@ void main() {
       expect(ids(const BudgetListFilter(state: BudgetState.risk)), ['risk']);
       expect(ids(const BudgetListFilter(sort: BudgetSort.name)), ['risk', 'paused', 'ok', 'over']);
       expect(ids(const BudgetListFilter(sort: BudgetSort.left)).take(2), ['paused', 'ok']);
-      expect(ids(const BudgetListFilter(period: BudgetPeriodFilter.custom)), isEmpty);
-      expect(const BudgetListFilter(sort: BudgetSort.name, period: BudgetPeriodFilter.monthly).optionCount, 2);
+      expect(const BudgetListFilter(sort: BudgetSort.name).optionCount, 1);
     });
   });
 

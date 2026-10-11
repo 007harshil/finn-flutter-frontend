@@ -21,19 +21,15 @@ class BudgetCalculator {
     return DateRange(start, end);
   }
 
-  /// The period a budget covers around [reference].
-  DateRange periodFor(Budget b, DateTime reference, int monthStartDay) =>
-      b.periodType == BudgetPeriodType.custom && b.customRange != null
-          ? b.customRange!
-          : monthlyPeriod(reference, monthStartDay);
+  /// The budget period that starts in [month].
+  DateRange periodOf(MonthKey month, int monthStartDay) =>
+      monthlyPeriod(DateTime(month.year, month.month, monthStartDay.clamp(1, 28)), monthStartDay);
 
-  /// The previous period (monthly budgets only; custom → same length before).
-  DateRange previousPeriod(Budget b, DateTime reference, int monthStartDay) {
-    final current = periodFor(b, reference, monthStartDay);
-    if (b.periodType == BudgetPeriodType.custom) return current.previous;
-    return monthlyPeriod(current.start.subtract(const Duration(days: 1)), monthStartDay);
-  }
+  /// The budget month (month its period starts in) containing [date].
+  MonthKey monthOf(DateTime date, int monthStartDay) => monthlyPeriod(date, monthStartDay).start.monthKey;
 
+  /// Usage of [budget] in [period] (default: the period containing
+  /// [today]). The limit is the one that applied in that month.
   BudgetUsage usage({
     required Budget budget,
     required List<Transaction> transactions,
@@ -42,7 +38,9 @@ class BudgetCalculator {
     required int monthStartDay,
     DateRange? period,
   }) {
-    final range = period ?? periodFor(budget, today, monthStartDay);
+    final range = period ?? monthlyPeriod(today, monthStartDay);
+    final limit = budget.limitFor(range.start.monthKey);
+    if (limit != budget.limit) budget = budget.copyWith(limit: limit);
     var spent = 0;
     final ids = <String>[];
     for (final t in transactions) {

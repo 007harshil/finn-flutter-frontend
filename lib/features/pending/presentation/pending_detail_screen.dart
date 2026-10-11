@@ -15,6 +15,7 @@ import '../../../shared/presentation/async_view.dart';
 import '../../alerts/presentation/alert_visuals.dart' show MaybeAnimate;
 import '../application/pending_actions.dart';
 import '../domain/pending_payment.dart';
+import 'pending_split_ui.dart';
 import 'pending_ui.dart';
 
 enum _Menu { edit, remind, writeOff, delete }
@@ -120,7 +121,8 @@ class _PendingDetailScreenState extends ConsumerState<PendingDetailScreen> {
               ),
             );
           }
-          return _Body(view: v, onSettle: () => context.push(AppRoutes.settlePending(v.payment.id)));
+          final split = v.payment.split == null ? null : ref.watch(pendingSplitsProvider)[v.payment.split!.id];
+          return _Body(view: v, split: split, onSettle: () => context.push(AppRoutes.settlePending(v.payment.id)));
         },
       ),
     );
@@ -128,10 +130,13 @@ class _PendingDetailScreenState extends ConsumerState<PendingDetailScreen> {
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.view, required this.onSettle});
+  const _Body({required this.view, required this.onSettle, this.split});
 
   final PendingView view;
   final VoidCallback onSettle;
+
+  /// The bill this item is part of, when it was split between several people.
+  final PendingSplitView? split;
 
   @override
   Widget build(BuildContext context) {
@@ -171,6 +176,10 @@ class _Body extends StatelessWidget {
             ],
           ],
         ),
+      ],
+      if (split case final split?) ...[
+        const SizedBox(height: Space.x3),
+        PendingSplitCard(split: split, currentId: p.id),
       ],
       if (p.isShared) ...[
         const SizedBox(height: Space.x3),

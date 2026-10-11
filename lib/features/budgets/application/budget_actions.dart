@@ -12,52 +12,30 @@ const int defaultBudgetWarningBps = 8000;
 const int minBudgetWarningBps = 5000;
 const int maxBudgetWarningBps = 9500;
 
-/// Longest custom budget period accepted.
-const int maxCustomBudgetDays = 366;
-
 /// Largest budget limit accepted (₹10 crore) — guards against typos.
 const Money maxBudgetLimit = Money.rupees(100000000);
 
-/// Input for creating or editing a budget. Budgets hold no money: they are
-/// spending limits, and spending is always derived from transactions.
+/// Input for creating or editing a budget. Budgets are always monthly and
+/// hold no money: they are spending limits, and spending is always derived
+/// from expenses in the category.
 class BudgetInput extends ActionInput {
   const BudgetInput({
     required this.categoryId,
     required this.limit,
-    this.periodType = BudgetPeriodType.monthly,
-    this.customStart,
-    this.customEnd,
     this.warningThresholdBps,
     this.note,
   });
 
   final String categoryId;
   final Money limit;
-  final BudgetPeriodType periodType;
-
-  /// Required for [BudgetPeriodType.custom].
-  final DateTime? customStart;
-  final DateTime? customEnd;
 
   /// 5000–9500 basis points. Null → [defaultBudgetWarningBps].
   final int? warningThresholdBps;
   final String? note;
 
-  DateRange? get customRange {
-    final s = customStart;
-    final e = customEnd;
-    if (periodType != BudgetPeriodType.custom || s == null || e == null || e.dateOnly.isBefore(s.dateOnly)) {
-      return null;
-    }
-    return DateRange(s, e);
-  }
-
   factory BudgetInput.fromJson(Map<String, Object?> j) => BudgetInput(
         categoryId: In.str(j, 'categoryId'),
         limit: In.money(j, 'limit'),
-        periodType: In.enumOpt(j, 'periodType', BudgetPeriodType.values) ?? BudgetPeriodType.monthly,
-        customStart: In.dateOpt(j, 'customStart'),
-        customEnd: In.dateOpt(j, 'customEnd'),
         warningThresholdBps: In.intOpt(j, 'warningThresholdBps'),
         note: In.strOpt(j, 'note'),
       );
@@ -66,9 +44,6 @@ class BudgetInput extends ActionInput {
   Map<String, Object?> toJson() => {
         'categoryId': categoryId,
         'limit': Out.money(limit),
-        'periodType': periodType.name,
-        'customStart': periodType == BudgetPeriodType.custom ? Out.dateOpt(customStart) : null,
-        'customEnd': periodType == BudgetPeriodType.custom ? Out.dateOpt(customEnd) : null,
         'warningThresholdBps': warningThresholdBps,
         'note': note,
       };
@@ -76,23 +51,15 @@ class BudgetInput extends ActionInput {
 
 const _budgetFields = [
   ActionFieldSpec('categoryId', FieldKind.id, 'Expense category id'),
-  ActionFieldSpec('limit', FieldKind.money, 'Spending limit in rupees, greater than zero'),
-  ActionFieldSpec('periodType', FieldKind.enumeration, 'Budget period', required: false,
-      allowedValues: ['monthly', 'custom']),
-  ActionFieldSpec('customStart', FieldKind.date, 'Start date (custom period only)', required: false),
-  ActionFieldSpec('customEnd', FieldKind.date, 'End date (custom period only, max 366 days)', required: false),
+  ActionFieldSpec('limit', FieldKind.money, 'Monthly spending limit in rupees, greater than zero'),
   ActionFieldSpec('warningThresholdBps', FieldKind.integer, 'Warning threshold in basis points (5000–9500)',
       required: false),
   ActionFieldSpec('note', FieldKind.string, 'Note', required: false),
 ];
 
-/// An active monthly budget (other than [exceptId]) for [categoryId], if any.
+/// An active budget (other than [exceptId]) for [categoryId], if any.
 Budget? conflictingMonthlyBudget(FinanceSnapshot s, String categoryId, {String? exceptId}) => s.budgets
-    .where((b) =>
-        b.id != exceptId &&
-        b.categoryId == categoryId &&
-        b.periodType == BudgetPeriodType.monthly &&
-        b.status == BudgetStatus.active)
+    .where((b) => b.id != exceptId && b.categoryId == categoryId && b.status == BudgetStatus.active)
     .firstOrNull;
 
 Map<String, String> validateBudget(BudgetInput i, FinanceSnapshot s, {String? exceptId, bool active = true}) {
@@ -102,24 +69,11 @@ Map<String, String> validateBudget(BudgetInput i, FinanceSnapshot s, {String? ex
     e['categoryId'] = 'Choose a category.';
   } else if (cat.type != TransactionType.expense) {
     e['categoryId'] = 'Budgets work with spending categories only.';
-  } else if (active &&
-      i.periodType == BudgetPeriodType.monthly &&
-      conflictingMonthlyBudget(s, i.categoryId, exceptId: exceptId) != null) {
+  } else if (active && conflictingMonthlyBudget(s, i.categoryId, exceptId: exceptId) != null) {
     e['categoryId'] = '${cat.name} already has a monthly budget. Edit that one instead.';
   }
   if (!i.limit.isPositive) e['limit'] = 'Enter a limit greater than zero.';
   if (i.limit > maxBudgetLimit) e['limit'] = 'That limit looks too large. Please check it.';
-  if (i.periodType == BudgetPeriodType.custom) {
-    final start = i.customStart;
-    final end = i.customEnd;
-    if (start == null || end == null) {
-      e['customRange'] = 'Choose the start and end dates.';
-    } else if (end.dateOnly.isBefore(start.dateOnly)) {
-      e['customRange'] = 'The end date must be on or after the start date.';
-    } else if (DateRange(start, end).dayCount > maxCustomBudgetDays) {
-      e['customRange'] = 'A custom period can be at most $maxCustomBudgetDays days.';
-    }
-  }
   final w = i.warningThresholdBps;
   if (w != null && (w < minBudgetWarningBps || w > maxBudgetWarningBps)) {
     e['warningThresholdBps'] = 'Choose a warning level between 50% and 95%.';
@@ -128,18 +82,26 @@ Map<String, String> validateBudget(BudgetInput i, FinanceSnapshot s, {String? ex
   return e;
 }
 
-String _periodLabel(BudgetInput i) {
-  final r = i.customRange;
-  if (i.periodType == BudgetPeriodType.custom && r != null) {
-    return '${DateFormats.dayMonthYear.format(r.start)} – ${DateFormats.dayMonthYear.format(r.end)}';
-  }
-  return 'Every month';
+/// "Every month, from 1 Oct 2026".
+String _periodLabel(FinanceSnapshot s) =>
+    'Every month, from ${DateFormats.dayMonthYear.format(s.currentBudgetPeriod.start)}';
+
+/// [b]'s limit history after changing its limit to [next] today: months
+/// before this one keep the old limit, this month onwards uses [next].
+List<BudgetLimitChange> limitHistoryAfterEdit(Budget b, Money next, FinanceSnapshot s) {
+  final current = s.currentBudgetMonth;
+  final started = FinanceSnapshot.budgetCalc.monthOf(b.createdAt, s.monthStartDay);
+  final until = current.previous;
+  if (next == b.limit || started > until) return b.previousLimits;
+  // Already recorded for last month (e.g. a second edit this month).
+  if (b.previousLimits.any((c) => c.until >= until)) return b.previousLimits;
+  return [...b.previousLimits, BudgetLimitChange(until: until, limit: b.limit)];
 }
 
 List<PreviewLine> _lines(BudgetInput i, FinanceSnapshot s) => [
       PreviewLine('Category', s.category(i.categoryId)?.name ?? '—'),
       PreviewLine('Limit', i.limit.format(), emphasis: true),
-      PreviewLine('Period', _periodLabel(i)),
+      PreviewLine('Period', _periodLabel(s)),
       PreviewLine('Warn at', formatBps(i.warningThresholdBps ?? defaultBudgetWarningBps, decimals: 0)),
     ];
 
@@ -180,8 +142,6 @@ class CreateBudgetAction extends FinancialAction<BudgetInput, Budget> {
       id: env.ids.next('bud'),
       categoryId: input.categoryId,
       limit: input.limit,
-      periodType: input.periodType,
-      customRange: input.periodType == BudgetPeriodType.custom ? input.customRange : null,
       warningThresholdBps: input.warningThresholdBps ?? defaultBudgetWarningBps,
       note: input.note,
       createdAt: now,
@@ -212,7 +172,8 @@ class UpdateBudgetAction extends FinancialAction<UpdateBudgetInput, Budget> {
         id: 'budgets.update',
         module: 'budgets',
         title: 'Edit a budget',
-        description: 'Changes a budget\'s category, limit, period or warning level. Usage updates automatically.',
+        description: 'Changes a budget\'s category, monthly limit or warning level. '
+            'Earlier months keep the limit they had.',
         risk: ActionRisk.low,
         fields: [
           ActionFieldSpec('id', FieldKind.id, 'Budget id'),
@@ -254,8 +215,7 @@ class UpdateBudgetAction extends FinancialAction<UpdateBudgetInput, Budget> {
     final updated = b.copyWith(
       categoryId: d.categoryId,
       limit: d.limit,
-      periodType: d.periodType,
-      customRange: () => d.periodType == BudgetPeriodType.custom ? d.customRange : null,
+      previousLimits: limitHistoryAfterEdit(b, d.limit, s),
       warningThresholdBps: d.warningThresholdBps ?? b.warningThresholdBps,
       note: () => d.note,
       updatedAt: env.clock.now(),
@@ -302,7 +262,6 @@ class SetBudgetPausedAction extends FinancialAction<SetBudgetPausedInput, Budget
     if (b == null) return const Result.err(AppFailure.notFound('This budget no longer exists.'));
     final name = s.category(b.categoryId)?.name ?? 'Budget';
     if (!input.paused &&
-        b.periodType == BudgetPeriodType.monthly &&
         conflictingMonthlyBudget(s, b.categoryId, exceptId: b.id) != null) {
       return Result.err(AppFailure(FailureCode.conflict,
           '$name already has an active monthly budget. Pause or delete it first.'));
@@ -364,7 +323,7 @@ class DeleteBudgetAction extends FinancialAction<BudgetIdInput, Budget> {
       lines: [
         PreviewLine('Category', name),
         PreviewLine('Limit', b.limit.format(), emphasis: true),
-        PreviewLine('Period', b.periodType.label),
+        const PreviewLine('Period', 'Monthly'),
       ],
       warnings: const ['Your transactions stay exactly as they are. Only the limit is removed.'],
     ));

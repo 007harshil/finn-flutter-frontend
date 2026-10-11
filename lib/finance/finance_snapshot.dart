@@ -132,6 +132,39 @@ class FinanceSnapshot {
   BudgetUsage? budgetUsage(String budgetId) =>
       budgetUsages.where((u) => u.budget.id == budgetId).firstOrNull;
 
+  /// The budget month (keyed by the month its period starts in) of today.
+  MonthKey get currentBudgetMonth => currentBudgetPeriod.start.monthKey;
+
+  /// First budget month any budget covers (null when there are none).
+  MonthKey? get firstBudgetMonth => budgets.isEmpty
+      ? null
+      : budgets.map((b) => budgetCalc.monthOf(b.createdAt, monthStartDay)).reduce((a, b) => a < b ? a : b);
+
+  final Map<MonthKey, List<BudgetUsage>> _budgetMonths = {};
+
+  /// Budgets as they stood in budget [month]. The current month is
+  /// [budgetUsages]. A past month is read-only history: every budget that
+  /// existed then, with the limit it had then, measured against that
+  /// month's expenses (pausing only affects the current month).
+  List<BudgetUsage> budgetUsagesFor(MonthKey month) {
+    if (month >= currentBudgetMonth) return budgetUsages;
+    return _budgetMonths.putIfAbsent(month, () {
+      final period = budgetCalc.periodOf(month, monthStartDay);
+      return [
+        for (final b in budgets)
+          if (budgetCalc.monthOf(b.createdAt, monthStartDay) <= month)
+            budgetCalc.usage(
+              budget: b.isPaused ? b.copyWith(status: BudgetStatus.active) : b,
+              transactions: transactions,
+              subscriptions: subscriptions,
+              today: today,
+              monthStartDay: monthStartDay,
+              period: period,
+            ),
+      ];
+    });
+  }
+
   late final List<GoalProgress> goalProgress = [
     for (final g in goals) goalCalc.progress(g, savingsMovements, today),
   ];

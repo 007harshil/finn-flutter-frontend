@@ -17,6 +17,8 @@ import '../../journeys/journey_helpers.dart';
 //   Rahul Verma  I owe   ₹2,000 left of ₹3,200, open 24 days
 //   Priya Nair   owes me ₹6,500, open 20 days
 //   Rahul Verma  I owe   ₹780, open 9 days
+//   Karan Mehta + Arjun Shah owe me ₹1,200 each, open 6 days: one split bill
+//     (Team dinner at Toit, 4 ways with me; Sneha Patil already settled)
 void main() {
   late TestEnv env;
   late List<PendingView> views;
@@ -36,6 +38,8 @@ void main() {
         'Concert tickets',
         'Goa trip hotel share',
         'Cab to airport',
+        'Team dinner at Toit',
+        'Team dinner at Toit',
       ]);
     });
 
@@ -47,7 +51,7 @@ void main() {
     test('age buckets, direction and reason filters combine', () {
       expect(purposes(const PendingFilter(ages: {PendingAge.long})), ['Emergency cash', 'Office lunch', 'Concert tickets']);
       expect(purposes(const PendingFilter(ages: {PendingAge.weeks})), ['Goa trip hotel share', 'Cab to airport']);
-      expect(purposes(const PendingFilter(ages: {PendingAge.fresh})), isEmpty);
+      expect(purposes(const PendingFilter(ages: {PendingAge.fresh})), ['Team dinner at Toit', 'Team dinner at Toit']);
       expect(
         purposes(const PendingFilter(ages: {PendingAge.long}, direction: PendingDirection.owedToMe)),
         ['Emergency cash', 'Office lunch'],
@@ -58,23 +62,24 @@ void main() {
 
     test('items with one person share a group at the rank of their longest-waiting item', () {
       final entries = buildPendingEntries(views, const PendingFilter());
-      expect(entries, hasLength(4));
+      expect(entries, hasLength(5));
       final group = entries[2] as PendingPersonGroup;
       expect(group.name, 'Rahul Verma');
       expect(group.toPay, const Money.rupees(2780));
-      expect(buildPendingEntries(views, const PendingFilter(groupByPerson: false)), hasLength(5));
+      expect(buildPendingEntries(views, const PendingFilter(groupByPerson: false)), hasLength(6),
+          reason: 'a split stays one entry even when people are not grouped');
     });
 
     test('overview sums each side and lists who has waited longest', () {
       final o = PendingOverview.of(views);
       expect(o.toPay, const Money.rupees(2780));
-      expect(o.toCollect, const Money.rupees(10350));
-      expect(o.net, const Money.rupees(7570));
+      expect(o.toCollect, const Money.rupees(12750));
+      expect(o.net, const Money.rupees(9970));
       expect(o.longCount, 3);
       expect(o.longToCollect, const Money.rupees(3850));
       expect(o.longToPay, const Money.rupees(2000));
       expect([for (final v in o.oldest) v.payment.counterparty], ['Ananya Iyer', 'Neha Kapoor', 'Rahul Verma']);
-      expect(o.people, 4);
+      expect(o.people, 6);
     });
 
     test('the age sentence is informative, with no deadline wording', () {
@@ -123,7 +128,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('OWED TO ME'));
       await tester.pumpAndSettle();
-      expect(find.text('Show 3 items'), findsOneWidget);
+      expect(find.text('Show 5 items'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('pending-apply')));
       await tester.pumpAndSettle();
 
@@ -148,7 +153,7 @@ void main() {
 
       await tester.tap(find.byTooltip('Close search'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Settled 1', findRichText: true));
+      await tester.tap(find.text('Settled 2', findRichText: true));
       await tester.pumpAndSettle();
       expect(find.text('Vikram Rao'), findsOneWidget);
       expect(tester.takeException(), isNull);
