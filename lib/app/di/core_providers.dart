@@ -21,6 +21,10 @@ final localDataStoreProvider = Provider<LocalDataStore>(
   (ref) => throw UnimplementedError('localDataStoreProvider must be overridden'),
 );
 
+/// Whether the app is connected to the FiNN API (`--dart-define=FINN_API_URL`,
+/// see `lib/data/remote/`). False in local (mock) mode and in tests.
+final remoteModeProvider = Provider<bool>((ref) => false);
+
 final clockProvider = Provider<Clock>((ref) => const SystemClock());
 
 final idGeneratorProvider = Provider<IdGenerator>((ref) => RandomIdGenerator());

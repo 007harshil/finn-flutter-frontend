@@ -7,6 +7,7 @@ import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/money/money_format.dart';
+import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
 import '../application/data_reset.dart';
@@ -280,6 +281,8 @@ class _DataGroup extends ConsumerWidget {
     try {
       await ref.read(dataResetServiceProvider).loadSampleData();
       if (context.mounted) FinnToast.success(context, 'Sample data loaded');
+    } on AppFailure catch (f) {
+      if (context.mounted) FinnToast.error(context, 'Could not load sample data', subtitle: f.message);
     } catch (_) {
       if (context.mounted) FinnToast.error(context, 'Could not load sample data', subtitle: 'Nothing was changed.');
     }
@@ -297,6 +300,8 @@ class _DataGroup extends ConsumerWidget {
     if (!ok || !context.mounted) return;
     try {
       await ref.read(dataResetServiceProvider).eraseEverything();
+    } on AppFailure catch (f) {
+      if (context.mounted) FinnToast.error(context, 'Could not erase your data', subtitle: f.message);
     } catch (_) {
       if (context.mounted) FinnToast.error(context, 'Could not erase your data', subtitle: 'Please try again.');
     }

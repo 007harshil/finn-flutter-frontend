@@ -62,6 +62,30 @@ Collections: transactions, categories, budgets, goals, savings movements, loans,
 
 6. **Test against the same suites.** `test/actions/action_harness.dart` builds `FinanceRepositories` explicitly; point it at the new implementations (or a fake server) and run `flutter test test/actions`. `MockBehavior` (latency, failing reads/writes) shows how the UI behaves under slow or failing storage.
 
+## Connecting to the FiNN API
+
+The real backend (`finn-backend`, contract in `finn-backend/docs/CLIENT_CONTRACT.md`) is wired in `lib/data/remote/` and `lib/features/auth/data/supabase_auth_service.dart`. Remote mode is switched on only by a dart-define; without it the app runs exactly as before on the local mock.
+
+| Dart-define | Default | Purpose |
+|---|---|---|
+| `FINN_API_URL` | (empty = local mock) | API base URL; `/api/v1` is appended |
+| `FINN_SUPABASE_URL` | `https://xeqhygypqyyyoortalod.supabase.co` | Supabase Auth project |
+| `FINN_SUPABASE_KEY` | the project's publishable key | public by design |
+
+```
+flutter run --dart-define=FINN_API_URL=https://api.example.com
+```
+
+**What is remote.** Sign-in (Supabase email OTP via `SupabaseAuthService`), every action (`RemoteOperationDispatcher`: `POST /actions/{id}/preview`, `POST /actions/{id}` with `Idempotency-Key` and the confirmation fingerprint; `runAction` and the review sheet are unchanged), the activity log (`GET /audit`), people search (`GET /users/search`), the alert inbox (`PUT /alerts/inbox`: `read`/`dismissed` add keys, `restore` un-dismisses) and the calculation preferences (`monthStartDay`, reminder days, emergency threshold, budget warning, disabled alert types → `PATCH /preferences`; synced back into `AppSettings`; the server's `timeZone` stays at its default because Flutter exposes no IANA zone name without an extra package).
+
+**What stays on the device.** Projections and calculators still run on the client from synced records. `SyncEngine` keeps the records (DTO JSON) in memory and in SharedPreferences per signed-in user, so the app opens offline with the last data; it runs a full load, then `GET /sync?since=` (looping while `hasMore`) on start, on app resume and after every action (the action's `changes` payload is applied immediately). The cursor is not advanced from action payloads, so changes made elsewhere in between are never skipped. The cache is deleted on sign-out. Display preferences (theme, motion, hidden balances, haptics) stay local.
+
+**Not available while connected.** Direct repository writes throw `AppFailure(notPermitted)` (all changes go through actions). Loading sample data and erasing everything are refused with a clear message; the onboarding hides the sample-data option. The shared ledger is a no-op: the server mirrors shared pending items.
+
+**Import.** On the first sign-in on a device that holds local records, the app asks once whether to upload them (`POST /import`, atomic, client ids kept; own pending items only, links dropped). Declining, or an account that already has records (`409`), starts from the server's data. After the initial sync, onboarding is shown exactly when the account has no financial profile.
+
+**Errors.** `ApiClient` maps error envelopes onto `AppFailure` with the same `FailureCode`; `unauthenticated` refreshes the session once, then signs out and reports `notPermitted`; timeouts, offline and 5xx without a body are `unavailable` (retryable). Tests: `test/remote/` (uses `http`'s `MockClient`, no network).
+
 ## Things a backend must preserve
 
 - **Exact money.** Store paise as integers (or fixed-point decimals). Never floats.

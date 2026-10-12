@@ -194,19 +194,21 @@ class LocalDataStore {
 
   /// Loads persisted data; seeds [scenario] when nothing is stored yet.
   Future<void> open({required DataScenario scenario, required DateTime today, bool forceSeed = false}) async {
-    var hasData = false;
-    if (!forceSeed) {
-      final loaded = await transactions.load();
-      if (loaded) {
-        hasData = true;
-        await Future.wait([
-          categories.load(), budgets.load(), goals.load(), savingsMovements.load(), loans.load(),
-          loanPayments.load(), subscriptions.load(), pending.load(), settlements.load(), assets.load(), sharedLedger.load(),
-          profile.store.load(), emergencyPlan.store.load(), alertInbox.store.load(),
-        ]);
-      }
-    }
+    final hasData = !forceSeed && await loadExisting();
     if (!hasData) await reseed(scenario, today);
+  }
+
+  /// Loads persisted data without seeding anything. Returns false when
+  /// nothing is stored on this device.
+  Future<bool> loadExisting() async {
+    final loaded = await transactions.load();
+    if (!loaded) return false;
+    await Future.wait([
+      categories.load(), budgets.load(), goals.load(), savingsMovements.load(), loans.load(),
+      loanPayments.load(), subscriptions.load(), pending.load(), settlements.load(), assets.load(), sharedLedger.load(),
+      profile.store.load(), emergencyPlan.store.load(), alertInbox.store.load(),
+    ]);
+    return true;
   }
 
   /// Replaces all data with [scenario].

@@ -101,8 +101,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     try {
       final repos = ref.read(financeRepositoriesProvider);
       final today = ref.read(clockProvider).today();
+      // Connected: the account is the dataset; only the profile is written
+      // (through the `profile.update` action endpoint).
+      final remote = ref.read(remoteModeProvider);
       if (_mode == _StartMode.fresh) {
-        await ref.read(localDataStoreProvider).reseed(DataScenario.empty, today);
+        if (!remote) await ref.read(localDataStoreProvider).reseed(DataScenario.empty, today);
         await repos.profile.set(FinancialProfile(displayName: name, openingBalance: balance!, openingDate: today));
       } else {
         final existing = repos.profile.current;
@@ -230,14 +233,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             body: 'Begin with a clean slate and your own numbers.',
             onTap: () => setState(() => _mode = _StartMode.fresh),
           ),
-          const SizedBox(height: Space.x2_5),
-          _ModeCard(
-            selected: _mode == _StartMode.sample,
-            icon: LucideIcons.sparkles,
-            title: 'Explore with sample data',
-            body: 'Look around with six months of realistic example data first.',
-            onTap: () => setState(() => _mode = _StartMode.sample),
-          ),
+          // Sample data exists only in the local (mock) mode.
+          if (!ref.watch(remoteModeProvider)) ...[
+            const SizedBox(height: Space.x2_5),
+            _ModeCard(
+              selected: _mode == _StartMode.sample,
+              icon: LucideIcons.sparkles,
+              title: 'Explore with sample data',
+              body: 'Look around with six months of realistic example data first.',
+              onTap: () => setState(() => _mode = _StartMode.sample),
+            ),
+          ],
           MotionAnimatedSize(
             child: _mode == _StartMode.fresh
                 ? Padding(

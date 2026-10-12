@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/di/data_providers.dart';
+import '../../../core/result/result.dart';
 import '../../../design_system/design_system.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../domain/alert.dart';
@@ -70,19 +71,29 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
       }
       if (unread.isEmpty) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) ref.read(alertInboxControllerProvider).markRead(unread);
+        // Bookkeeping only: a failed write (offline) is retried next time.
+        if (mounted) ref.read(alertInboxControllerProvider).markRead(unread).ignore();
       });
     }, fireImmediately: true);
   }
 
   void _dismiss(FinancialAlert a) {
     setState(() => _hidden.add(a.key));
-    ref.read(alertInboxControllerProvider).dismiss(a.key);
+    ref.read(alertInboxControllerProvider).dismiss(a.key).catchError((Object e) {
+      if (!mounted) return;
+      setState(() => _hidden.remove(a.key));
+      FinnToast.error(context, 'Could not dismiss the alert', subtitle: e is AppFailure ? e.message : null);
+    });
     FinnToast.info(context, 'Alert dismissed', subtitle: 'You can restore it from the bottom of this list.');
   }
 
   Future<void> _restore() async {
-    await ref.read(alertInboxControllerProvider).restoreAll();
+    try {
+      await ref.read(alertInboxControllerProvider).restoreAll();
+    } on AppFailure catch (f) {
+      if (mounted) FinnToast.error(context, 'Could not restore alerts', subtitle: f.message);
+      return;
+    }
     if (!mounted) return;
     setState(_hidden.clear);
     FinnToast.success(context, 'Dismissed alerts restored');

@@ -7,6 +7,8 @@ import 'app/di/core_providers.dart';
 import 'core/persistence/persistence_driver.dart';
 import 'core/time/clock.dart';
 import 'data/local/local_data_store.dart';
+import 'data/remote/api_config.dart';
+import 'data/remote/remote_bootstrap.dart';
 
 /// Dataset used on first launch: `--dart-define=FINN_SCENARIO=empty|demo|stressed`.
 const _scenarioName = String.fromEnvironment('FINN_SCENARIO', defaultValue: 'demo');
@@ -17,6 +19,14 @@ const _latencyMs = int.fromEnvironment('FINN_LATENCY_MS', defaultValue: 250);
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
+
+  // Connected mode: `--dart-define=FINN_API_URL=https://...`.
+  const api = ApiConfig.fromEnvironment();
+  if (api.enabled) {
+    runApp(await bootstrapRemoteApp(config: api, prefs: prefs, app: const FinnApp()));
+    return;
+  }
+
   final scenario = DataScenario.values.firstWhere((s) => s.name == _scenarioName, orElse: () => DataScenario.demo);
   final store = LocalDataStore(
     driver: SharedPreferencesDriver(prefs),

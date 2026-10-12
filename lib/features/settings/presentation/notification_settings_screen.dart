@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../core/money/money_format.dart';
+import '../../../core/result/result.dart';
 import '../../../design_system/design_system.dart';
 import '../../alerts/domain/alert.dart';
 import 'settings_widgets.dart';
@@ -192,7 +193,12 @@ class _RestoreDismissed extends ConsumerWidget {
       variant: FinnButtonVariant.outline,
       expand: true,
       onPressed: () async {
-        await ref.read(alertInboxControllerProvider).restoreAll();
+        try {
+          await ref.read(alertInboxControllerProvider).restoreAll();
+        } on AppFailure catch (f) {
+          if (context.mounted) FinnToast.error(context, 'Could not restore alerts', subtitle: f.message);
+          return;
+        }
         if (context.mounted) FinnToast.success(context, 'Dismissed alerts restored');
       },
     );

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/di/core_providers.dart';
+import '../../../core/result/result.dart';
 import '../../../core/time/clock.dart';
 import '../../../data/local/local_data_store.dart';
 
@@ -13,15 +14,23 @@ class DataResetService {
 
   /// Replaces everything on this device with the sample dataset.
   Future<void> loadSampleData() async {
+    _ensureLocal('Sample data is only available when FiNN runs without an account connection.');
     final today = _ref.read(clockProvider).today();
     await _ref.read(localDataStoreProvider).reseed(DataScenario.demo, today);
   }
 
   /// Deletes every record and returns the app to first-run setup.
   Future<void> eraseEverything() async {
+    _ensureLocal('Your records are stored in your FiNN account. Delete them individually while connected.');
     final today = _ref.read(clockProvider).today();
     await _ref.read(localDataStoreProvider).reseed(DataScenario.empty, today);
     await _ref.read(settingsProvider.notifier).update((s) => s.copyWith(onboardingComplete: false));
+  }
+
+  /// Whole-dataset resets apply to the local mock only; a connected account
+  /// is changed through actions.
+  void _ensureLocal(String message) {
+    if (_ref.read(remoteModeProvider)) throw AppFailure(FailureCode.notPermitted, message);
   }
 }
 
