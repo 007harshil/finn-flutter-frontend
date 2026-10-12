@@ -64,14 +64,15 @@ Collections: transactions, categories, budgets, goals, savings movements, loans,
 
 ## Connecting to the FiNN API
 
-The real backend (`finn-backend`, contract in `finn-backend/docs/CLIENT_CONTRACT.md`) is wired in `lib/data/remote/` and `lib/features/auth/data/backend_auth_service.dart`. Remote mode is switched on only by a dart-define; without it the app runs exactly as before on the local mock.
+The real backend (`finn-backend`, contract in `finn-backend/docs/CLIENT_CONTRACT.md`) is wired in `lib/data/remote/` and `lib/features/auth/data/backend_auth_service.dart`. Remote mode is the default and targets `https://finn-backend.vercel.app`, so `flutter build apk` needs no flags. A dart-define overrides it.
 
 | Dart-define | Default | Purpose |
 |---|---|---|
-| `FINN_API_URL` | (empty = local mock) | API base URL; `/api/v1` is appended |
+| `FINN_API_URL` | `https://finn-backend.vercel.app` | API base URL; `/api/v1` is appended. Empty = local mock |
 
 ```
-flutter run --dart-define=FINN_API_URL=https://api.example.com
+flutter run --dart-define=FINN_API_URL=       # local mock
+flutter run --dart-define=FINN_API_URL=https://other.example.com
 ```
 
 **What is remote.** Sign-in (the API's own email OTP via `BackendAuthService`: `POST /auth/otp`, `POST /auth/verify`, `POST /auth/refresh`, `POST /auth/logout`; the session — bearer token, rotating refresh token, expiry and user — is kept in SharedPreferences under `finn.auth.session.v1` by `BackendApiAuth`, refreshed shortly before expiry and on `unauthenticated`, one refresh at a time), every action (`RemoteOperationDispatcher`: `POST /actions/{id}/preview`, `POST /actions/{id}` with `Idempotency-Key` and the confirmation fingerprint; `runAction` and the review sheet are unchanged), the activity log (`GET /audit`), people search (`GET /users/search`), the alert inbox (`PUT /alerts/inbox`: `read`/`dismissed` add keys, `restore` un-dismisses) and the calculation preferences (`monthStartDay`, reminder days, emergency threshold, budget warning, disabled alert types → `PATCH /preferences`; synced back into `AppSettings`; the server's `timeZone` stays at its default because Flutter exposes no IANA zone name without an extra package).

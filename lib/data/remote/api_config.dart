@@ -2,12 +2,9 @@ import 'package:flutter/foundation.dart';
 
 /// Connection settings for the FiNN API, read from `--dart-define`s.
 ///
-/// Remote mode is enabled only when `FINN_API_URL` is set; without it the
-/// app runs entirely on the local mock backend.
-///
-/// ```
-/// flutter run --dart-define=FINN_API_URL=https://api.example.com
-/// ```
+/// Defaults to the production backend so plain `flutter build` works with no
+/// flags. Override with `--dart-define=FINN_API_URL=<url>`, or pass an empty
+/// value (`--dart-define=FINN_API_URL=`) to run on the local mock backend.
 @immutable
 class ApiConfig {
   const ApiConfig({
@@ -15,9 +12,15 @@ class ApiConfig {
     this.timeout = const Duration(seconds: 20),
   });
 
+  /// Production backend used when no `--dart-define` is given.
+  static const defaultApiUrl = 'https://finn-backend.vercel.app';
+
   /// Reads the compile-time `--dart-define`s.
   const ApiConfig.fromEnvironment()
-      : apiUrl = const String.fromEnvironment('FINN_API_URL'),
+      : apiUrl = const String.fromEnvironment(
+          'FINN_API_URL',
+          defaultValue: defaultApiUrl,
+        ),
         timeout = const Duration(seconds: 20);
 
   /// Base URL of the API, without the `/api/v1` suffix. Empty = local mode.

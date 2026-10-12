@@ -20,7 +20,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
 
-  // Connected mode: `--dart-define=FINN_API_URL=https://...`.
+  // Connected mode by default (https://finn-backend.vercel.app); override with
+  // `--dart-define=FINN_API_URL=https://...`, or empty for the local mock.
   const api = ApiConfig.fromEnvironment();
   if (api.enabled) {
     runApp(await bootstrapRemoteApp(config: api, prefs: prefs, app: const FinnApp()));
