@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:finn/agent/agent_config.dart';
 import 'package:finn/agent/execution/proposals.dart';
 import 'package:finn/agent/llm/llm_provider.dart';
+import 'package:finn/agent/orchestration/agent_events.dart';
 import 'package:finn/agent/orchestration/agent_runner.dart';
 import 'package:finn/agent/prompt/system_prompt.dart';
 import 'package:finn/core/money/money.dart';
@@ -76,6 +79,102 @@ void main() {
     expect(provider.requests.first.instructions, contains('cat_food'));
   });
 
+  test('a batched plan goes straight to review: one model call for a four-task message', () async {
+    Map<String, Object?> item(String tool, Map<String, Object?> args) => {'tool': tool, 'arguments': args};
+    final provider = ScriptedProvider([
+      callsTools([
+        toolCall('queue_actions', {
+          'actions': [
+            item('record_transaction', {...lunch(amount: '70'), 'categoryId': 'cat_groceries', 'note': 'Vegetables'}),
+            item('record_transaction', {...lunch(amount: '150'), 'categoryId': 'cat_groceries', 'note': 'Milk'}),
+            item('record_transaction', {...lunch(amount: '400'), 'categoryId': 'cat_transport', 'note': 'Petrol'}),
+            item('add_subscription', {
+              'name': 'Netflix Premium',
+              'amount': '179',
+              'frequency': 'monthly',
+              'categoryId': 'cat_subscriptions',
+              'startDate': '2026-10-09',
+              'nextDueDate': '2026-11-09',
+              'autoRenews': true,
+            }),
+          ],
+          'done': true,
+        }),
+      ]),
+    ]);
+    final rig = AgentRig(h, provider);
+    final result = await rig.turn('Bought vegetables for 70, milk for 150, petrol for 400 and added Netflix premium '
+        '179 yesterday');
+
+    expect(provider.requests, hasLength(1), reason: 'no closing model call');
+    expect(rig.approvals, hasLength(1));
+    expect(rig.approvals.single, hasLength(4));
+    expect(result.end, AgentTurnEnd.completed);
+    expect(result.actions.map((a) => a.status), everyElement(ActionResultStatus.completed));
+    expect(result.reply, startsWith('Done: Spent ₹70; Spent ₹150; Spent ₹400; '));
+    final s = await h.snapshot();
+    expect(s.transactions, hasLength(3));
+    expect(s.subscriptions.single.name, 'Netflix Premium');
+    // The conversation stays well formed for the next turn.
+    final roles = rig.runner.conversation.messages.map((m) => m.role).toList();
+    expect(roles, [LlmRole.user, LlmRole.assistant, LlmRole.tool, LlmRole.user, LlmRole.assistant]);
+    expect(lastAppMessageIn(rig), contains('"status":"completed"'));
+  });
+
+  test('a failed batch item is fixed in the next step and everything is reviewed on one card', () async {
+    Map<String, Object?> item(Map<String, Object?> args) => {'tool': 'record_transaction', 'arguments': args};
+    final provider = ScriptedProvider([
+      callsTools([
+        toolCall('queue_actions', {
+          'actions': [item(lunch(amount: '70')), item({...lunch(amount: '150'), 'date': '2026-12-01'})],
+          'done': true,
+        }, id: 'c_batch'),
+      ]),
+      (LlmRequest r) {
+        final items = (toolResultsIn(r)['c_batch']!['results']! as List).cast<Map>();
+        expect(items[1]['error'], containsPair('code', 'validation'));
+        return callsTools([
+          toolCall('queue_actions', {
+            'actions': [item(lunch(amount: '150'))],
+            'done': true,
+          }),
+        ]);
+      },
+    ]);
+    final rig = AgentRig(h, provider);
+    final result = await rig.turn('Spent 70 and 150 on food');
+    expect(provider.requests, hasLength(2));
+    expect(rig.approvals.single, hasLength(2));
+    expect(result.reply, 'Done: Spent ₹70; Spent ₹150.');
+  });
+
+  test('a tool call written as JSON text is recovered and handled like a real call', () async {
+    final args = {
+      'actions': [
+        {'tool': 'record_transaction', 'arguments': lunch(amount: '70')},
+      ],
+      'done': true,
+    };
+    final provider = ScriptedProvider([says('```json\n${jsonEncode({'queue_actions': args})}\n```')]);
+    final rig = AgentRig(h, provider);
+    final result = await rig.turn('Spent 70 on food');
+    expect(provider.requests, hasLength(1));
+    expect(rig.approvals.single, hasLength(1));
+    expect(result.reply, 'Done: Spent ₹70.');
+
+    const offered = {'queue_actions', 'record_transaction'};
+    final named = AgentRunner.recoverToolCallText(
+        says(jsonEncode({'name': 'record_transaction', 'arguments': lunch()})), offered, 3);
+    expect(named.toolCalls.single.name, 'record_transaction');
+    expect(named.toolCalls.single.id, 'recovered_3');
+    // Ordinary text, unknown tools and non-object arguments stay text.
+    for (final text in ['Done!', '{"delete_everything": {}}', '{"queue_actions": "x"}', '{"a": 1, "b": 2}', '{oops']) {
+      final r = AgentRunner.recoverToolCallText(says(text), offered, 0);
+      expect(r.toolCalls, isEmpty, reason: text);
+      expect(r.text, text);
+    }
+  });
+
   test('nothing is written before the user approves', () async {
     final provider = ScriptedProvider([
       callsTools([toolCall('record_transaction', lunch())]),
@@ -148,6 +247,72 @@ void main() {
     expect((await h.snapshot()).transactions.single.amount, const Money.rupees(600));
   });
 
+  test('an item that needed a record from the same plan is finished after approval, without [continue]', () async {
+    final pets = {'name': 'Pets', 'type': 'expense', 'iconKey': 'tag', 'colorIndex': 3, 'isEssential': false};
+    final provider = ScriptedProvider([
+      // The model guesses a placeholder id for the category it is creating.
+      callsTools([
+        toolCall('queue_actions', {
+          'actions': [
+            {'tool': 'create_category', 'arguments': pets},
+            {
+              'tool': 'record_transaction',
+              'arguments': {...lunch(amount: '500'), 'categoryId': '<catId>'},
+            },
+          ],
+          'done': true,
+        }),
+      ]),
+      // ...and then forgets [continue].
+      says('I queued the category. What is the new category id?'),
+      (LlmRequest r) {
+        final outcome = lastAppMessage(r)!;
+        expect(outcome, contains('still missing'));
+        final id = RegExp(r'"recordId":"([^"]+)"').firstMatch(outcome)!.group(1)!;
+        return callsTools([
+          toolCall('queue_actions', {
+            'actions': [
+              {
+                'tool': 'record_transaction',
+                'arguments': {...lunch(amount: '500'), 'categoryId': id},
+              },
+            ],
+            'done': true,
+          }),
+        ]);
+      },
+    ]);
+    final rig = AgentRig(h, provider);
+    final result = await rig.turn('Create a Pets category and record 500 for dog food in it');
+    expect(provider.requests, hasLength(3));
+    expect(rig.approvals.map((a) => a.length), [1, 1]);
+    expect(result.end, AgentTurnEnd.completed);
+    expect(result.actions.every((a) => a.succeeded), isTrue);
+    expect((await h.snapshot()).transactions.single.amount, const Money.rupees(500));
+  });
+
+  test('auto-continue happens at most once per turn', () async {
+    final provider = ScriptedProvider([
+      callsTools([
+        toolCall('queue_actions', {
+          'actions': [
+            {'tool': 'record_transaction', 'arguments': lunch(amount: '70')},
+            {'tool': 'record_transaction', 'arguments': {...lunch(), 'date': '2026-12-01'}},
+          ],
+          'done': true,
+        }),
+      ]),
+      says('When was the second one?'),
+      callsTools([toolCall('record_transaction', lunch(amount: '90'))]),
+      says('Queued the ₹90 too. I still need the date of the ₹450 one.'),
+    ]);
+    final rig = AgentRig(h, provider);
+    final result = await rig.turn('Spent 70 and 450 on food');
+    expect(provider.requests, hasLength(4));
+    expect(rig.approvals, hasLength(2));
+    expect(result.end, AgentTurnEnd.completed);
+  });
+
   test('an invalid action is fed back so the model can correct itself', () async {
     final rahul = await addPending(h, counterparty: 'Rahul', rupees: 500);
     final provider = ScriptedProvider([
@@ -200,13 +365,24 @@ void main() {
     expect(rig.runner.conversation.isEmpty, isTrue);
   });
 
-  test('a short rate limit is waited out once; a long one is reported', () async {
-    final provider = ScriptedProvider([
-      const LlmException(LlmErrorKind.rateLimited, 'Busy.', retryable: true, retryAfter: Duration(milliseconds: 10)),
-      says('Hello!'),
-    ]);
+  test('rate limits are waited out quietly within the turn budget; a long one is reported', () async {
+    const limited =
+        LlmException(LlmErrorKind.rateLimited, 'Busy.', retryable: true, retryAfter: Duration(milliseconds: 10));
+    final provider = ScriptedProvider([limited, limited, limited, limited, says('Hello!')]);
     final rig = AgentRig(h, provider);
-    expect((await rig.turn('hi')).reply, 'Hello!');
+    final labels = <String>[];
+    final ok = await rig.runner.runTurn('hi', approve: rig.approveAll, onEvent: (e) {
+      if (e is AgentWaiting) labels.add(e.label);
+    });
+    expect(ok.reply, 'Hello!');
+    expect(labels, List.filled(4, AgentRunner.waitingLabel));
+    expect(labels.join(), isNot(contains(RegExp('busy|retry', caseSensitive: false))));
+
+    final spent = ScriptedProvider([limited, limited, limited, says('Never reached')]);
+    final tight = AgentRig(h, spent, config: const AgentConfig(rateLimitWaitBudget: Duration(milliseconds: 25)));
+    final out = await tight.turn('hi');
+    expect(out.error?.kind, LlmErrorKind.rateLimited, reason: 'budget spent after two waits');
+    expect(spent.requests, hasLength(3));
 
     final slow = ScriptedProvider([
       const LlmException(LlmErrorKind.rateLimited, 'Please wait a moment.', retryable: true, retryAfter: Duration(minutes: 2)),

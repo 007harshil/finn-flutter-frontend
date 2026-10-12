@@ -258,6 +258,103 @@ void main() {
     });
   });
 
+  group('queue_actions', () {
+    Map<String, Object?> item(String tool, Map<String, Object?> args) => {'tool': tool, 'arguments': args};
+
+    LlmToolCall batch(List<Map<String, Object?>> items, {bool done = true}) =>
+        toolCall('queue_actions', {'actions': items, 'done': done});
+
+    test('queues every valid item from one call and marks the plan complete', () async {
+      rig.executor.beginTurn();
+      final e = await rig.executor.executeStep([
+        batch([
+          item('record_transaction', expense(amount: '70', category: 'cat_groceries')),
+          item('record_transaction', expense(amount: '150')),
+          item('record_transaction', expense(amount: '400', category: 'cat_transport')),
+        ]),
+      ]);
+      final r = jsonDecode(e.results.single.content!) as Map;
+      expect(r['ok'], isTrue);
+      final items = (r['results']! as List).cast<Map>();
+      expect(items.map((i) => i['status']), everyElement('queuedForApproval'));
+      expect(items.map((i) => i['item']), [0, 1, 2]);
+      expect(items.first, isNot(contains('message')), reason: 'the batch says it once');
+      expect(e.planComplete, isTrue);
+      expect(rig.executor.queued, hasLength(3));
+      expect((await h.snapshot()).transactions, isEmpty, reason: 'queued, not written');
+
+      final records = await rig.executor.settleQueue(approve: rig.approveAll);
+      expect(records.map((x) => x.status), everyElement(ActionResultStatus.completed));
+      expect(rig.approvals, hasLength(1));
+      expect((await h.snapshot()).transactions, hasLength(3));
+    });
+
+    test('bad items are reported one by one; valid ones stay queued and the plan is not complete', () async {
+      rig.executor.beginTurn();
+      final e = await rig.executor.executeStep([
+        batch([
+          item('record_transaction', expense()),
+          item('record_transaction', {...expense(), 'date': '2026-12-01'}),
+          item('find_records', {'kind': 'pending'}),
+          item('delete_transaction', {'transactionId': 't1'}),
+          {'tool': 'record_transaction', 'arguments': 'oops'},
+        ]),
+      ]);
+      final r = jsonDecode(e.results.single.content!) as Map;
+      expect(r['ok'], isFalse);
+      final items = (r['results']! as List).cast<Map>();
+      expect(items[0]['status'], 'queuedForApproval');
+      expect(items[1]['error'], containsPair('code', 'validation'));
+      expect(items[2]['error'], containsPair('code', 'unknownTool'), reason: 'lookups are not actions');
+      expect(items[3]['error'], containsPair('code', 'unknownTool'));
+      expect(items[4]['error'], containsPair('code', 'invalidArguments'));
+      expect(e.planComplete, isFalse);
+      expect(rig.executor.queued, hasLength(1));
+    });
+
+    test('done=false, or a lookup in the same step, leaves the plan open', () async {
+      rig.executor.beginTurn();
+      final open = await rig.executor.executeStep([batch([item('record_transaction', expense())], done: false)]);
+      expect(open.planComplete, isFalse);
+
+      rig.executor.beginTurn();
+      final withLookup = await rig.executor.executeStep([
+        batch([item('record_transaction', expense())]),
+        toolCall('find_records', {'kind': 'pending', 'query': 'Rahul'}),
+      ]);
+      expect(withLookup.planComplete, isFalse);
+    });
+
+    test('an item switches on its tool group so it can be fixed against the full schema', () async {
+      expect(rig.selection.enabled, isNot(contains(ToolGroup.subscriptions)));
+      await step([batch([item('add_subscription', {'name': 'Netflix'})])]);
+      expect(rig.selection.enabled, contains(ToolGroup.subscriptions));
+    });
+
+    test('undeclared item fields are dropped and identical items are queued once', () async {
+      final r = await step([
+        batch([
+          item('record_transaction', {...expense(), 'id': 'forged', 'createdBy': 'x'}),
+          item('record_transaction', expense()),
+        ]),
+      ]);
+      final items = ((r.single['results']! as List).cast<Map>());
+      expect(items[0]['status'], 'queuedForApproval');
+      expect(items[1]['status'], 'duplicateCall');
+      expect(rig.executor.queued, hasLength(1));
+    });
+
+    test('an empty or oversized batch is refused', () async {
+      final r = await step([
+        batch([]),
+        batch([for (var i = 0; i < 13; i++) item('record_transaction', expense(amount: '${i + 1}'))]),
+      ]);
+      expect(r[0]['error'], containsPair('code', 'invalidArguments'));
+      expect(r[1]['error'], containsPair('code', 'tooManyActions'));
+      expect(rig.executor.hasQueued, isFalse);
+    });
+  });
+
   group('read tools', () {
     test('find_records resolves a unique pending item by name', () async {
       final p = await addPending(h, counterparty: 'Rahul Sharma', rupees: 1200);

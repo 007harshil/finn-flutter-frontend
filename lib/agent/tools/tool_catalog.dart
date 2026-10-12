@@ -95,7 +95,8 @@ class AgentToolbox {
     if (_byName.length != tools.length) throw StateError('Duplicate agent tool name');
   }
 
-  /// Read tools plus every allowlisted action found in [registry].
+  /// Read tools, every allowlisted action found in [registry], and
+  /// [QueueActionsTool] over those actions.
   factory AgentToolbox.standard(ActionRegistry registry) {
     final actionTools = <AgentTool>[];
     for (final entry in agentActionTools.entries) {
@@ -114,6 +115,7 @@ class AgentToolbox {
       const FindRecordsTool(),
       const SearchTransactionsTool(),
       const LoadToolsTool(),
+      QueueActionsTool([for (final t in actionTools) t.name]),
       ...actionTools,
     ]);
   }

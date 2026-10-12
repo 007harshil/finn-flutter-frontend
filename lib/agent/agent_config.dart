@@ -7,8 +7,8 @@ import 'package:flutter/foundation.dart';
 @immutable
 class AgentConfig {
   const AgentConfig({
-    // Models without parallel tool calls (e.g. gpt-oss) need one step per
-    // call, so a multi-task request takes several steps.
+    // Models without parallel tool calls (e.g. gpt-oss) batch actions
+    // through queue_actions; lookups still take a step each.
     this.maxModelCallsPerTurn = 10,
     this.maxToolCallsPerStep = 8,
     this.maxToolCallsPerTurn = 24,
@@ -22,9 +22,10 @@ class AgentConfig {
     this.transientRetries = 1,
     this.defaultRateLimitWait = const Duration(seconds: 5),
     // Free Groq tiers measure tokens per minute, so a wait can approach a
-    // minute; the screen shows a countdown meanwhile.
+    // minute. Waits are routine pacing, not failures: the turn keeps going
+    // until the budget is spent.
     this.maxRateLimitWait = const Duration(seconds: 60),
-    this.rateLimitRetries = 2,
+    this.rateLimitWaitBudget = const Duration(seconds: 150),
   });
 
   /// Model round trips in one user turn (tool loop limit).
@@ -54,12 +55,13 @@ class AgentConfig {
   /// calls have no side effects; tool mutations are never retried.
   final int transientRetries;
 
-  /// Wait before the single retry after a rate limit without a hint.
+  /// Wait before retrying after a rate limit without a hint.
   final Duration defaultRateLimitWait;
 
   /// Longer requested waits are not retried; the user is told instead.
   final Duration maxRateLimitWait;
 
-  /// Retries of a model call after rate limits within one step.
-  final int rateLimitRetries;
+  /// Total rate-limit waiting allowed in one user turn, across all its
+  /// model calls.
+  final Duration rateLimitWaitBudget;
 }

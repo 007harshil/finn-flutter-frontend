@@ -9,12 +9,14 @@ import '../llm/llm_types.dart';
 import 'json_schema.dart';
 import 'tool_groups.dart';
 
-/// A capability the model can call. Two kinds exist:
+/// A capability the model can call. Three kinds exist:
 /// * [ReadTool]: looks up data the user is authorised to see and runs
 ///   immediately.
 /// * [ActionTool]: proposes a registered [FinancialAction]. It is executed by
 ///   the `ToolExecutor` through the action dispatcher only after the user
 ///   approves the preview.
+/// * [QueueActionsTool]: proposes several [ActionTool] calls in one model
+///   step, each validated exactly like a direct call.
 sealed class AgentTool {
   const AgentTool();
 
@@ -88,6 +90,53 @@ class ActionTool extends AgentTool {
   static final Map<String, Map<String, Object?>> _schemas = {};
 }
 
+/// Queues many actions in a single tool call.
+///
+/// Models without parallel tool calls (gpt-oss) otherwise need one model
+/// round trip per action, and every round trip resends the whole request:
+/// a four-item message took ten calls and ~15k tokens, far over free-tier
+/// per-minute limits. With this tool the same message is one call. With
+/// [doneField] set, the runner opens the review card straight away instead
+/// of asking the model for a closing sentence.
+final class QueueActionsTool extends AgentTool {
+  const QueueActionsTool(this.actionToolNames);
+
+  static const toolName = 'queue_actions';
+  static const doneField = 'done';
+
+  /// Upper bound on actions in one call (runaway protection).
+  static const maxActions = 12;
+
+  /// Every action tool the model may name in an item.
+  final List<String> actionToolNames;
+
+  @override
+  String get name => toolName;
+
+  @override
+  String get progressLabel => 'Preparing your changes';
+
+  @override
+  String get description => 'Queue one or more actions for review in ONE call (preferred over calling action tools '
+      'one at a time). Each item names an action tool and gives exactly the arguments that tool takes.';
+
+  @override
+  Map<String, Object?> get parameters => JsonSchema.object({
+        'actions': {
+          'type': 'array',
+          'minItems': 1,
+          'maxItems': maxActions,
+          'items': JsonSchema.object({
+            'tool': JsonSchema.string('Action tool name', values: actionToolNames),
+            'arguments': {'type': 'object', 'description': "That tool's arguments"},
+          }, required: ['tool', 'arguments']),
+        },
+        doneField: JsonSchema.boolean(
+            'true when these are all the changes left for this request (nothing more to look up, ask or wait for); '
+            'the user then reviews them and you are finished'),
+      }, required: ['actions', doneField]);
+}
+
 /// Uniform JSON returned to the model for every tool call.
 @immutable
 class ToolResult {
@@ -108,6 +157,9 @@ class ToolResult {
 
   factory ToolResult.failure(AppFailure f, {String? hint}) =>
       ToolResult.error(f.code.name, f.message, fields: f.fieldErrors, hint: hint);
+
+  /// Result of a [QueueActionsTool] call; [ok] only when every item was.
+  factory ToolResult.batch(Map<String, Object?> data, {required bool ok}) => ToolResult._({'ok': ok, ...data}, ok: ok);
 
   final Map<String, Object?> json;
   final bool ok;

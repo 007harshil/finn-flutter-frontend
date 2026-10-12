@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
@@ -51,8 +52,9 @@ class AgentTurnResult {
 
 /// The agent loop.
 ///
-/// 1. Model ↔ tools until the model stops calling tools. Lookups run at
-///    once; actions are validated, previewed and queued.
+/// 1. Model ↔ tools until the model stops calling tools or marks its plan
+///    done (`queue_actions` with `done: true`). Lookups run at once;
+///    actions are validated, previewed and queued.
 /// 2. If anything is queued, the user reviews it all on one card; approved
 ///    actions run and their confirmed outcomes go back to the model.
 /// 3. The model reports (or proposes follow-ups that needed those results,
@@ -105,6 +107,8 @@ class AgentRunner {
     final actions = <ActionRecord>[];
     var usage = const LlmUsage();
     var toolCalls = 0;
+    final waitBudget = _WaitBudget(config.rateLimitWaitBudget);
+    var autoContinued = false;
 
     final String instructions;
     try {
@@ -131,6 +135,24 @@ class AgentRunner {
           usage: usage,
         );
 
+    /// Reviews the queued plan and runs what the user approves. Returns the
+    /// turn's result, or null when the model should continue with the
+    /// outcomes.
+    ///
+    /// The report comes from the confirmed outcomes, not from another model
+    /// call: always truthful, and it saves a round trip (tokens are scarce
+    /// on free tiers).
+    Future<AgentTurnResult?> review(String? plan, {required bool continueAfter}) async {
+      onEvent?.call(AgentPlanReady(plan));
+      final records = await settle();
+      if (token.isCancelled) return stopped();
+      conversation.add(LlmMessage.user(outcomesMessage(records, continuing: continueAfter)));
+      if (continueAfter) return null;
+      final reply = _outcomeSummary(actions, lead: '');
+      conversation.add(LlmMessage.assistant(text: reply));
+      return AgentTurnResult(end: AgentTurnEnd.completed, reply: reply, actions: actions, usage: usage);
+    }
+
     for (var step = 0; step < config.maxModelCallsPerTurn; step++) {
       final remainingCalls = config.maxToolCallsPerTurn - toolCalls;
       final finalStep = step == config.maxModelCallsPerTurn - 1 || remainingCalls <= 0;
@@ -144,9 +166,9 @@ class AgentRunner {
       );
 
       onEvent?.call(const AgentThinking());
-      final LlmResponse response;
+      LlmResponse response;
       try {
-        response = await _complete(request, token, onEvent);
+        response = await _complete(request, token, onEvent, waitBudget);
       } on LlmException catch (e) {
         if (e.kind == LlmErrorKind.cancelled) {
           await settle(); // reports queued items as stopped, runs nothing
@@ -165,6 +187,7 @@ class AgentRunner {
         );
       }
       usage = usage + response.usage;
+      if (!finalStep) response = recoverToolCallText(response, {for (final t in request.tools) t.name}, step);
       conversation.add(response.toMessage());
 
       if (response.toolCalls.isNotEmpty) {
@@ -180,6 +203,9 @@ class AgentRunner {
           await settle();
           return stopped();
         }
+        // Everything is queued and the model has nothing left: review now
+        // instead of spending a model call on a closing sentence.
+        if (execution.planComplete) return (await review(null, continueAfter: false))!;
         if (finalStep) break;
         continue;
       }
@@ -195,20 +221,18 @@ class AgentRunner {
       }
 
       final raw = response.text ?? '';
-      final wantsMore = raw.contains(continueMarker);
       final plan = raw.replaceAll(continueMarker, '').trim();
-      onEvent?.call(AgentPlanReady(plan.isEmpty ? null : plan));
-      final records = await settle();
-      if (token.isCancelled) return stopped();
-      conversation.add(LlmMessage.user(outcomesMessage(records)));
-      // The report comes from the confirmed outcomes, not from another model
-      // call: always truthful, and it saves a round trip (tokens are scarce
-      // on free tiers). The model continues only when it asked to.
-      if (!wantsMore || step == config.maxModelCallsPerTurn - 1) {
-        final reply = _outcomeSummary(actions, lead: '');
-        conversation.add(LlmMessage.assistant(text: reply));
-        return AgentTurnResult(end: AgentTurnEnd.completed, reply: reply, actions: actions, usage: usage);
-      }
+      // The model continues when it asked to, or (once per turn) when part
+      // of the plan was refused and never fixed, usually an action that
+      // needs a record queued in this plan: the outcomes carry the ids it
+      // was missing.
+      final autoContinue = executor.hasUnfixedFailures && !autoContinued;
+      autoContinued = autoContinued || autoContinue;
+      // Its text then tends to ask the user for what the app will supply
+      // ("what is the new id?"), so it is not shown above the card.
+      final result = await review(plan.isEmpty || autoContinue ? null : plan,
+          continueAfter: (raw.contains(continueMarker) || autoContinue) && step < config.maxModelCallsPerTurn - 1);
+      if (result != null) return result;
     }
 
     // Out of steps: still let the user review what was prepared.
@@ -225,17 +249,21 @@ class AgentRunner {
     );
   }
 
+  /// Shown while a rate limit is waited out. Pacing is routine on free
+  /// tiers, so it reads as progress, not as an error.
+  static const waitingLabel = 'Still working on it…';
+
   /// One model call with a timeout and bounded retries (safe: model calls
-  /// change nothing): one retry after a timeout or outage, and up to
-  /// [AgentConfig.rateLimitRetries] after a rate limit that asks for a
-  /// bounded wait.
+  /// change nothing): one retry after a timeout or outage, and after rate
+  /// limits as long as the requested wait fits [AgentConfig.maxRateLimitWait]
+  /// and the turn's [budget].
   Future<LlmResponse> _complete(
     LlmRequest request,
     CancellationToken token,
     void Function(AgentEvent event)? onEvent,
+    _WaitBudget budget,
   ) async {
     var transientRetries = 0;
-    var rateLimitRetries = 0;
     while (true) {
       token.throwIfCancelled();
       try {
@@ -248,11 +276,13 @@ class AgentRunner {
       } on LlmException catch (e) {
         final Duration wait;
         if (e.kind == LlmErrorKind.rateLimited) {
-          final after = e.retryAfter ?? config.defaultRateLimitWait;
-          if (rateLimitRetries >= config.rateLimitRetries || after > config.maxRateLimitWait) rethrow;
-          rateLimitRetries++;
+          final hint = e.retryAfter;
+          final after = hint == null || hint <= Duration.zero ? config.defaultRateLimitWait : hint;
+          // A long wait (e.g. a daily limit) or a spent budget is reported.
+          if (after > config.maxRateLimitWait || after > budget.remaining) rethrow;
+          budget.remaining -= after;
           wait = after;
-          onEvent?.call(AgentWaiting('The assistant is busy. Retrying in ${after.inSeconds} s'));
+          onEvent?.call(const AgentWaiting(waitingLabel));
         } else {
           final transient = e.retryable &&
               (e.kind == LlmErrorKind.timeout ||
@@ -271,6 +301,44 @@ class AgentRunner {
   /// Ends a plan reply when the model needs the outcomes to continue.
   static const continueMarker = '[continue]';
 
+  /// gpt-oss sometimes writes a tool call as JSON in its text instead of
+  /// calling the tool, e.g. `{"queue_actions": {...}}` or
+  /// `{"name": "queue_actions", "arguments": {...}}`, which would end the
+  /// turn with JSON as the reply. When the whole text is such a call to one
+  /// of the [offered] tools, it becomes a real tool call. That is safe: tool
+  /// calls are untrusted anyway and go through the same validation and
+  /// review.
+  @visibleForTesting
+  static LlmResponse recoverToolCallText(LlmResponse response, Set<String> offered, int step) {
+    final text = response.text;
+    if (response.toolCalls.isNotEmpty || text == null) return response;
+    final body = text.replaceAll(RegExp(r'^```(?:json)?\s*|\s*```$'), '').trim();
+    if (!body.startsWith('{')) return response;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(body);
+    } on FormatException {
+      return response;
+    }
+    if (decoded is! Map) return response;
+    String? name;
+    Object? args;
+    if (decoded.length == 1 && offered.contains(decoded.keys.single)) {
+      name = decoded.keys.single as String;
+      args = decoded.values.single;
+    } else if (decoded['name'] is String && offered.contains(decoded['name'])) {
+      name = decoded['name'] as String;
+      args = decoded['arguments'] ?? decoded['parameters'];
+    }
+    if (name == null || args is! Map) return response;
+    return LlmResponse(
+      toolCalls: [LlmToolCall(id: 'recovered_$step', name: name, arguments: jsonEncode(args))],
+      finishReason: LlmFinishReason.toolCalls,
+      usage: response.usage,
+      providerState: response.providerState,
+    );
+  }
+
   /// Factual summary built from action records (never from model text).
   static String _outcomeSummary(List<ActionRecord> actions, {required String lead}) {
     if (actions.isEmpty) return lead.isEmpty ? 'Nothing was changed.' : '$lead Nothing was changed.';
@@ -282,4 +350,10 @@ class AgentRunner {
       if (notDone.isNotEmpty) 'Not done: ${notDone.join('; ')}.',
     ].join(' ');
   }
+}
+
+/// Rate-limit waiting left in one turn, shared by all its model calls.
+class _WaitBudget {
+  _WaitBudget(this.remaining);
+  Duration remaining;
 }

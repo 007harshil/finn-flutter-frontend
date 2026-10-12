@@ -8,7 +8,9 @@ import 'json_schema.dart';
 /// stay on for the rest of the conversation.
 enum ToolGroup {
   core('lookups, income/expenses, pending payments'),
-  transactions('edit transaction, new category'),
+  // Not "transactions": models took that name to mean recording one, which
+  // core already does, and spent a step loading it.
+  edits('edit a transaction, new category'),
   budgets('create/change/pause budgets'),
   pending('split bill, write off'),
   loans('EMI/loan payments, new loan'),
@@ -22,8 +24,8 @@ enum ToolGroup {
 
 /// Which group each tool belongs to. Tools not listed are core.
 const Map<String, ToolGroup> toolGroupOf = {
-  'edit_transaction': ToolGroup.transactions,
-  'create_category': ToolGroup.transactions,
+  'edit_transaction': ToolGroup.edits,
+  'create_category': ToolGroup.edits,
   'create_budget': ToolGroup.budgets,
   'update_budget': ToolGroup.budgets,
   'pause_or_resume_budget': ToolGroup.budgets,
@@ -43,7 +45,7 @@ const Map<String, ToolGroup> toolGroupOf = {
 };
 
 final Map<ToolGroup, RegExp> _keywords = {
-  ToolGroup.transactions: RegExp(r'\b(edit|change|correct|wrong|fix|update|categor\w*)\b', caseSensitive: false),
+  ToolGroup.edits: RegExp(r'\b(edit|change|correct|wrong|fix|update|categor\w*)\b', caseSensitive: false),
   ToolGroup.budgets: RegExp(r'\bbudget\w*\b|\blimit\b', caseSensitive: false),
   ToolGroup.pending: RegExp(r'\b(split\w*|share|shared|write.?off|forgive|won.?t pay)\b', caseSensitive: false),
   ToolGroup.loans: RegExp(r'\b(emi|loan\w*|instal+ment\w*|prepay\w*|mortgage)\b', caseSensitive: false),
@@ -85,7 +87,7 @@ class LoadToolsTool extends ReadTool {
   String get progressLabel => 'Getting ready';
 
   @override
-  String get description => 'Adds tool groups from your next step: '
+  String get description => 'Adds tool groups from your next step (recording income/expenses is always available): '
       '${[for (final g in ToolGroup.values) if (g != ToolGroup.core) '${g.name} (${g.summary})'].join('; ')}.';
 
   @override

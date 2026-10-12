@@ -12,6 +12,7 @@ Code: `lib/agent/`. Tests: `test/agent/`. Backend relay: `finn-backend` `POST /a
    |---|---|---|
    | `GROQ_API_KEY` | (unset = "not configured") | Groq key. **Server only**: keep it in `.env.local` (git-ignored) locally and in the host's secret settings in production. Never put it in the app or in git. |
    | `GROQ_MODEL` | `openai/gpt-oss-20b` | Model for every request |
+   | `GROQ_FALLBACK_MODELS` | `openai/gpt-oss-120b` | Comma-separated models tried in order when the model before them is rate limited (429/498). Groq meters each model separately, so each fallback adds its own per-minute budget. They get the same request, including `reasoning_effort`. `none` disables fallback. |
    | `GROQ_REASONING_EFFORT` | `low` | `off` (param not sent) \| `none` \| `default` \| `low` \| `medium` \| `high` |
    | `GROQ_BASE_URL` | `https://api.groq.com/openai/v1` | Chat Completions at `/chat/completions` |
    | `GROQ_TIMEOUT_MS` | `60000` | Upstream timeout (the route's `maxDuration` is 75 s) |
@@ -38,14 +39,24 @@ Code: `lib/agent/`. Tests: `test/agent/`. Backend relay: `finn-backend` `POST /a
 
 ### Model choice
 
-`openai/gpt-oss-20b` is the default. It is a production model on Groq, available on the free tier, lightweight and built for tool use, and it is the cheapest Groq model that supports tool calling. For better accuracy on complex requests, set `GROQ_MODEL=openai/gpt-oss-120b`; it has the same limits and API. Both make one tool call per step (no parallel calls), so the agent works step by step.
+`openai/gpt-oss-20b` is the default. It is a production model on Groq, available on the free tier, lightweight and built for tool use, and it is the cheapest Groq model that supports tool calling. For better accuracy on complex requests, set `GROQ_MODEL=openai/gpt-oss-120b`; it has the same limits and API. Both make one tool call per step (no parallel calls). Several actions therefore go into one `queue_actions` call (see below) instead of one step each.
 
-Groq's free tier allows about **8,000 tokens per minute and 30 requests per minute** per model. The module is designed around that limit:
-- Tools load in groups (see below), and the instructions and schemas are compact. An opening request is about 1.6k tokens.
+Groq's free tier allows about **8,000 tokens per minute** per model, and every step resends the whole request (about 2.5k tokens). The module is designed around that limit:
+- **One call for many actions.** `queue_actions` carries every action of a message. With `done: true` the runner opens the review card straight away, without a closing model call.
+- Tools load in groups (see below), and the instructions and schemas are compact.
 - One review card per turn. The final report is built from the confirmed outcomes without another model call.
-- If Groq asks the app to wait, it waits (up to 60 s, twice) and shows "The assistant is busy. Retrying in N s".
+- **Fallback model.** When the main model is rate limited, the relay sends the same request to `GROQ_FALLBACK_MODELS` at once. A model that was just rate limited is skipped until its `retry-after` passes.
+- **Quiet pacing.** If every model is rate limited, the app waits for the requested time and carries on. It shows "Still working on it…", not an error. A single wait may last up to 60 s, and all waits in one turn together up to 150 s. Only a longer wait, such as a daily limit, ends the turn with a message.
 
-A live check of "Rahul paid back the 2000 and I spent 300 on an auto" took 4 model calls and about 6.6k tokens, with both actions saved after one approval.
+Live checks (2026-10-13, `gpt-oss-20b`):
+
+| Request | Before | Now |
+|---|---|---|
+| "bought vegetables of 70rs, milk of 150rs, petrol 400, added netflix premium 179 yesterday" | 10 calls, about 15.6k tokens, 4 rate-limit waits, 72 s | 1 call, about 2.9k tokens, no waits, 4 actions on one card (4 of 4 runs) |
+| "Rahul paid back the 2000 and I spent 300 on an auto" | 4 calls, about 6.6k tokens | 2 calls (lookup, then batch), about 4.4k tokens |
+| "Create a category called Pets and record 500 on dog food in it" | stopped after the category; the expense was dropped | 3 calls, 2 review cards, both saved |
+
+The free tier also has a **daily** cap per model (about 200k tokens and 1,000 requests for `gpt-oss-20b`). When it is reached, Groq asks for a wait of many minutes. The relay then serves from the fallback model, which has its own daily cap, until the main model is available again.
 
 ## How a request flows
 
@@ -68,11 +79,13 @@ AgentScreen ──send──▶ AgentController ──▶ AgentRunner
                                                        → RemoteOperationDispatcher → POST /actions/{id}
 ```
 
-1. **Plan.** The model calls tools. Lookups run immediately. Each action call is checked: unknown tools and malformed JSON are rejected, arguments are pruned to the tool's schema, the action's own `decode` runs, and the dispatcher previews it on fresh data. A valid action is *queued*. The model is told it is not done yet.
-2. **Review.** When the model replies with text, every queued action appears on **one** review card. The user can approve all, approve some or decline. Client and server policy require confirmation for every agent action and forbid deletes.
+1. **Plan.** The model calls tools. Lookups run immediately. Actions usually arrive together in one `queue_actions` call, though a direct action tool call works too. Each action is checked: unknown tools and malformed JSON are rejected, arguments are pruned to the tool's schema, the action's own `decode` runs, and the dispatcher previews it on fresh data. A valid action is *queued*. The model is told it is not done yet. In a batch, each item is checked on its own: valid items stay queued, and the model resends only the failed ones, fixed.
+2. **Review.** When the model marks its batch `done: true` and every item is valid, or when it replies with text, every queued action appears on **one** review card. The user can approve all, approve some or decline. Client and server policy require confirmation for every agent action and forbid deletes.
 3. **Execute.** Approved actions run through `dispatch` with the preview's fingerprint. If a record changed after review, the action is not written and is reported as `needsReapproval`.
 4. **Report.** Outcome rows (Saved, Not approved, Failed, Not confirmed) and the reply text come from the dispatcher's results, never from the model. The outcomes are also added to the conversation as an app message.
 5. **Dependent steps.** When a later action needs an earlier result (for example a new category's id), the model ends its plan with `[continue]`. After approval it receives the outcomes, including record ids, and can propose the rest. That goes through the review card again.
+   - gpt-oss often forgets the marker, or puts a placeholder id in the dependent item. If any action was refused in the turn and never fixed, the runner continues after the review anyway, once per turn. It then asks the model to queue what is still missing, using the new record ids. The model's text is not shown above the card in that case, because it usually asks the user for the id the app is about to supply.
+6. **Tool calls written as text.** gpt-oss sometimes writes a tool call as JSON in its reply instead of calling the tool. When the whole reply is such a call to an offered tool, for example `{"queue_actions": {...}}` or `{"name": ..., "arguments": {...}}`, the runner treats it as a real call. It then goes through the same validation and review.
 
 ## Tools
 
@@ -81,8 +94,9 @@ Offered in groups to keep requests small. Core is always offered. Other groups a
 | Group | Tools | Maps to |
 |---|---|---|
 | core | `get_financial_overview`, `find_records`, `search_transactions`, `load_tools` | read-only lookups over the synced snapshot (`find_records` uses `PendingResolver` rules: unique / multiple / none) |
+| core | `queue_actions` | up to 12 `{tool, arguments}` items, each any action tool below, plus `done`. Each item gets the same checks as a direct call and switches on its tool's group. |
 | core | `record_transaction`, `add_pending_payment`, `settle_pending_payment` | `transactions.create`, `pending.create`, `pending.settle` |
-| transactions | `edit_transaction`, `create_category` | `transactions.update`, `categories.create` |
+| edits | `edit_transaction`, `create_category` | `transactions.update`, `categories.create` |
 | budgets | `create_budget`, `update_budget`, `pause_or_resume_budget` | `budgets.create/update/setPaused` |
 | pending | `split_bill`, `write_off_pending_payment` | `pending.split/cancel` |
 | loans | `record_loan_payment`, `create_loan` | `loans.recordPayment/create` |
@@ -102,12 +116,13 @@ Not exposed: every `*.delete` (policy blocks these too), profile and asset edits
   - Retrying after an unknown outcome (a lost reply) reuses the key, so the server replays the stored result instead of writing twice.
   - A deliberate identical entry in a later turn gets a new key and a "possible duplicate" note on the card.
   - Known edge: if an outcome was unknown and the user then asks for a separate identical entry, the server replays the first one ("Already saved"). Repeating the request again records it, because the next occurrence gets a new key.
-- **No automatic retries of mutations.** Model calls are retried only after a timeout, an outage, a malformed tool call (`toolCallFailed`) or a short rate-limit wait.
+- **No automatic retries of mutations.** Model calls are retried only after a timeout, an outage, a malformed tool call (`toolCallFailed`) or a rate-limit wait that fits the turn's budget.
 - **Partial success.** Each action commits on its own. Each outcome is reported separately.
 - **Prompt injection.** The instructions treat record text and tool results as data. Any write still needs approval of the app-generated preview.
 - **Limits** (`AgentConfig`):
   - 10 model calls per turn; the last one forces `tool_choice: none`.
-  - 8 tool calls per step and 24 per turn.
+  - 8 tool calls per step and 24 per turn. A `queue_actions` call counts as one and holds up to 12 actions.
+  - Rate-limit waiting: at most 60 s per wait and 150 s per turn (`maxRateLimitWait`, `rateLimitWaitBudget`).
   - Messages up to 2,000 characters.
   - History limited to 6 turns, about 12k characters and at most 180 provider items.
   - Tool results truncated at 3,000 characters.

@@ -10,6 +10,7 @@ import '../orchestration/agent_events.dart';
 import '../tools/agent_tool.dart';
 import '../tools/json_schema.dart';
 import '../tools/tool_catalog.dart';
+import '../tools/tool_groups.dart';
 import 'proposals.dart';
 
 /// Asks the user to approve [proposals]; completes with the approved ids.
@@ -20,8 +21,13 @@ typedef ApprovalHandler = Future<Set<String>> Function(List<ProposedAction> prop
 /// call (even when refused or cancelled) so the conversation stays well
 /// formed.
 class StepExecution {
-  const StepExecution(this.results);
+  const StepExecution(this.results, {this.planComplete = false});
   final List<LlmMessage> results;
+
+  /// The model queued its last actions with `queue_actions(done: true)` and
+  /// every call of the step succeeded: the plan is ready for review without
+  /// another model call.
+  final bool planComplete;
 }
 
 /// Turns model tool calls into application operations.
@@ -72,9 +78,18 @@ class ToolExecutor {
   /// Proposals waiting for the end-of-plan review.
   final List<ProposedAction> _queue = [];
 
+  /// Tools whose last proposal this turn was refused and not yet fixed.
+  final List<String> _unfixed = [];
+
   int _proposalSeq = 0;
 
   bool get hasQueued => _queue.isNotEmpty;
+
+  /// An action was refused this turn and never proposed again successfully,
+  /// typically because it needs the id of a record queued in the same plan.
+  /// The runner then continues after the review so the model can finish it
+  /// with the real outcome, even if it forgot to ask for that.
+  bool get hasUnfixedFailures => _unfixed.isNotEmpty;
 
   List<ProposedAction> get queued => List.unmodifiable(_queue);
 
@@ -82,6 +97,7 @@ class ToolExecutor {
   void beginTurn() {
     _doneThisTurn.clear();
     _queue.clear();
+    _unfixed.clear();
   }
 
   Future<StepExecution> executeStep(
@@ -92,6 +108,10 @@ class ToolExecutor {
   }) async {
     final allowed = limit == null || limit > maxCallsPerStep ? maxCallsPerStep : limit;
     final results = <ToolResult>[];
+    // The plan is complete only if the model said so and has no lookup
+    // result still to read.
+    var markedDone = false;
+    var ranLookup = false;
 
     for (var i = 0; i < calls.length; i++) {
       final call = calls[i];
@@ -102,13 +122,26 @@ class ToolExecutor {
             'tooManyCalls', 'The tool call limit for this request was reached, so this call was not run.',
             hint: 'Tell the user what is still outstanding.'));
       } else {
+        final tool = toolbox.lookup(call.name);
+        if (tool is ReadTool) ranLookup = true;
+        if (tool is QueueActionsTool && _parseArguments(call.arguments)?[QueueActionsTool.doneField] == true) {
+          markedDone = true;
+        }
         results.add(await _handle(call, onEvent));
       }
     }
-    return StepExecution([
-      for (var i = 0; i < calls.length; i++)
-        LlmMessage.toolResult(callId: calls[i].id, toolName: calls[i].name, content: results[i].encode()),
-    ]);
+    return StepExecution(
+      [
+        for (var i = 0; i < calls.length; i++)
+          LlmMessage.toolResult(
+            callId: calls[i].id,
+            toolName: calls[i].name,
+            // One line per queued item; room for a full batch.
+            content: results[i].encode(maxChars: calls[i].name == QueueActionsTool.toolName ? 8000 : 3000),
+          ),
+      ],
+      planComplete: markedDone && !ranLookup && hasQueued && results.every((r) => r.ok),
+    );
   }
 
   Future<ToolResult> _handle(LlmToolCall call, void Function(AgentEvent event)? onEvent) async {
@@ -122,12 +155,73 @@ class ToolExecutor {
       return ToolResult.error('invalidArguments', 'Arguments must be a JSON object.',
           hint: 'Call the tool again with valid JSON matching its schema.');
     }
-    final pruned = JsonSchema.prune(args, tool.parameters)! as Map<String, Object?>;
     onEvent?.call(AgentToolStarted(tool.name, tool.progressLabel));
+    if (tool is QueueActionsTool) return _queueBatch(call, args);
+    final pruned = JsonSchema.prune(args, tool.parameters)! as Map<String, Object?>;
     return switch (tool) {
       ReadTool() => _runRead(tool, pruned),
-      ActionTool() => _propose(tool, call, pruned),
+      ActionTool() => _proposeTracked(tool, call.id, pruned),
+      QueueActionsTool() => throw StateError('handled above'),
     };
+  }
+
+  /// Runs each `queue_actions` item through the same checks as a direct
+  /// action call. Items are independent: valid ones stay queued when others
+  /// fail, and the model resends only the failed ones.
+  Future<ToolResult> _queueBatch(LlmToolCall call, Map<String, Object?> args) async {
+    final raw = args['actions'];
+    if (raw is! List || raw.isEmpty) {
+      return ToolResult.error('invalidArguments', 'actions must be a non-empty list.',
+          hint: 'Call queue_actions again with at least one {tool, arguments} item.');
+    }
+    if (raw.length > QueueActionsTool.maxActions) {
+      return ToolResult.error('tooManyActions', 'At most ${QueueActionsTool.maxActions} actions fit in one call.',
+          hint: 'Queue the first ${QueueActionsTool.maxActions} with done=false, then the rest in another call.');
+    }
+    final items = <Map<String, Object?>>[];
+    var allOk = true;
+    for (var i = 0; i < raw.length; i++) {
+      final item = raw[i];
+      final name = item is Map ? item['tool'] : null;
+      final itemArgs = item is Map ? item['arguments'] : null;
+      final target = name is String ? toolbox.lookup(name) : null;
+      final ToolResult result;
+      if (target is! ActionTool) {
+        result = ToolResult.error('unknownTool', 'There is no action tool named "$name".',
+            hint: 'Use only action tool names from your tool list.');
+      } else if (itemArgs is! Map) {
+        result = ToolResult.error('invalidArguments', 'arguments must be a JSON object.',
+            hint: 'Send the arguments of ${target.name} as an object.');
+      } else {
+        // Offer the tool directly from the next step, so a failed item can
+        // be fixed against its full schema.
+        context.selection?.enable([toolGroupOf[target.name] ?? ToolGroup.core]);
+        final pruned = JsonSchema.prune(Map<String, Object?>.from(itemArgs), target.parameters)! as Map<String, Object?>;
+        result = await _proposeTracked(target, '${call.id}#$i', pruned);
+      }
+      allOk = allOk && result.ok;
+      final json = Map<String, Object?>.of(result.json)..remove('ok');
+      // The batch message says it once for all items.
+      if (json['status'] == 'queuedForApproval') json.remove('message');
+      items.add({'item': i, 'tool': name, ...json});
+    }
+    return ToolResult.batch({
+      'results': items,
+      'message': allOk
+          ? 'All valid and queued. The user reviews them together; they are NOT done yet.'
+          : 'Items without an error are queued. Call queue_actions again with only the failed items, fixed. If an '
+              'item needs the id of a record queued here, leave it out: you get that id after the user approves.',
+    }, ok: allOk);
+  }
+
+  Future<ToolResult> _proposeTracked(ActionTool tool, String toolCallId, Map<String, Object?> args) async {
+    final result = await _propose(tool, toolCallId, args);
+    if (!result.ok) {
+      _unfixed.add(tool.name);
+    } else {
+      _unfixed.remove(tool.name);
+    }
+    return result;
   }
 
   static Map<String, Object?>? _parseArguments(String raw) {
@@ -154,7 +248,7 @@ class ToolExecutor {
   static const _distinctHint =
       'If the user really asked for two separate identical entries, add a note that tells them apart and call again.';
 
-  Future<ToolResult> _propose(ActionTool tool, LlmToolCall call, Map<String, Object?> args) async {
+  Future<ToolResult> _propose(ActionTool tool, String toolCallId, Map<String, Object?> args) async {
     final ActionInput input;
     try {
       input = tool.action.decode(args);
@@ -201,7 +295,7 @@ class ToolExecutor {
         final occurrence = _completed[fingerprint] ?? 0;
         final proposal = ProposedAction(
           id: 'p${++_proposalSeq}',
-          toolCallId: call.id,
+          toolCallId: toolCallId,
           tool: tool,
           input: input,
           preview: value,
@@ -318,8 +412,9 @@ class ToolExecutor {
 
 /// The message that tells the model what happened to its proposals. Sent
 /// as an app-authored user message because the original tool calls were
-/// already answered with "queued".
-String outcomesMessage(List<ActionRecord> records) {
+/// already answered with "queued". With [continuing], the model is asked to
+/// queue the rest of the request that needed these results.
+String outcomesMessage(List<ActionRecord> records, {bool continuing = false}) {
   final items = [
     for (final r in records)
       {
@@ -333,8 +428,11 @@ String outcomesMessage(List<ActionRecord> records) {
         'recordId': ?r.recordId,
       },
   ];
+  const saved = '"completed" and "alreadyDone" mean saved; anything else means not saved. Do not retry failed or unknown '
+      'ones on your own.';
   return '[FiNN app message, not typed by the user] Outcome of the actions you proposed: ${jsonEncode(items)}\n'
-      'Tell the user the result of each in one short line. "completed" and "alreadyDone" mean saved; anything else '
-      'means not saved. Do not retry failed or unknown ones on your own. Propose follow-up actions only if they were '
-      'waiting for these results.';
+      '${continuing ? 'Now queue every part of the user\'s request that is still missing, using the recordIds above '
+          '(one queue_actions call, done=true). If nothing is missing, say so in one short line. $saved' : 'Tell the user '
+          'the result of each in one short line. $saved Propose follow-up actions only if they were waiting for these '
+          'results.'}';
 }
