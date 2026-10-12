@@ -50,6 +50,13 @@ class HomeHeader extends ConsumerWidget {
           ),
           const SizedBox(width: Space.x2),
           FinnIconButton(
+            icon: LucideIcons.sparkles,
+            tooltip: 'Assistant',
+            variant: FinnIconButtonVariant.filled,
+            onPressed: () => context.push(AppRoutes.assistant),
+          ),
+          const SizedBox(width: Space.x2),
+          FinnIconButton(
             icon: hidden ? LucideIcons.eyeOff : LucideIcons.eye,
             tooltip: hidden ? 'Show balances' : 'Hide balances',
             variant: FinnIconButtonVariant.filled,

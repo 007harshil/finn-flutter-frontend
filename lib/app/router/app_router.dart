@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../agent/agent.dart' show AgentScreen;
 import '../../core/time/dates.dart';
 import '../../features/alerts/presentation/alerts_screen.dart';
 import '../../features/analytics/presentation/analytics_screen.dart';
@@ -107,6 +108,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(path: AppRoutes.onboarding, builder: (_, _) => const OnboardingScreen()),
+      GoRoute(
+        path: AppRoutes.assistant,
+        pageBuilder: (context, state) => FadeScalePage<Object?>(key: state.pageKey, child: const AgentScreen()),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AppShell(shell: shell),
         branches: [

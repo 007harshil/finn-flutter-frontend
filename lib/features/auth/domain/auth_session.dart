@@ -52,7 +52,7 @@ class AuthFailure implements Exception {
 }
 
 /// Passwordless email sign-in. Replace [MockAuthService] with a real
-/// provider (e.g. Supabase email OTP); nothing else needs to change.
+/// provider (e.g. the FiNN API's email OTP); nothing else needs to change.
 abstract interface class AuthService {
   /// Emails a one-time code to [email]. Signs up unknown addresses.
   Future<void> sendCode(String email);

@@ -8,32 +8,20 @@ import 'package:flutter/foundation.dart';
 /// ```
 /// flutter run --dart-define=FINN_API_URL=https://api.example.com
 /// ```
-///
-/// `FINN_SUPABASE_URL` and `FINN_SUPABASE_KEY` default to the FiNN project.
-/// The key is Supabase's publishable key, which is public by design.
 @immutable
 class ApiConfig {
   const ApiConfig({
     required this.apiUrl,
-    this.supabaseUrl = defaultSupabaseUrl,
-    this.supabaseKey = defaultSupabaseKey,
     this.timeout = const Duration(seconds: 20),
   });
 
   /// Reads the compile-time `--dart-define`s.
   const ApiConfig.fromEnvironment()
       : apiUrl = const String.fromEnvironment('FINN_API_URL'),
-        supabaseUrl = const String.fromEnvironment('FINN_SUPABASE_URL', defaultValue: defaultSupabaseUrl),
-        supabaseKey = const String.fromEnvironment('FINN_SUPABASE_KEY', defaultValue: defaultSupabaseKey),
         timeout = const Duration(seconds: 20);
-
-  static const defaultSupabaseUrl = 'https://xeqhygypqyyyoortalod.supabase.co';
-  static const defaultSupabaseKey = 'sb_publishable_1iDr4zeoG6ykOvNETNF72w_HOTRv0tC';
 
   /// Base URL of the API, without the `/api/v1` suffix. Empty = local mode.
   final String apiUrl;
-  final String supabaseUrl;
-  final String supabaseKey;
 
   /// Per-request timeout.
   final Duration timeout;

@@ -9,6 +9,9 @@ import '../../features/transactions/domain/transaction.dart';
 abstract final class AppRoutes {
   static const onboarding = '/onboarding';
 
+  /// The FiNN assistant (full screen, outside the tab shell).
+  static const assistant = '/assistant';
+
   // Authentication (outside the shell; every other route requires sign-in)
   static const login = '/login';
   static const verifyOtpPath = '/login/verify';

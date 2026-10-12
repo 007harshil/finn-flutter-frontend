@@ -61,6 +61,10 @@ Cross-module money movements are created only by actions in their owning module 
 
 `ActionRegistry` (populated from `lib/app/di/action_catalog.dart`) lists descriptors as JSON and decodes/dispatches by id. `PlanExecutor` (`action_plan.dart`) runs multi-step plans: it previews every step, executes only approved fingerprints, skips steps whose dependencies failed, and reports a step as stale (`staleData`) if its record changed after approval. Steps commit independently; there is no cross-step rollback.
 
+## Assistant (agent)
+
+`lib/agent/` is a self-contained module that turns natural-language requests into actions through LLM tool calling (Grok via the FiNN API relay). It reads through the snapshot and writes only through `OperationDispatcher` on the `agent` channel, after the user approves each preview. The rest of the app uses only `lib/agent/agent.dart` (`AgentScreen`, `agentControllerProvider`, `llmProviderProvider`). See `docs/AGENT.md`.
+
 ## State management and navigation
 
 - Riverpod 3 without code generation. Core providers (`core_providers.dart`): `localDataStoreProvider` and `sharedPreferencesProvider` (overridden in `main.dart` and tests), `clockProvider`, `idGeneratorProvider`, `todayProvider`, `financeRepositoriesProvider`, `settingsProvider`. Action providers (`action_providers.dart`): environment, dispatcher, audit log, registry, plan executor.

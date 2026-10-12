@@ -3,13 +3,12 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../app/di/core_providers.dart';
 import '../../core/persistence/persistence_driver.dart';
 import '../../core/time/clock.dart';
 import '../../features/auth/application/auth_controller.dart';
-import '../../features/auth/data/supabase_auth_service.dart';
+import '../../features/auth/data/backend_auth_service.dart';
 import '../../features/auth/domain/auth_session.dart';
 import '../local/local_data_store.dart';
 import 'api_client.dart';
@@ -20,18 +19,15 @@ import 'remote_repositories.dart';
 import 'remote_session_scope.dart';
 import 'sync_engine.dart';
 
-/// Starts the app connected to the FiNN API: initialises Supabase, restores
-/// the signed-in user's offline cache (so repositories are hydrated before
+/// Starts the app connected to the FiNN API: restores the stored FiNN
+/// session and the signed-in user's offline cache (so repositories are hydrated before
 /// the first frame) and wraps [app] with the remote overrides.
 Future<Widget> bootstrapRemoteApp({
   required ApiConfig config,
   required SharedPreferences prefs,
   required Widget app,
 }) async {
-  await Supabase.initialize(url: config.supabaseUrl, publishableKey: config.supabaseKey);
-  final goTrue = Supabase.instance.client.auth;
-
-  final apiAuth = SupabaseApiAuth(goTrue);
+  final apiAuth = BackendApiAuth(config: config, prefs: prefs);
   final api = ApiClient(config: config, auth: apiAuth);
   final engine = SyncEngine(api: api, prefs: prefs);
 
@@ -39,9 +35,9 @@ Future<Widget> bootstrapRemoteApp({
   final local = LocalDataStore(driver: SharedPreferencesDriver(prefs));
   final hasLocal = await local.loadExisting();
 
-  // The app's sign-in state follows the Supabase session.
+  // The app's sign-in state follows the stored FiNN session.
   final userId = apiAuth.userId;
-  if (goTrue.currentSession == null || userId == null) {
+  if (apiAuth.session == null || userId == null) {
     await prefs.remove(AuthController.storageKey);
   } else {
     if (prefs.getString(AuthController.storageKey) == null) {
@@ -55,7 +51,7 @@ Future<Widget> bootstrapRemoteApp({
     config: config,
     prefs: prefs,
     auth: apiAuth,
-    authService: SupabaseAuthService(auth: goTrue, clock: const SystemClock()),
+    authService: BackendAuthService(auth: apiAuth, clock: const SystemClock()),
     api: api,
     engine: engine,
     repositories: buildRemoteRepositories(engine, api),

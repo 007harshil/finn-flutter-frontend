@@ -64,19 +64,17 @@ Collections: transactions, categories, budgets, goals, savings movements, loans,
 
 ## Connecting to the FiNN API
 
-The real backend (`finn-backend`, contract in `finn-backend/docs/CLIENT_CONTRACT.md`) is wired in `lib/data/remote/` and `lib/features/auth/data/supabase_auth_service.dart`. Remote mode is switched on only by a dart-define; without it the app runs exactly as before on the local mock.
+The real backend (`finn-backend`, contract in `finn-backend/docs/CLIENT_CONTRACT.md`) is wired in `lib/data/remote/` and `lib/features/auth/data/backend_auth_service.dart`. Remote mode is switched on only by a dart-define; without it the app runs exactly as before on the local mock.
 
 | Dart-define | Default | Purpose |
 |---|---|---|
 | `FINN_API_URL` | (empty = local mock) | API base URL; `/api/v1` is appended |
-| `FINN_SUPABASE_URL` | `https://xeqhygypqyyyoortalod.supabase.co` | Supabase Auth project |
-| `FINN_SUPABASE_KEY` | the project's publishable key | public by design |
 
 ```
 flutter run --dart-define=FINN_API_URL=https://api.example.com
 ```
 
-**What is remote.** Sign-in (Supabase email OTP via `SupabaseAuthService`), every action (`RemoteOperationDispatcher`: `POST /actions/{id}/preview`, `POST /actions/{id}` with `Idempotency-Key` and the confirmation fingerprint; `runAction` and the review sheet are unchanged), the activity log (`GET /audit`), people search (`GET /users/search`), the alert inbox (`PUT /alerts/inbox`: `read`/`dismissed` add keys, `restore` un-dismisses) and the calculation preferences (`monthStartDay`, reminder days, emergency threshold, budget warning, disabled alert types → `PATCH /preferences`; synced back into `AppSettings`; the server's `timeZone` stays at its default because Flutter exposes no IANA zone name without an extra package).
+**What is remote.** Sign-in (the API's own email OTP via `BackendAuthService`: `POST /auth/otp`, `POST /auth/verify`, `POST /auth/refresh`, `POST /auth/logout`; the session — bearer token, rotating refresh token, expiry and user — is kept in SharedPreferences under `finn.auth.session.v1` by `BackendApiAuth`, refreshed shortly before expiry and on `unauthenticated`, one refresh at a time), every action (`RemoteOperationDispatcher`: `POST /actions/{id}/preview`, `POST /actions/{id}` with `Idempotency-Key` and the confirmation fingerprint; `runAction` and the review sheet are unchanged), the activity log (`GET /audit`), people search (`GET /users/search`), the alert inbox (`PUT /alerts/inbox`: `read`/`dismissed` add keys, `restore` un-dismisses) and the calculation preferences (`monthStartDay`, reminder days, emergency threshold, budget warning, disabled alert types → `PATCH /preferences`; synced back into `AppSettings`; the server's `timeZone` stays at its default because Flutter exposes no IANA zone name without an extra package).
 
 **What stays on the device.** Projections and calculators still run on the client from synced records. `SyncEngine` keeps the records (DTO JSON) in memory and in SharedPreferences per signed-in user, so the app opens offline with the last data; it runs a full load, then `GET /sync?since=` (looping while `hasMore`) on start, on app resume and after every action (the action's `changes` payload is applied immediately). The cursor is not advanced from action payloads, so changes made elsewhere in between are never skipped. The cache is deleted on sign-out. Display preferences (theme, motion, hidden balances, haptics) stay local.
 
@@ -136,6 +134,10 @@ Every write already has a transport-neutral shape, which maps directly onto an R
 - **Name resolution.** `PendingResolver` (`pending_actions.dart`) finds an obligation by counterparty name and refuses to guess when several match (`ambiguous`).
 
 A server implementation can host the same `FinancialAction` classes (they depend only on `FinanceRepositories`, `Clock` and `IdGenerator` through `ActionEnvironment`), or reimplement them behind endpoints such as `POST /actions/{id}:preview` and `POST /actions/{id}:execute` with the idempotency key and confirmation fingerprint as headers.
+
+## Assistant relay
+
+The agent (`lib/agent/`, `docs/AGENT.md`) calls `POST /agent/completions` through `ApiClient` with the user's session. The server adds the xAI key, model and limits and forwards to the xAI Responses API. The relay never runs tools; the agent's writes use the normal `POST /actions/{id}` path with `channel: "agent"`.
 
 ## Checklist
 

@@ -6,7 +6,7 @@ import '../../app/di/action_providers.dart';
 import '../../app/di/core_providers.dart';
 import '../../domain/finance_repositories.dart';
 import '../../features/auth/application/auth_controller.dart';
-import '../../features/auth/data/supabase_auth_service.dart';
+import '../../features/auth/data/backend_auth_service.dart';
 import 'api_client.dart';
 import 'api_config.dart';
 import 'remote_dispatcher.dart';
@@ -31,8 +31,8 @@ class RemoteBackend {
 
   final ApiConfig config;
   final SharedPreferences prefs;
-  final SupabaseApiAuth auth;
-  final SupabaseAuthService authService;
+  final BackendApiAuth auth;
+  final BackendAuthService authService;
   final ApiClient api;
   final SyncEngine engine;
   final FinanceRepositories repositories;

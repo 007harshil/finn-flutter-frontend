@@ -20,6 +20,14 @@ abstract interface class ApiAuth {
   Future<void> expire();
 }
 
+/// An [ApiAuth] that can renew its token shortly before it expires, so a
+/// request is not first sent with a token about to be rejected.
+abstract interface class ProactiveApiAuth implements ApiAuth {
+  /// Refreshes the session if the access token is about to expire. Never
+  /// throws; a failed attempt falls back to the `unauthenticated` path.
+  Future<void> ensureFresh();
+}
+
 /// Message used when the session cannot be recovered.
 const sessionExpiredMessage = 'Your session has expired. Please sign in again.';
 
@@ -106,6 +114,7 @@ class ApiClient {
     Object? body,
     Map<String, String>? headers,
   }) async {
+    if (auth case final ProactiveApiAuth proactive) await proactive.ensureFresh();
     final token = auth.accessToken;
     if (token == null || token.isEmpty) return const _Unauthenticated();
 
