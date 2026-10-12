@@ -46,6 +46,9 @@ class FinnColors extends ThemeExtension<FinnColors> {
     required this.accentPending,
     required this.accentAnalytics,
     required this.accentNetWorth,
+    required this.agentStart,
+    required this.agentMid,
+    required this.agentEnd,
     required this.chartSeries,
   });
 
@@ -100,10 +103,22 @@ class FinnColors extends ThemeExtension<FinnColors> {
   final Color accentAnalytics;
   final Color accentNetWorth;
 
+  /// FiNN agent brand gradient (orb, review panel accents).
+  final Color agentStart;
+  final Color agentMid;
+  final Color agentEnd;
+
   /// Ordered categorical palette for charts.
   final List<Color> chartSeries;
 
   bool get isDark => brightness == Brightness.dark;
+
+  /// Gradient of the FiNN agent mark.
+  LinearGradient get agentGradient => LinearGradient(
+        colors: [agentStart, agentMid, agentEnd],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
 
   LinearGradient get heroGradient => LinearGradient(
         colors: [heroStart, heroEnd],
@@ -149,6 +164,9 @@ class FinnColors extends ThemeExtension<FinnColors> {
     accentPending: Palette.violet600,
     accentAnalytics: Palette.emerald600,
     accentNetWorth: Palette.blue600,
+    agentStart: Palette.emerald500,
+    agentMid: Palette.cyan500,
+    agentEnd: Palette.indigo600,
     chartSeries: [
       Palette.navy700,
       Palette.emerald500,
@@ -199,6 +217,9 @@ class FinnColors extends ThemeExtension<FinnColors> {
     accentPending: Palette.violet500,
     accentAnalytics: Palette.emerald500,
     accentNetWorth: Palette.blue500,
+    agentStart: Palette.emerald400,
+    agentMid: Palette.cyan500,
+    agentEnd: Palette.indigo500,
     chartSeries: [
       Palette.slate300,
       Palette.emerald400,
@@ -256,6 +277,9 @@ class FinnColors extends ThemeExtension<FinnColors> {
       accentPending: l(accentPending, other.accentPending),
       accentAnalytics: l(accentAnalytics, other.accentAnalytics),
       accentNetWorth: l(accentNetWorth, other.accentNetWorth),
+      agentStart: l(agentStart, other.agentStart),
+      agentMid: l(agentMid, other.agentMid),
+      agentEnd: l(agentEnd, other.agentEnd),
       chartSeries: t < 0.5 ? chartSeries : other.chartSeries,
     );
   }

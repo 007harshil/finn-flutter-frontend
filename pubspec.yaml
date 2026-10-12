@@ -45,6 +45,7 @@ dependencies:
   pdf: ^3.13.1
   flutter_animate: ^4.5.2
   http: ^1.6.0
+  record: ^7.1.2
 
 dev_dependencies:
   flutter_test:

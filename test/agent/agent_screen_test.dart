@@ -128,7 +128,8 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('Review this action'), findsOneWidget);
+      expect(find.text('Review this change'), findsOneWidget);
+      expect(find.text('TRANSACTIONS · NEW'), findsOneWidget);
       expect(find.text('I will record ₹450 for lunch.'), findsOneWidget);
       expect(find.textContaining('450'), findsWidgets);
       expect(find.byTooltip('Stop'), findsOneWidget);
@@ -139,7 +140,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('Done: Spent ₹450.'), findsOneWidget);
-      expect(find.text('Saved'), findsOneWidget);
+      expect(find.text('Change saved'), findsOneWidget);
+      expect(find.text('SAVED'), findsOneWidget);
       expect(find.byTooltip('Send'), findsOneWidget);
     });
   });

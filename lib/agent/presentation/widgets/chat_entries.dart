@@ -3,8 +3,9 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../design_system/design_system.dart';
 import '../../application/agent_controller.dart';
-import '../../execution/proposals.dart';
 import '../../orchestration/agent_runner.dart';
+import 'agent_logo.dart';
+import 'outcome_summary.dart';
 
 class UserBubble extends StatelessWidget {
   const UserBubble({super.key, required this.entry});
@@ -77,9 +78,7 @@ class AgentBubble extends StatelessWidget {
               SelectableText(entry.text, style: t.body),
               if (entry.actions.isNotEmpty) ...[
                 const SizedBox(height: Space.x3),
-                FinnDivider(),
-                const SizedBox(height: Space.x2),
-                for (final a in entry.actions) ActionOutcomeRow(record: a),
+                OutcomeSummary(actions: entry.actions),
               ],
               if (onRetry != null) ...[
                 const SizedBox(height: Space.x3),
@@ -125,53 +124,6 @@ class AgentPlanBubble extends StatelessWidget {
   }
 }
 
-/// One action and what actually happened to it.
-class ActionOutcomeRow extends StatelessWidget {
-  const ActionOutcomeRow({super.key, required this.record});
-  final ActionRecord record;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final (IconData icon, Color color, String label) = switch (record.status) {
-      ActionResultStatus.completed => (LucideIcons.circleCheck, c.positive, 'Saved'),
-      ActionResultStatus.alreadyDone => (LucideIcons.circleCheck, c.positive, 'Already saved'),
-      ActionResultStatus.declined => (LucideIcons.circleX, c.textTertiary, 'Not approved'),
-      ActionResultStatus.cancelled => (LucideIcons.circleStop, c.textTertiary, 'Stopped'),
-      ActionResultStatus.needsReapproval => (LucideIcons.circleAlert, c.warning, 'Needs review again'),
-      ActionResultStatus.failed when record.outcomeUnknown => (LucideIcons.circleHelp, c.warning, 'Not confirmed'),
-      ActionResultStatus.failed => (LucideIcons.circleX, c.negative, 'Failed'),
-    };
-    return Semantics(
-      label: '$label: ${record.summary}${record.message == null ? '' : '. ${record.message}'}',
-      excludeSemantics: true,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: Space.x1),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: Space.x2),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(record.summary, style: t.bodyStrong),
-                  Text(
-                    record.message == null ? label : '$label · ${record.message}',
-                    style: t.caption.copyWith(color: c.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// "Thinking…" / tool progress line.
 class AgentProgress extends StatelessWidget {
   const AgentProgress({super.key, required this.label});
@@ -185,11 +137,7 @@ class AgentProgress extends StatelessWidget {
       label: label,
       child: Row(
         children: [
-          SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(strokeWidth: 2, color: c.primary),
-          ),
+          const SizedBox.square(dimension: 22, child: AgentOrb(size: 22, active: true)),
           const SizedBox(width: Space.x2),
           Flexible(child: Text(label, style: context.text.caption.copyWith(color: c.textSecondary))),
         ],

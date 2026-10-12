@@ -2,6 +2,8 @@
     <!-- Required in release builds to reach the FiNN API (debug/profile manifests add it only for tooling). -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Voice requests to the FiNN agent (speech is transcribed by the FiNN API). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="FiNN"
         android:name="${applicationName}"
