@@ -137,7 +137,7 @@ A server implementation can host the same `FinancialAction` classes (they depend
 
 ## Assistant relay
 
-The agent (`lib/agent/`, `docs/AGENT.md`) calls `POST /agent/completions` through `ApiClient` with the user's session. The server adds the xAI key, model and limits and forwards to the xAI Responses API. The relay never runs tools; the agent's writes use the normal `POST /actions/{id}` path with `channel: "agent"`.
+The agent (`lib/agent/`, `docs/AGENT.md`) calls `POST /agent/completions` through `ApiClient` with the user's session. The server adds the Groq key, model and limits and forwards to Groq Chat Completions. The relay never runs tools; the agent's writes use the normal `POST /actions/{id}` path with `channel: "agent"`.
 
 ## Checklist
 

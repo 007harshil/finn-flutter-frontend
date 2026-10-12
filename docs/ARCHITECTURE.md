@@ -63,7 +63,7 @@ Cross-module money movements are created only by actions in their owning module 
 
 ## Assistant (agent)
 
-`lib/agent/` is a self-contained module that turns natural-language requests into actions through LLM tool calling (Grok via the FiNN API relay). It reads through the snapshot and writes only through `OperationDispatcher` on the `agent` channel, after the user approves each preview. The rest of the app uses only `lib/agent/agent.dart` (`AgentScreen`, `agentControllerProvider`, `llmProviderProvider`). See `docs/AGENT.md`.
+`lib/agent/` is a self-contained module that turns natural-language requests into actions through LLM tool calling (Groq via the FiNN API relay). It reads through the snapshot and writes only through `OperationDispatcher` on the `agent` channel, after the user approves each preview. The rest of the app uses only `lib/agent/agent.dart` (`AgentScreen`, `agentControllerProvider`, `llmProviderProvider`). See `docs/AGENT.md`.
 
 ## State management and navigation
 
