@@ -57,7 +57,7 @@ void main() {
       expect(done.status, AgentStatus.idle);
       expect(done.entries.whereType<UserChatEntry>(), hasLength(1));
       final reply = done.entries.last as AgentChatEntry;
-      expect(reply.text, 'Done: Spent ₹450.');
+      expect(reply.text, '₹450 on Food & Dining added as an expense.');
       expect(reply.actions.single.status, ActionResultStatus.completed);
       expect((await env.snapshot()).transactions.length, before + 1);
       expect(provider.requests, hasLength(2));
@@ -148,9 +148,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('Done: Spent ₹450.'), findsOneWidget);
+      expect(find.text('₹450 on Food & Dining added as an expense.'), findsOneWidget);
       expect(find.text('Change saved'), findsOneWidget);
       expect(find.text('SAVED'), findsOneWidget);
+      // The saved record links to its detail screen.
+      expect(find.text('View'), findsOneWidget);
       expect(find.byTooltip('Send'), findsOneWidget);
     });
   });

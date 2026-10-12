@@ -6,6 +6,7 @@ import '../../../core/time/clock.dart';
 import '../../../core/time/dates.dart';
 import '../../../finance/finance_snapshot.dart';
 import '../domain/transaction.dart';
+import '../../settings/application/tracking_start.dart';
 
 /// Input for creating or updating a manual transaction.
 class TransactionInput extends ActionInput {
@@ -147,6 +148,7 @@ class CreateTransactionAction extends FinancialAction<TransactionInput, Transact
       updatedAt: now,
     );
     await env.repos.transactions.save(tx);
+    await extendTrackingStart(env, tx.date);
     return Result.ok(tx);
   }
 }
@@ -238,6 +240,7 @@ class UpdateTransactionAction extends FinancialAction<UpdateTransactionInput, Tr
       version: existing.version + 1,
     );
     await env.repos.transactions.save(updated);
+    await extendTrackingStart(env, updated.date);
     return Result.ok(updated);
   }
 }

@@ -9,6 +9,7 @@ import '../../categories/domain/category.dart';
 import '../../transactions/application/transaction_actions.dart';
 import '../../transactions/domain/transaction.dart';
 import '../domain/subscription.dart';
+import '../../settings/application/tracking_start.dart';
 
 // ---------------------------------------------------------------------------
 // Schedule helpers (pure). A due date passing NEVER creates a transaction:
@@ -516,6 +517,7 @@ class MarkSubscriptionPaidAction extends FinancialAction<MarkSubscriptionPaidInp
       note: SubscriptionSchedule.paymentNote(sub, p.cycle),
     );
     await env.repos.transactions.save(tx);
+    await extendTrackingStart(env, tx.date);
     try {
       await env.repos.subscriptions.save(sub.copyWith(
         nextDueDate: p.nextDueDate,

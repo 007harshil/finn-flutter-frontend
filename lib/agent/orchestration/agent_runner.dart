@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../finance/finance_snapshot.dart';
 import '../agent_config.dart';
+import '../execution/action_recap.dart';
 import '../execution/proposals.dart';
 import '../execution/tool_executor.dart';
 import '../llm/llm_provider.dart';
@@ -342,11 +343,11 @@ class AgentRunner {
   /// Factual summary built from action records (never from model text).
   static String _outcomeSummary(List<ActionRecord> actions, {required String lead}) {
     if (actions.isEmpty) return lead.isEmpty ? 'Nothing was changed.' : '$lead Nothing was changed.';
-    final done = actions.where((a) => a.succeeded).map((a) => a.summary).toList();
+    final done = actions.where((a) => a.succeeded).map(actionRecap).toList();
     final notDone = actions.where((a) => !a.succeeded).map((a) => a.summary).toList();
     return [
       if (lead.isNotEmpty) lead,
-      if (done.isNotEmpty) 'Done: ${done.join('; ')}.',
+      ...done,
       if (notDone.isNotEmpty) 'Not done: ${notDone.join('; ')}.',
     ].join(' ');
   }

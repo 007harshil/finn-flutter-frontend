@@ -10,6 +10,7 @@ import '../../transactions/application/transaction_actions.dart';
 import '../../transactions/domain/transaction.dart';
 import '../domain/loan.dart';
 import '../domain/loan_calculator.dart';
+import '../../settings/application/tracking_start.dart';
 
 class LoanInput extends ActionInput {
   const LoanInput({
@@ -250,6 +251,7 @@ class CreateLoanAction extends FinancialAction<LoanInput, Loan> {
         method: PaymentMethod.bankTransfer,
       );
       await env.repos.transactions.save(tx);
+      await extendTrackingStart(env, tx.date);
     }
     final loan = input.toLoan(id, env.clock.now(), disbursementTransactionId: tx?.id);
     await env.repos.loans.save(loan);
@@ -503,6 +505,7 @@ class RecordLoanPaymentAction extends FinancialAction<LoanPaymentInput, LoanPaym
         note: '${loan.name} · ${input.kind.label}${p.periodNumber != null ? ' #${p.periodNumber}' : ''}',
       );
       await env.repos.transactions.save(tx);
+      await extendTrackingStart(env, tx.date);
     }
     final payment = LoanPayment(
       id: env.ids.next('lp'),

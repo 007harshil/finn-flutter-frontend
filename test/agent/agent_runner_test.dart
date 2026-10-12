@@ -65,7 +65,7 @@ void main() {
 
     expect(result.end, AgentTurnEnd.completed);
     // The report is built from confirmed outcomes, without another model call.
-    expect(result.reply, 'Done: Spent ₹450; Receive ₹2,000 from Rahul.');
+    expect(result.reply, '₹450 on Food & Dining added as an expense. Received ₹2,000 from Rahul.');
     expect(provider.requests, hasLength(4));
     expect(lastAppMessageIn(rig), contains('"status":"completed"'));
     expect(result.actions.map((a) => a.status), everyElement(ActionResultStatus.completed));
@@ -111,7 +111,7 @@ void main() {
     expect(rig.approvals.single, hasLength(4));
     expect(result.end, AgentTurnEnd.completed);
     expect(result.actions.map((a) => a.status), everyElement(ActionResultStatus.completed));
-    expect(result.reply, startsWith('Done: Spent ₹70; Spent ₹150; Spent ₹400; '));
+    expect(result.reply, startsWith('₹70 on Groceries added as an expense. ₹150 on Groceries added as an expense. ₹400 on Transport added as an expense. '));
     final s = await h.snapshot();
     expect(s.transactions, hasLength(3));
     expect(s.subscriptions.single.name, 'Netflix Premium');
@@ -145,7 +145,7 @@ void main() {
     final result = await rig.turn('Spent 70 and 150 on food');
     expect(provider.requests, hasLength(2));
     expect(rig.approvals.single, hasLength(2));
-    expect(result.reply, 'Done: Spent ₹70; Spent ₹150.');
+    expect(result.reply, '₹70 on Food & Dining added as an expense. ₹150 on Food & Dining added as an expense.');
   });
 
   test('a tool call written as JSON text is recovered and handled like a real call', () async {
@@ -160,7 +160,7 @@ void main() {
     final result = await rig.turn('Spent 70 on food');
     expect(provider.requests, hasLength(1));
     expect(rig.approvals.single, hasLength(1));
-    expect(result.reply, 'Done: Spent ₹70.');
+    expect(result.reply, '₹70 on Food & Dining added as an expense.');
 
     const offered = {'queue_actions', 'record_transaction'};
     final named = AgentRunner.recoverToolCallText(
@@ -217,7 +217,7 @@ void main() {
       return {p.first.id};
     });
     expect(result.actions.map((a) => a.status), [ActionResultStatus.completed, ActionResultStatus.declined]);
-    expect(result.reply, 'Done: Spent ₹300. Not done: Spent ₹700.');
+    expect(result.reply, '₹300 on Food & Dining added as an expense. Not done: Spent ₹700.');
     expect((await h.snapshot()).transactions.single.amount, const Money.rupees(300));
   });
 
@@ -402,7 +402,7 @@ void main() {
     expect(result.end, AgentTurnEnd.failed);
     expect(rig.approvals, hasLength(1));
     expect(result.actions.single.status, ActionResultStatus.completed);
-    expect(result.reply, contains('Done:'));
+    expect(result.reply, contains('₹450 on Food & Dining added as an expense.'));
   });
 
   test('tool loop limit forces a final answer without tools', () async {
@@ -426,7 +426,7 @@ void main() {
     final result = await rig.turn('Spent 450 on lunch');
     expect(result.end, AgentTurnEnd.limitReached);
     expect(rig.approvals, hasLength(1));
-    expect(result.reply, contains('Done: Spent'));
+    expect(result.reply, contains('added as an expense.'));
   });
 
   test('stopping during approval ends the turn without writing', () async {

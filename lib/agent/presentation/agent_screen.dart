@@ -179,6 +179,14 @@ class _AgentExperienceState extends ConsumerState<AgentExperience> {
     _send(text);
   }
 
+  /// Leaves the agent and shows a saved record.
+  void _openRecord(String route) {
+    final router = GoRouter.of(context);
+    if (_haptics) HapticFeedback.selectionClick();
+    widget.onClose();
+    router.go(route);
+  }
+
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
@@ -261,7 +269,13 @@ class _AgentExperienceState extends ConsumerState<AgentExperience> {
                           body: !state.available
                               ? const _Unavailable()
                               : conversation
-                              ? _Transcript(state: state, seen: _seen, controller: _scroll, onRetry: _send)
+                              ? _Transcript(
+                                  state: state,
+                                  seen: _seen,
+                                  controller: _scroll,
+                                  onRetry: _send,
+                                  onOpen: _openRecord,
+                                )
                               : _Welcome(examples: _examples, voice: voice.available, onPick: _send),
                         ),
                       ),
@@ -455,9 +469,11 @@ class _GlassIconButton extends StatelessWidget {
 // Stage
 // ---------------------------------------------------------------------------
 
-/// Visualizer, live caption and the content below it. The visualizer is
-/// the same element in every state, so it morphs (hero → compact) instead
-/// of being replaced.
+/// Visualizer, live caption and the content below it. Before a conversation
+/// the visualizer is a fixed hero above the welcome; once it starts, the
+/// visualizer and caption become the first item of the transcript
+/// ([_StageHeader]) so they scroll away with older messages instead of
+/// holding a fixed band of the screen.
 class _Stage extends StatelessWidget {
   const _Stage({
     required this.presence,
@@ -486,32 +502,42 @@ class _Stage extends StatelessWidget {
     final motion = context.motion;
     return LayoutBuilder(
       builder: (context, box) {
-        final compact = conversation || compactForKeyboard;
         final hero = [280.0, box.maxWidth * 0.7, box.maxHeight * 0.4].reduce((a, b) => a < b ? a : b);
         final small = [136.0, box.maxHeight * 0.24].reduce((a, b) => a < b ? a : b);
+        final header = _StageHeader(
+          size: small,
+          presence: presence,
+          level: level,
+          pulse: pulse,
+          caption: caption,
+          onOrbTap: onOrbTap,
+          orbLabel: orbLabel,
+        );
         return Column(
           children: [
-            TweenAnimationBuilder<double>(
-              tween: Tween(end: compact ? 0 : box.maxHeight * 0.04),
-              duration: motion.slow,
-              curve: Curves2.emphasized,
-              builder: (context, gap, _) => SizedBox(height: gap),
-            ),
-            TweenAnimationBuilder<double>(
-              tween: Tween(end: compact ? small : hero),
-              duration: motion.slow,
-              curve: Curves2.emphasized,
-              builder: (context, size, _) => AgentVisualizer(
-                size: size,
-                presence: presence,
-                level: level,
-                pulse: pulse,
-                onTap: onOrbTap,
-                semanticLabel: orbLabel,
+            if (!conversation) ...[
+              TweenAnimationBuilder<double>(
+                tween: Tween(end: compactForKeyboard ? 0 : box.maxHeight * 0.04),
+                duration: motion.slow,
+                curve: Curves2.emphasized,
+                builder: (context, gap, _) => SizedBox(height: gap),
               ),
-            ),
-            _Caption(text: caption, presence: presence),
-            const SizedBox(height: Space.x2),
+              TweenAnimationBuilder<double>(
+                tween: Tween(end: compactForKeyboard ? small : hero),
+                duration: motion.slow,
+                curve: Curves2.emphasized,
+                builder: (context, size, _) => AgentVisualizer(
+                  size: size,
+                  presence: presence,
+                  level: level,
+                  pulse: pulse,
+                  onTap: onOrbTap,
+                  semanticLabel: orbLabel,
+                ),
+              ),
+              _Caption(text: caption, presence: presence),
+              const SizedBox(height: Space.x2),
+            ],
             Expanded(
               child: AnimatedSwitcher(
                 duration: motion.slow,
@@ -524,7 +550,10 @@ class _Stage extends StatelessWidget {
                     child: child,
                   ),
                 ),
-                child: KeyedSubtree(key: ValueKey(conversation), child: body),
+                child: KeyedSubtree(
+                  key: ValueKey(conversation),
+                  child: _StageHeaderScope(header: header, child: body),
+                ),
               ),
             ),
           ],
@@ -532,6 +561,59 @@ class _Stage extends StatelessWidget {
       },
     );
   }
+}
+
+/// Compact visualizer and live caption, shown at the top of the transcript.
+class _StageHeader extends StatelessWidget {
+  const _StageHeader({
+    required this.size,
+    required this.presence,
+    required this.level,
+    required this.pulse,
+    required this.caption,
+    required this.onOrbTap,
+    required this.orbLabel,
+  });
+
+  final double size;
+  final AgentPresence presence;
+  final double level;
+  final int pulse;
+  final String caption;
+  final VoidCallback? onOrbTap;
+  final String orbLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Center(
+          child: AgentVisualizer(
+            size: size,
+            presence: presence,
+            level: level,
+            pulse: pulse,
+            onTap: onOrbTap,
+            semanticLabel: orbLabel,
+          ),
+        ),
+        _Caption(text: caption, presence: presence),
+      ],
+    );
+  }
+}
+
+/// Hands the stage header down to the transcript, which lists it first.
+class _StageHeaderScope extends InheritedWidget {
+  const _StageHeaderScope({required this.header, required super.child});
+
+  final Widget header;
+
+  static Widget? of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_StageHeaderScope>()?.header;
+
+  @override
+  bool updateShouldNotify(_StageHeaderScope old) => true;
 }
 
 class _Caption extends StatelessWidget {
@@ -731,16 +813,26 @@ class _Unavailable extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _Transcript extends ConsumerWidget {
-  const _Transcript({required this.state, required this.seen, required this.controller, required this.onRetry});
+  const _Transcript({
+    required this.state,
+    required this.seen,
+    required this.controller,
+    required this.onRetry,
+    required this.onOpen,
+  });
 
   final AgentViewState state;
   final Set<String> seen;
   final ScrollController controller;
   final ValueChanged<String> onRetry;
 
+  /// Opens a saved record's screen.
+  final ValueChanged<String> onOpen;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(agentControllerProvider.notifier);
+    final header = _StageHeaderScope.of(context);
     return ShaderMask(
       blendMode: BlendMode.dstIn,
       // Older lines dissolve into the stage at the top.
@@ -752,8 +844,9 @@ class _Transcript extends ConsumerWidget {
       ).createShader(r),
       child: ListView(
         controller: controller,
-        padding: const EdgeInsets.fromLTRB(Space.gutter, Space.x4, Space.gutter, Space.x4),
+        padding: const EdgeInsets.fromLTRB(Space.gutter, 0, Space.gutter, Space.x4),
         children: [
+          if (header != null) ...[header, const SizedBox(height: Space.x4)],
           for (final e in state.entries) ...[
             switch (e) {
               UserChatEntry() => _UserLine(key: ValueKey(e.id), text: e.text),
@@ -761,6 +854,7 @@ class _Transcript extends ConsumerWidget {
                 key: ValueKey(e.id),
                 entry: e,
                 reveal: seen.add(e.id),
+                onOpen: onOpen,
                 onRetry: e.retryText != null && !state.busy && e == state.entries.last
                     ? () => onRetry(e.retryText!)
                     : null,
@@ -814,10 +908,11 @@ class _UserLine extends StatelessWidget {
 
 /// The agent's answer: a luminous glass card with what it did.
 class _AgentCard extends StatelessWidget {
-  const _AgentCard({super.key, required this.entry, required this.reveal, this.onRetry});
+  const _AgentCard({super.key, required this.entry, required this.reveal, required this.onOpen, this.onRetry});
 
   final AgentChatEntry entry;
   final bool reveal;
+  final ValueChanged<String> onOpen;
   final VoidCallback? onRetry;
 
   @override
@@ -891,7 +986,7 @@ class _AgentCard extends StatelessWidget {
               ),
               if (entry.actions.isNotEmpty) ...[
                 const SizedBox(height: Space.x3),
-                OutcomeSummary(actions: entry.actions),
+                OutcomeSummary(actions: entry.actions, onOpen: onOpen),
               ],
               if (onRetry != null) ...[
                 const SizedBox(height: Space.x3),
@@ -1082,7 +1177,7 @@ class _CommandDock extends StatelessWidget {
       ),
       VoicePhase.idle => Row(
         key: const ValueKey('compose'),
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(width: Space.x2),
           Expanded(

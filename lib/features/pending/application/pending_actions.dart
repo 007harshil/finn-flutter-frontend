@@ -9,6 +9,7 @@ import '../../categories/domain/category.dart';
 import '../../transactions/application/transaction_actions.dart';
 import '../../transactions/domain/transaction.dart';
 import '../domain/pending_payment.dart';
+import '../../settings/application/tracking_start.dart';
 
 class PendingInput extends ActionInput {
   const PendingInput({
@@ -664,6 +665,7 @@ class SettlePendingAction extends FinancialAction<SettlePendingInput, PendingSet
         note: 'Settlement · ${v.payment.purpose}',
       );
       await env.repos.transactions.save(tx);
+      await extendTrackingStart(env, tx.date);
     }
     final settlement = PendingSettlement(
       id: env.ids.next('set'),

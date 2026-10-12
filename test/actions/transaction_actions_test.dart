@@ -45,6 +45,19 @@ void main() {
       expect(s.monthSummary(s.currentMonth).expense, const Money.rupees(1200));
     });
 
+    test('an entry dated before tracking start moves the start back so it counts in cash', () async {
+      final profile = h.store.profile.current!;
+      await h.store.profile.set(profile.copyWith(openingDate: DateTime(2026, 10, 9)));
+      await h.run(const CreateTransactionAction(), expense(700, date: DateTime(2026, 10, 5)));
+      final s = await h.snapshot();
+      expect(s.profile!.openingDate, DateTime(2026, 10, 5));
+      expect(s.profile!.openingBalance, harnessOpening);
+      expect(s.balance.cash, harnessOpening - const Money.rupees(700));
+      // A later entry leaves the start alone.
+      await h.run(const CreateTransactionAction(), expense(100, date: DateTime(2026, 10, 9)));
+      expect((await h.snapshot()).profile!.openingDate, DateTime(2026, 10, 5));
+    });
+
     test('dates are stored as calendar dates', () async {
       final t = await h.run(
         const CreateTransactionAction(),
