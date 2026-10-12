@@ -13,13 +13,11 @@ import 'tool_groups.dart';
 /// action, add one entry here; schema, validation, preview and execution
 /// come from the action itself.
 const Map<String, ({String actionId, String? guidance})> agentActionTools = {
-  'record_transaction': (
-    actionId: 'transactions.create',
-    guidance: null,
-  ),
+  'record_transaction': (actionId: 'transactions.create', guidance: null),
   'edit_transaction': (
     actionId: 'transactions.update',
-    guidance: 'Find the transaction with search_transactions first and send every field (changed and unchanged) '
+    guidance:
+        'Find the transaction with search_transactions first and send every field (changed and unchanged) '
         'with its version as expectedVersion. Linked transactions cannot be edited.',
   ),
   'create_category': (actionId: 'categories.create', guidance: 'Only when no existing category fits.'),
@@ -29,15 +27,9 @@ const Map<String, ({String actionId, String? guidance})> agentActionTools = {
     guidance: 'Send all fields with the budget version from find_records as expectedVersion.',
   ),
   'pause_or_resume_budget': (actionId: 'budgets.setPaused', guidance: null),
-  'add_pending_payment': (
-    actionId: 'pending.create',
-    guidance: null,
-  ),
+  'add_pending_payment': (actionId: 'pending.create', guidance: null),
   'split_bill': (actionId: 'pending.split', guidance: null),
-  'settle_pending_payment': (
-    actionId: 'pending.settle',
-    guidance: 'Get pendingId from find_records(kind: pending).',
-  ),
+  'settle_pending_payment': (actionId: 'pending.settle', guidance: 'Get pendingId from find_records(kind: pending).'),
   'write_off_pending_payment': (actionId: 'pending.cancel', guidance: 'Only when the user says it will not be paid.'),
   'record_loan_payment': (actionId: 'loans.recordPayment', guidance: 'Resolve loanId with find_records(kind: loans).'),
   'create_loan': (actionId: 'loans.create', guidance: null),
@@ -68,14 +60,18 @@ final Map<String, Map<String, Map<String, Object?>>> _fieldOverrides = {
       'description': 'The other people (not the user), 2 or more',
       'minItems': 1,
       'maxItems': 20,
-      'items': JsonSchema.object({
-        'counterparty': JsonSchema.string('Person name', maxLength: 80),
-        'value': {
-          'type': 'number',
-          'description': 'Their value for exact (rupees), percent (%), shares (parts) or adjustment (rupees ±); '
-              'omit for equally',
+      'items': JsonSchema.object(
+        {
+          'counterparty': JsonSchema.string('Person name', maxLength: 80),
+          'value': {
+            'type': 'number',
+            'description':
+                'Their value for exact (rupees), percent (%), shares (parts) or adjustment (rupees ±); '
+                'omit for equally',
+          },
         },
-      }, required: ['counterparty']),
+        required: ['counterparty'],
+      ),
     },
     'myValue': {'type': 'number', 'description': 'Your own value when includeMe, same unit as people[].value'},
   },
@@ -102,13 +98,15 @@ class AgentToolbox {
     for (final entry in agentActionTools.entries) {
       final action = registry.lookup(entry.value.actionId);
       if (action == null) continue;
-      actionTools.add(ActionTool(
-        name: entry.key,
-        action: action,
-        guidance: entry.value.guidance,
-        fieldOverrides: _fieldOverrides[entry.value.actionId] ?? const {},
-        excludedFields: _excludedFields[entry.value.actionId] ?? const {},
-      ));
+      actionTools.add(
+        ActionTool(
+          name: entry.key,
+          action: action,
+          guidance: entry.value.guidance,
+          fieldOverrides: _fieldOverrides[entry.value.actionId] ?? const {},
+          excludedFields: _excludedFields[entry.value.actionId] ?? const {},
+        ),
+      );
     }
     return AgentToolbox([
       const FinancialOverviewTool(),

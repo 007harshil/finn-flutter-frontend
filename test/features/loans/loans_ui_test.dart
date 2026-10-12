@@ -27,24 +27,28 @@ Future<ActionOutcome<O>> _run<I extends ActionInput, O>(
   final dispatcher = container.read(actionDispatcherProvider);
   var outcome = await dispatcher.dispatch(action, input, idempotencyKey: key);
   if (outcome is ActionNeedsConfirmation<O>) {
-    outcome = await dispatcher.dispatch(action, input,
-        idempotencyKey: key, confirmation: ActionConfirmation(outcome.preview.fingerprint));
+    outcome = await dispatcher.dispatch(
+      action,
+      input,
+      idempotencyKey: key,
+      confirmation: ActionConfirmation(outcome.preview.fingerprint),
+    );
   }
   return outcome;
 }
 
 LoanInput _input({LoanStructure structure = LoanStructure.amortizing, int? tenure = 12}) => LoanInput(
-      name: 'Test',
-      counterparty: 'Bank',
-      direction: LoanDirection.borrowed,
-      structure: structure,
-      principal: const Money.rupees(100000),
-      rate: const InterestRate(1200),
-      startDate: DateTime(2026, 1, 1),
-      firstDueDate: DateTime(2026, 2, 1),
-      frequency: Frequency.monthly,
-      tenureInstallments: tenure,
-    );
+  name: 'Test',
+  counterparty: 'Bank',
+  direction: LoanDirection.borrowed,
+  structure: structure,
+  principal: const Money.rupees(100000),
+  rate: const InterestRate(1200),
+  startDate: DateTime(2026, 1, 1),
+  firstDueDate: DateTime(2026, 2, 1),
+  frequency: Frequency.monthly,
+  tenureInstallments: tenure,
+);
 
 void main() {
   late TestEnv env;
@@ -111,7 +115,9 @@ void main() {
     expect(after.isClosed, isTrue);
     expect(after.loan.status, LoanStatus.closed);
     expect(snap.transactions.length, txBefore + 1);
-    final repayments = snap.linkedTransactions(before.loan.id).where((t) => t.origin == TransactionOrigin.loanRepayment);
+    final repayments = snap
+        .linkedTransactions(before.loan.id)
+        .where((t) => t.origin == TransactionOrigin.loanRepayment);
     expect(repayments.length, repaymentsBefore + 1);
     expect(repayments.every((t) => t.type == TransactionType.income), isTrue);
   });

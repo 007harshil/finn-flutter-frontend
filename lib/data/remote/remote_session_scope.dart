@@ -18,13 +18,13 @@ import 'sync_engine.dart';
 
 /// The calculation-relevant preferences the server also uses.
 JsonMap serverPreferencesOf(AppSettings s) => {
-      'monthStartDay': s.monthStartDay,
-      'emiReminderDays': s.emiReminderDays,
-      'subscriptionReminderDays': s.subscriptionReminderDays,
-      'lowEmergencyCoverageMonths': s.lowEmergencyCoverageMonths,
-      'defaultBudgetWarningBps': s.defaultBudgetWarningBps,
-      'disabledAlertTypes': (s.disabledAlertTypes.map((t) => t.name).toList()..sort()),
-    };
+  'monthStartDay': s.monthStartDay,
+  'emiReminderDays': s.emiReminderDays,
+  'subscriptionReminderDays': s.subscriptionReminderDays,
+  'lowEmergencyCoverageMonths': s.lowEmergencyCoverageMonths,
+  'defaultBudgetWarningBps': s.defaultBudgetWarningBps,
+  'disabledAlertTypes': (s.disabledAlertTypes.map((t) => t.name).toList()..sort()),
+};
 
 /// [s] with the server's preferences applied (unknown fields ignored).
 AppSettings withServerPreferences(AppSettings s, JsonMap p) {
@@ -149,7 +149,8 @@ class _RemoteSessionScopeState extends ConsumerState<RemoteSessionScope> with Wi
     final upload = await showFinnConfirm(
       ctx,
       title: 'Upload the data on this device?',
-      message: 'This device has records you created before signing in. You can upload them once to your '
+      message:
+          'This device has records you created before signing in. You can upload them once to your '
           'FiNN account, or start from what is already in your account. Records on this device are not deleted.',
       confirmLabel: 'Upload my data',
       cancelLabel: 'Start from my account',
@@ -161,8 +162,13 @@ class _RemoteSessionScopeState extends ConsumerState<RemoteSessionScope> with Wi
       _toast((c) => FinnToast.success(c, 'Your data was uploaded'));
     } on AppFailure catch (f) {
       if (f.code == FailureCode.conflict) {
-        _toast((c) => FinnToast.info(c, 'Your account already has records',
-            subtitle: 'Nothing was uploaded. Your account’s data is shown.'));
+        _toast(
+          (c) => FinnToast.info(
+            c,
+            'Your account already has records',
+            subtitle: 'Nothing was uploaded. Your account’s data is shown.',
+          ),
+        );
       } else {
         // Offer again next time (nothing was written: the import is atomic).
         await _backend.prefs.remove(_offeredKey(userId));
@@ -233,8 +239,13 @@ class _RemoteSessionScopeState extends ConsumerState<RemoteSessionScope> with Wi
       debugPrint('Could not save preferences: $e');
       // Keep the app consistent with the server's calculations.
       _applyServerPreferences();
-      _toast((c) => FinnToast.error(c, 'Could not save this setting',
-          subtitle: e is AppFailure ? e.message : 'Please try again.'));
+      _toast(
+        (c) => FinnToast.error(
+          c,
+          'Could not save this setting',
+          subtitle: e is AppFailure ? e.message : 'Please try again.',
+        ),
+      );
     }
   }
 

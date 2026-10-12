@@ -52,15 +52,14 @@ class VoiceInputState {
     Duration? elapsed,
     VoiceTranscript? transcript,
     VoiceTranscript? error,
-  }) =>
-      VoiceInputState(
-        available: available,
-        phase: phase ?? this.phase,
-        levels: levels ?? this.levels,
-        elapsed: elapsed ?? this.elapsed,
-        transcript: transcript ?? this.transcript,
-        error: error ?? this.error,
-      );
+  }) => VoiceInputState(
+    available: available,
+    phase: phase ?? this.phase,
+    levels: levels ?? this.levels,
+    elapsed: elapsed ?? this.elapsed,
+    transcript: transcript ?? this.transcript,
+    error: error ?? this.error,
+  );
 }
 
 /// Limits for one voice request.

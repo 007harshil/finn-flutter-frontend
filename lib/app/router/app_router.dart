@@ -66,16 +66,16 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.onDispose(signedIn.dispose);
 
   GoRoute sheet(String path, Widget Function(GoRouterState s) build) => GoRoute(
-        path: path,
-        parentNavigatorKey: rootNavigatorKey,
-        pageBuilder: (context, state) => SheetPage<Object?>(key: state.pageKey, child: build(state)),
-      );
+    path: path,
+    parentNavigatorKey: rootNavigatorKey,
+    pageBuilder: (context, state) => SheetPage<Object?>(key: state.pageKey, child: build(state)),
+  );
 
   GoRoute page(String path, Widget Function(GoRouterState s) build, {List<RouteBase> routes = const []}) => GoRoute(
-        path: path,
-        pageBuilder: (context, state) => FadeScalePage<Object?>(key: state.pageKey, child: build(state)),
-        routes: routes,
-      );
+    path: path,
+    pageBuilder: (context, state) => FadeScalePage<Object?>(key: state.pageKey, child: build(state)),
+    routes: routes,
+  );
 
   TransactionType? typeParam(GoRouterState s) =>
       TransactionType.values.where((t) => t.name == s.uri.queryParameters['type']).firstOrNull;
@@ -115,110 +115,174 @@ final routerProvider = Provider<GoRouter>((ref) {
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AppShell(shell: shell),
         branches: [
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: AppRoutes.home,
-              builder: (_, _) => const HomeScreen(),
-              routes: [
-                page('alerts', (_) => const AlertsScreen()),
-                page('timeline', (_) => const TimelineScreen()),
-              ],
-            ),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: AppRoutes.transactions,
-              builder: (_, s) => TransactionsScreen(
-                initialType: typeParam(s),
-                initialMonth: MonthKey.tryParse(s.uri.queryParameters['month']),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.home,
+                builder: (_, _) => const HomeScreen(),
+                routes: [page('alerts', (_) => const AlertsScreen()), page('timeline', (_) => const TimelineScreen())],
               ),
-              routes: [
-                sheet('new', (s) => TransactionFormSheet(initialType: typeParam(s) ?? TransactionType.expense)),
-                page(':txId', (s) => TransactionDetailScreen(id: s.pathParameters['txId']!), routes: [
-                  sheet('edit', (s) => TransactionFormSheet(transactionId: s.pathParameters['txId'])),
-                ]),
-              ],
-            ),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: AppRoutes.budgets,
-              builder: (_, _) => const BudgetsScreen(),
-              routes: [
-                sheet('new', (_) => const BudgetFormSheet()),
-                page(':budgetId', (s) => BudgetDetailScreen(
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.transactions,
+                builder: (_, s) => TransactionsScreen(
+                  initialType: typeParam(s),
+                  initialMonth: MonthKey.tryParse(s.uri.queryParameters['month']),
+                ),
+                routes: [
+                  sheet('new', (s) => TransactionFormSheet(initialType: typeParam(s) ?? TransactionType.expense)),
+                  page(
+                    ':txId',
+                    (s) => TransactionDetailScreen(id: s.pathParameters['txId']!),
+                    routes: [sheet('edit', (s) => TransactionFormSheet(transactionId: s.pathParameters['txId']))],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.budgets,
+                builder: (_, _) => const BudgetsScreen(),
+                routes: [
+                  sheet('new', (_) => const BudgetFormSheet()),
+                  page(
+                    ':budgetId',
+                    (s) => BudgetDetailScreen(
                       id: s.pathParameters['budgetId']!,
                       month: MonthKey.tryParse(s.uri.queryParameters['month']),
-                    ), routes: [
-                  sheet('edit', (s) => BudgetFormSheet(budgetId: s.pathParameters['budgetId'])),
-                ]),
-              ],
-            ),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: AppRoutes.goals,
-              builder: (_, _) => const GoalsScreen(),
-              routes: [
-                sheet('new', (_) => const GoalFormSheet()),
-                page('emergency-fund', (_) => const EmergencyFundScreen(), routes: [
-                  sheet('plan', (_) => const EmergencyPlanSheet()),
-                  sheet('move', (s) => EmergencyMovementSheet(withdraw: s.uri.queryParameters['kind'] == 'withdraw')),
-                ]),
-                page(':goalId', (s) => GoalDetailScreen(id: s.pathParameters['goalId']!), routes: [
-                  sheet('edit', (s) => GoalFormSheet(goalId: s.pathParameters['goalId'])),
-                  sheet('move', (s) => GoalMovementSheet(
-                        goalId: s.pathParameters['goalId']!,
-                        withdraw: s.uri.queryParameters['kind'] == 'withdraw',
-                      )),
-                ]),
-              ],
-            ),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: AppRoutes.more,
-              builder: (_, _) => const MoreScreen(),
-              routes: [
-                page('account', (_) => const ProfileScreen()),
-                page('loans', (_) => const LoansScreen(), routes: [
-                  sheet('new', (_) => const LoanFormSheet()),
-                  page(':loanId', (s) => LoanDetailScreen(id: s.pathParameters['loanId']!), routes: [
-                    sheet('edit', (s) => LoanFormSheet(loanId: s.pathParameters['loanId'])),
-                    sheet('pay', (s) => LoanPaymentSheet(loanId: s.pathParameters['loanId']!)),
-                  ]),
-                ]),
-                page('subscriptions', (_) => const SubscriptionsScreen(), routes: [
-                  sheet('new', (_) => const SubscriptionFormSheet()),
-                  page(':subId', (s) => SubscriptionDetailScreen(id: s.pathParameters['subId']!), routes: [
-                    sheet('edit', (s) => SubscriptionFormSheet(subscriptionId: s.pathParameters['subId'])),
-                  ]),
-                ]),
-                page('pending', (_) => const PendingScreen(), routes: [
-                  sheet('new', (s) => PendingFormSheet(owedToMe: s.uri.queryParameters['direction'] == 'owedToMe')),
-                  page(':pendingId', (s) => PendingDetailScreen(id: s.pathParameters['pendingId']!), routes: [
-                    sheet('edit', (s) => PendingFormSheet(pendingId: s.pathParameters['pendingId'])),
-                    sheet('settle', (s) => SettlePendingSheet(pendingId: s.pathParameters['pendingId']!)),
-                  ]),
-                ]),
-                page('analytics', (_) => const AnalyticsScreen()),
-                page('net-worth', (_) => const NetWorthScreen(), routes: [
-                  sheet('assets/new', (_) => const AssetFormSheet()),
-                  sheet('assets/:assetId/edit', (s) => AssetFormSheet(assetId: s.pathParameters['assetId'])),
-                ]),
-                page('settings', (_) => const SettingsScreen(), routes: [
-                  sheet('profile', (_) => const ProfileSheet()),
-                  page('categories', (_) => const CategoriesScreen(), routes: [
-                    sheet('new', (s) => CategoryFormSheet(initialType: typeParam(s) ?? TransactionType.expense)),
-                    sheet(':categoryId/edit', (s) => CategoryFormSheet(categoryId: s.pathParameters['categoryId'])),
-                  ]),
-                  page('export', (_) => const ExportScreen()),
-                  page('notifications', (_) => const NotificationSettingsScreen()),
-                  page('activity', (_) => const ActivityLogScreen()),
-                ]),
-              ],
-            ),
-          ]),
+                    ),
+                    routes: [sheet('edit', (s) => BudgetFormSheet(budgetId: s.pathParameters['budgetId']))],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.goals,
+                builder: (_, _) => const GoalsScreen(),
+                routes: [
+                  sheet('new', (_) => const GoalFormSheet()),
+                  page(
+                    'emergency-fund',
+                    (_) => const EmergencyFundScreen(),
+                    routes: [
+                      sheet('plan', (_) => const EmergencyPlanSheet()),
+                      sheet(
+                        'move',
+                        (s) => EmergencyMovementSheet(withdraw: s.uri.queryParameters['kind'] == 'withdraw'),
+                      ),
+                    ],
+                  ),
+                  page(
+                    ':goalId',
+                    (s) => GoalDetailScreen(id: s.pathParameters['goalId']!),
+                    routes: [
+                      sheet('edit', (s) => GoalFormSheet(goalId: s.pathParameters['goalId'])),
+                      sheet(
+                        'move',
+                        (s) => GoalMovementSheet(
+                          goalId: s.pathParameters['goalId']!,
+                          withdraw: s.uri.queryParameters['kind'] == 'withdraw',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.more,
+                builder: (_, _) => const MoreScreen(),
+                routes: [
+                  page('account', (_) => const ProfileScreen()),
+                  page(
+                    'loans',
+                    (_) => const LoansScreen(),
+                    routes: [
+                      sheet('new', (_) => const LoanFormSheet()),
+                      page(
+                        ':loanId',
+                        (s) => LoanDetailScreen(id: s.pathParameters['loanId']!),
+                        routes: [
+                          sheet('edit', (s) => LoanFormSheet(loanId: s.pathParameters['loanId'])),
+                          sheet('pay', (s) => LoanPaymentSheet(loanId: s.pathParameters['loanId']!)),
+                        ],
+                      ),
+                    ],
+                  ),
+                  page(
+                    'subscriptions',
+                    (_) => const SubscriptionsScreen(),
+                    routes: [
+                      sheet('new', (_) => const SubscriptionFormSheet()),
+                      page(
+                        ':subId',
+                        (s) => SubscriptionDetailScreen(id: s.pathParameters['subId']!),
+                        routes: [
+                          sheet('edit', (s) => SubscriptionFormSheet(subscriptionId: s.pathParameters['subId'])),
+                        ],
+                      ),
+                    ],
+                  ),
+                  page(
+                    'pending',
+                    (_) => const PendingScreen(),
+                    routes: [
+                      sheet('new', (s) => PendingFormSheet(owedToMe: s.uri.queryParameters['direction'] == 'owedToMe')),
+                      page(
+                        ':pendingId',
+                        (s) => PendingDetailScreen(id: s.pathParameters['pendingId']!),
+                        routes: [
+                          sheet('edit', (s) => PendingFormSheet(pendingId: s.pathParameters['pendingId'])),
+                          sheet('settle', (s) => SettlePendingSheet(pendingId: s.pathParameters['pendingId']!)),
+                        ],
+                      ),
+                    ],
+                  ),
+                  page('analytics', (_) => const AnalyticsScreen()),
+                  page(
+                    'net-worth',
+                    (_) => const NetWorthScreen(),
+                    routes: [
+                      sheet('assets/new', (_) => const AssetFormSheet()),
+                      sheet('assets/:assetId/edit', (s) => AssetFormSheet(assetId: s.pathParameters['assetId'])),
+                    ],
+                  ),
+                  page(
+                    'settings',
+                    (_) => const SettingsScreen(),
+                    routes: [
+                      sheet('profile', (_) => const ProfileSheet()),
+                      page(
+                        'categories',
+                        (_) => const CategoriesScreen(),
+                        routes: [
+                          sheet('new', (s) => CategoryFormSheet(initialType: typeParam(s) ?? TransactionType.expense)),
+                          sheet(
+                            ':categoryId/edit',
+                            (s) => CategoryFormSheet(categoryId: s.pathParameters['categoryId']),
+                          ),
+                        ],
+                      ),
+                      page('export', (_) => const ExportScreen()),
+                      page('notifications', (_) => const NotificationSettingsScreen()),
+                      page('activity', (_) => const ActivityLogScreen()),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
         ],
       ),
     ],
@@ -230,16 +294,16 @@ class _NotFoundScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('404', style: Theme.of(context).textTheme.displaySmall),
-              const SizedBox(height: 8),
-              const Text('This page does not exist.'),
-              TextButton(onPressed: () => context.go(AppRoutes.home), child: const Text('Return to Home')),
-            ],
-          ),
-        ),
-      );
+    body: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('404', style: Theme.of(context).textTheme.displaySmall),
+          const SizedBox(height: 8),
+          const Text('This page does not exist.'),
+          TextButton(onPressed: () => context.go(AppRoutes.home), child: const Text('Return to Home')),
+        ],
+      ),
+    ),
+  );
 }

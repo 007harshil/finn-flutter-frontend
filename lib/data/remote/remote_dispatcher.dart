@@ -19,7 +19,8 @@ JsonMap _map(Object? json) {
   throw FormatException('Expected a record, got ${json.runtimeType}');
 }
 
-ActionResultDecoder _record<T>(T Function(JsonMap) decode) => (json) => decode(_map(json));
+ActionResultDecoder _record<T>(T Function(JsonMap) decode) =>
+    (json) => decode(_map(json));
 
 /// Output decoders keyed by action id. Every action's `O` type
 /// (`FinancialAction<I, O>`) is a record DTO, a list of them
@@ -42,8 +43,11 @@ final Map<String, ActionResultDecoder> actionResultDecoders = {
   for (final id in ['loans.create', 'loans.update', 'loans.delete']) id: _record(LoanDto.fromJson),
   'loans.recordPayment': _record(LoanPaymentDto.fromJson),
   for (final id in [
-    'subscriptions.create', 'subscriptions.update', 'subscriptions.setStatus',
-    'subscriptions.skipCycle', 'subscriptions.delete',
+    'subscriptions.create',
+    'subscriptions.update',
+    'subscriptions.setStatus',
+    'subscriptions.skipCycle',
+    'subscriptions.delete',
   ])
     id: _record(SubscriptionDto.fromJson),
   for (final id in ['goals.create', 'goals.update', 'goals.toggleArchive', 'goals.delete'])
@@ -67,21 +71,17 @@ final Map<String, ActionResultDecoder> actionResultDecoders = {
 
 /// Decodes the server's preview JSON.
 ActionPreview actionPreviewFromJson(JsonMap j) => ActionPreview(
-      actionId: j['actionId'] as String? ?? '',
-      title: j['title'] as String? ?? '',
-      summary: j['summary'] as String? ?? '',
-      lines: [
-        for (final l in (j['lines'] as List? ?? const []).whereType<Map>())
-          PreviewLine(
-            l['label']?.toString() ?? '',
-            l['value']?.toString() ?? '',
-            emphasis: l['emphasis'] == true,
-          ),
-      ],
-      warnings: [for (final w in (j['warnings'] as List? ?? const [])) w.toString()],
-      fingerprint: j['fingerprint'] as String? ?? '',
-      requiresConfirmation: j['requiresConfirmation'] == true,
-    );
+  actionId: j['actionId'] as String? ?? '',
+  title: j['title'] as String? ?? '',
+  summary: j['summary'] as String? ?? '',
+  lines: [
+    for (final l in (j['lines'] as List? ?? const []).whereType<Map>())
+      PreviewLine(l['label']?.toString() ?? '', l['value']?.toString() ?? '', emphasis: l['emphasis'] == true),
+  ],
+  warnings: [for (final w in (j['warnings'] as List? ?? const [])) w.toString()],
+  fingerprint: j['fingerprint'] as String? ?? '',
+  requiresConfirmation: j['requiresConfirmation'] == true,
+);
 
 /// [OperationDispatcher] backed by the FiNN API. Validation, confirmation
 /// fingerprints, idempotency, policy and audit are enforced by the server;
@@ -112,10 +112,10 @@ class RemoteOperationDispatcher extends OperationDispatcher {
     final decision = policy.check(action.descriptor, channel);
     if (decision != null) return Result.err(decision);
     try {
-      final data = await api.post('/actions/${action.descriptor.id}/preview', body: {
-        'input': input.toJson(),
-        'channel': channel.name,
-      });
+      final data = await api.post(
+        '/actions/${action.descriptor.id}/preview',
+        body: {'input': input.toJson(), 'channel': channel.name},
+      );
       final preview = data is Map ? data['preview'] : null;
       if (preview is! Map) throw const FormatException('Missing preview');
       return Result.ok(actionPreviewFromJson(Map<String, Object?>.from(preview)));
@@ -123,7 +123,9 @@ class RemoteOperationDispatcher extends OperationDispatcher {
       return Result.err(f);
     } catch (e) {
       debugPrint('Preview ${action.descriptor.id} failed: $e');
-      return Result.err(const AppFailure(FailureCode.unknown, 'Something went wrong. Please try again.', retryable: true));
+      return Result.err(
+        const AppFailure(FailureCode.unknown, 'Something went wrong. Please try again.', retryable: true),
+      );
     }
   }
 
@@ -170,12 +172,24 @@ class RemoteOperationDispatcher extends OperationDispatcher {
             value = _decode<O>(id, data['result']);
           } catch (e) {
             debugPrint('Could not decode the result of $id: $e');
-            return const ActionRejected(AppFailure(FailureCode.unknown,
-                'Your change was saved, but the app could not read the reply. It will appear after the next refresh.'));
+            return const ActionRejected(
+              AppFailure(
+                FailureCode.unknown,
+                'Your change was saved, but the app could not read the reply. It will appear after the next refresh.',
+              ),
+            );
           }
           return ActionCompleted(
             value,
-            preview ?? ActionPreview(actionId: id, title: '', summary: '', lines: const [], fingerprint: '', requiresConfirmation: false),
+            preview ??
+                ActionPreview(
+                  actionId: id,
+                  title: '',
+                  summary: '',
+                  lines: const [],
+                  fingerprint: '',
+                  requiresConfirmation: false,
+                ),
             replayed: data['replayed'] == true,
           );
         default:
@@ -185,8 +199,9 @@ class RemoteOperationDispatcher extends OperationDispatcher {
       return ActionRejected(f);
     } catch (e, st) {
       debugPrint('Action $id failed: $e\n$st');
-      return ActionRejected(AppFailure(FailureCode.unknown, 'Something went wrong. Please try again.',
-          cause: e, retryable: true));
+      return ActionRejected(
+        AppFailure(FailureCode.unknown, 'Something went wrong. Please try again.', cause: e, retryable: true),
+      );
     } finally {
       _inFlight.remove(idempotencyKey);
     }

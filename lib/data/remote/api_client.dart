@@ -42,8 +42,7 @@ const sessionExpiredMessage = 'Your session has expired. Please sign in again.';
 /// * Timeouts, 5xx without an error body and network errors become
 ///   [FailureCode.unavailable] (retryable).
 class ApiClient {
-  ApiClient({required this.config, required this.auth, http.Client? httpClient})
-      : _http = httpClient ?? http.Client();
+  ApiClient({required this.config, required this.auth, http.Client? httpClient}) : _http = httpClient ?? http.Client();
 
   final ApiConfig config;
   final ApiAuth auth;
@@ -119,11 +118,7 @@ class ApiClient {
     if (token == null || token.isEmpty) return const _Unauthenticated();
 
     final request = http.Request(method, _uri(path, query))
-      ..headers.addAll({
-        'accept': 'application/json',
-        'authorization': 'Bearer $token',
-        ...?headers,
-      });
+      ..headers.addAll({'accept': 'application/json', 'authorization': 'Bearer $token', ...?headers});
     if (body != null) {
       request.headers['content-type'] = 'application/json; charset=utf-8';
       request.body = jsonEncode(body);
@@ -134,11 +129,18 @@ class ApiClient {
       final streamed = await _http.send(request).timeout(config.timeout);
       response = await http.Response.fromStream(streamed).timeout(config.timeout);
     } on TimeoutException {
-      throw const AppFailure(FailureCode.unavailable,
-          'FiNN is taking too long to respond. Please try again.', retryable: true);
+      throw const AppFailure(
+        FailureCode.unavailable,
+        'FiNN is taking too long to respond. Please try again.',
+        retryable: true,
+      );
     } catch (e) {
-      throw AppFailure(FailureCode.unavailable, 'Could not reach FiNN. Check your connection and try again.',
-          retryable: true, cause: e);
+      throw AppFailure(
+        FailureCode.unavailable,
+        'Could not reach FiNN. Check your connection and try again.',
+        retryable: true,
+        cause: e,
+      );
     }
 
     final decoded = _decodeBody(response);
@@ -193,8 +195,11 @@ class ApiClient {
     // No error envelope (proxy, gateway, crash page).
     if (status == 401) return null;
     if (status >= 500 || status == 408 || status == 429) {
-      return const AppFailure(FailureCode.unavailable, 'FiNN is unavailable right now. Please try again.',
-          retryable: true);
+      return const AppFailure(
+        FailureCode.unavailable,
+        'FiNN is unavailable right now. Please try again.',
+        retryable: true,
+      );
     }
     final code = switch (status) {
       403 => FailureCode.notPermitted,
@@ -207,14 +212,14 @@ class ApiClient {
   }
 
   static String _defaultMessage(FailureCode code) => switch (code) {
-        FailureCode.validation => 'Please check the details and try again.',
-        FailureCode.notFound => 'This record no longer exists.',
-        FailureCode.conflict => 'This conflicts with another change.',
-        FailureCode.staleData => 'This record changed since you last saw it. Review it and try again.',
-        FailureCode.notPermitted => 'You are not allowed to do that.',
-        FailureCode.unavailable => 'FiNN is unavailable right now. Please try again.',
-        _ => 'Something went wrong. Nothing was changed.',
-      };
+    FailureCode.validation => 'Please check the details and try again.',
+    FailureCode.notFound => 'This record no longer exists.',
+    FailureCode.conflict => 'This conflicts with another change.',
+    FailureCode.staleData => 'This record changed since you last saw it. Review it and try again.',
+    FailureCode.notPermitted => 'You are not allowed to do that.',
+    FailureCode.unavailable => 'FiNN is unavailable right now. Please try again.',
+    _ => 'Something went wrong. Nothing was changed.',
+  };
 
   void close() => _http.close();
 }

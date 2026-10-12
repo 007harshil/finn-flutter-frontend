@@ -53,7 +53,12 @@ class SettingsScreen extends ConsumerWidget {
 
 String _ordinal(int n) {
   if (n >= 11 && n <= 13) return '${n}th';
-  return switch (n % 10) { 1 => '${n}st', 2 => '${n}nd', 3 => '${n}rd', _ => '${n}th' };
+  return switch (n % 10) {
+    1 => '${n}st',
+    2 => '${n}nd',
+    3 => '${n}rd',
+    _ => '${n}th',
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +277,8 @@ class _DataGroup extends ConsumerWidget {
     final ok = await showFinnConfirm(
       context,
       title: 'Replace with sample data?',
-      message: 'Everything on this device will be replaced with six months of example records. '
+      message:
+          'Everything on this device will be replaced with six months of example records. '
           'Export first if you want to keep a copy.',
       confirmLabel: 'Replace data',
       destructive: true,
@@ -292,7 +298,8 @@ class _DataGroup extends ConsumerWidget {
     final ok = await showFinnConfirm(
       context,
       title: 'Erase all data?',
-      message: 'This permanently deletes every transaction, goal, loan and setting stored on this device '
+      message:
+          'This permanently deletes every transaction, goal, loan and setting stored on this device '
           'and takes you back to setup. This cannot be undone.',
       confirmLabel: 'Erase everything',
       destructive: true,
@@ -362,7 +369,9 @@ class _Footer extends StatelessWidget {
           children: [
             Icon(LucideIcons.lock, size: 12, color: c.textTertiary),
             const SizedBox(width: Space.x1_5),
-            Flexible(child: Text('Your data stays on this device', style: t.micro, textAlign: TextAlign.center)),
+            Flexible(
+              child: Text('Your data stays on this device', style: t.micro, textAlign: TextAlign.center),
+            ),
           ],
         ),
         const SizedBox(height: Space.x1),

@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
+import '../../../app/shell/app_drawer.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
@@ -41,10 +42,10 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
   void _set(BudgetListFilter f) => setState(() => _filter = f);
 
   void _setMonth(MonthKey m, MonthKey current) => setState(() {
-        _month = m >= current ? null : m;
-        _filter = _filter.copyWith(state: () => null);
-        _entered.clear();
-      });
+    _month = m >= current ? null : m;
+    _filter = _filter.copyWith(state: () => null);
+    _entered.clear();
+  });
 
   void _toggleState(BudgetState s) => _set(_filter.copyWith(state: () => _filter.state == s ? null : s));
 
@@ -101,7 +102,10 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
             return CustomScrollView(
               key: const PageStorageKey('budgets'),
               slivers: [
-                _boxed(_Header(pulse: o, onMonth: (m) => _setMonth(m, o.currentMonth)), top: Space.x4),
+                _boxed(
+                  _Header(pulse: o, onMonth: (m) => _setMonth(m, o.currentMonth)),
+                  top: Space.x4,
+                ),
                 if (o.paces.isEmpty)
                   _boxed(
                     o.isPast
@@ -113,7 +117,8 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
                         : EmptyState(
                             icon: LucideIcons.chartPie,
                             title: 'No budgets yet',
-                            message: 'Set a monthly limit for a category like Food or Shopping. '
+                            message:
+                                'Set a monthly limit for a category like Food or Shopping. '
                                 'Every expense in that category counts towards it automatically.',
                             actionLabel: 'Create a budget',
                             actionIcon: LucideIcons.plus,
@@ -124,13 +129,20 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
                 else ...[
                   if (o.hasTotals)
                     _boxed(
-                      StaggeredEntrance(child: _PulseCard(pulse: o, filter: _filter, onState: _toggleState)),
+                      StaggeredEntrance(
+                        child: _PulseCard(pulse: o, filter: _filter, onState: _toggleState),
+                      ),
                       top: Space.x3,
                     ),
                   SliverPersistentHeader(
                     pinned: true,
                     delegate: _BarDelegate(
-                      child: _Controls(pulse: o, filter: _filter, onState: (s) => _set(_filter.copyWith(state: () => s)), onOptions: _openOptions),
+                      child: _Controls(
+                        pulse: o,
+                        filter: _filter,
+                        onState: (s) => _set(_filter.copyWith(state: () => s)),
+                        onOptions: _openOptions,
+                      ),
                     ),
                   ),
                   _boxed(_ResultLine(count: shown.length, filter: _filter, onSort: _openOptions)),
@@ -167,7 +179,13 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
                                   context,
                                   (a) => a
                                       .fadeIn(delay: 40.ms * i, duration: 260.ms)
-                                      .slideY(begin: 0.2, end: 0, delay: 40.ms * i, duration: 380.ms, curve: Curves.easeOutCubic),
+                                      .slideY(
+                                        begin: 0.2,
+                                        end: 0,
+                                        delay: 40.ms * i,
+                                        duration: 380.ms,
+                                        curve: Curves.easeOutCubic,
+                                      ),
                                 ),
                         );
                       },
@@ -184,8 +202,8 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
 }
 
 Widget _boxed(Widget child, {double top = 0}) => SliverToBoxAdapter(
-      child: ResponsiveCenter(padding: EdgeInsets.fromLTRB(Space.gutter, top, Space.gutter, 0), child: child),
-    );
+  child: ResponsiveCenter(padding: EdgeInsets.fromLTRB(Space.gutter, top, Space.gutter, 0), child: child),
+);
 
 /// Title, "New budget", and a month switcher. Budgets renew every month;
 /// earlier months can be looked at but not changed.
@@ -205,7 +223,11 @@ class _Header extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: Semantics(header: true, child: Text('Budgets', style: t.pageTitle))),
+            const AppMenuButton(),
+            if (AppDrawerScope.maybeOf(context) != null) const SizedBox(width: Space.x3),
+            Expanded(
+              child: Semantics(header: true, child: Text('Budgets', style: t.pageTitle)),
+            ),
             if (!o.isPast)
               FinnButton(
                 label: 'New budget',
@@ -284,8 +306,8 @@ class _PulseCard extends StatelessWidget {
     final (String verdict, Color tone, IconData icon) = o.isOver
         ? (past ? 'Went over' : 'Over budget', c.negative, LucideIcons.triangleAlert)
         : !past && heading != null && heading > 1
-            ? ('Spending fast', c.warning, LucideIcons.gauge)
-            : (past ? 'Stayed within' : 'On pace', c.positive, LucideIcons.circleCheck);
+        ? ('Spending fast', c.warning, LucideIcons.gauge)
+        : (past ? 'Stayed within' : 'On pace', c.positive, LucideIcons.circleCheck);
     final safe = o.safePerDay;
     final sub = [
       'of ${budgetMoney(context, o.limit)}',
@@ -353,10 +375,7 @@ class _PulseCard extends StatelessWidget {
                 Icon(LucideIcons.repeat, size: 12, color: c.textTertiary),
                 const SizedBox(width: Space.x1),
                 Expanded(
-                  child: Text(
-                    '${budgetMoney(context, o.committed)} in subscriptions still to come',
-                    style: t.micro,
-                  ),
+                  child: Text('${budgetMoney(context, o.committed)} in subscriptions still to come', style: t.micro),
                 ),
               ],
             ),
@@ -378,14 +397,21 @@ class _PulseCard extends StatelessWidget {
                       color: shortcuts[i].color(c),
                       selected: filter.state == shortcuts[i],
                       height: 32,
-                      semantics: '${shortcuts[i].countLabel(o.count(shortcuts[i]), past: past)}. '
+                      semantics:
+                          '${shortcuts[i].countLabel(o.count(shortcuts[i]), past: past)}. '
                           '${filter.state == shortcuts[i] ? 'Showing only these' : 'Show only these'}',
                       onTap: () => onState(shortcuts[i]),
                     ).maybeAnimate(
                       context,
                       (a) => a
                           .fadeIn(delay: 300.ms + 70.ms * i, duration: 280.ms)
-                          .slideX(begin: 0.3, end: 0, delay: 300.ms + 70.ms * i, duration: 420.ms, curve: Curves.easeOutCubic),
+                          .slideX(
+                            begin: 0.3,
+                            end: 0,
+                            delay: 300.ms + 70.ms * i,
+                            duration: 420.ms,
+                            curve: Curves.easeOutCubic,
+                          ),
                     ),
                   ],
                 ],
@@ -411,40 +437,49 @@ class _PulseLegend extends StatelessWidget {
     final o = pulse;
     final projected = o.projected;
     Widget swatch(Color color, {bool hatched = false}) => Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: hatched ? color.withValues(alpha: 0.25) : color,
-            borderRadius: Radii.rSm,
-            border: hatched ? Border.all(color: color, width: 1.2) : null,
-          ),
-        );
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: hatched ? color.withValues(alpha: 0.25) : color,
+        borderRadius: Radii.rSm,
+        border: hatched ? Border.all(color: color, width: 1.2) : null,
+      ),
+    );
     final over = projected != null && projected > o.limit;
     return Wrap(
       spacing: Space.x3,
       runSpacing: Space.x1,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          swatch(o.isOver ? c.negative : c.primary),
-          const SizedBox(width: Space.x1),
-          Text('Spent ${budgetMoney(context, o.spent)}', style: t.micro.copyWith(color: c.textPrimary)),
-        ]),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            swatch(o.isOver ? c.negative : c.primary),
+            const SizedBox(width: Space.x1),
+            Text('Spent ${budgetMoney(context, o.spent)}', style: t.micro.copyWith(color: c.textPrimary)),
+          ],
+        ),
         if (projected != null && !o.isOver && !o.isPast)
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            swatch(over ? c.negative : c.primary, hatched: true),
-            const SizedBox(width: Space.x1),
-            Text(
-              'Heading for ${budgetMoney(context, projected)}',
-              style: t.micro.copyWith(color: over ? c.negative : c.textSecondary, fontWeight: FontWeight.w700),
-            ),
-          ]),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              swatch(over ? c.negative : c.primary, hatched: true),
+              const SizedBox(width: Space.x1),
+              Text(
+                'Heading for ${budgetMoney(context, projected)}',
+                style: t.micro.copyWith(color: over ? c.negative : c.textSecondary, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
         if (!o.isPast)
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            Container(width: 2, height: 10, color: c.textPrimary),
-            const SizedBox(width: Space.x1),
-            Text('Today · ${formatBps((o.elapsed * 10000).round(), decimals: 0)} of month', style: t.micro),
-          ]),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 2, height: 10, color: c.textPrimary),
+              const SizedBox(width: Space.x1),
+              Text('Today · ${formatBps((o.elapsed * 10000).round(), decimals: 0)} of month', style: t.micro),
+            ],
+          ),
       ],
     );
   }
@@ -578,15 +613,16 @@ class _TabChip extends StatelessWidget {
           curve: Curves2.emphasized,
           height: 36,
           padding: const EdgeInsets.symmetric(horizontal: Space.x3),
-          decoration: BoxDecoration(
-            color: selected ? c.textPrimary : c.surfaceMuted,
-            borderRadius: Radii.rFull,
-          ),
+          decoration: BoxDecoration(color: selected ? c.textPrimary : c.surfaceMuted, borderRadius: Radii.rFull),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (color != null) ...[
-                Container(width: 7, height: 7, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                ),
                 const SizedBox(width: Space.x1_5),
               ],
               Text(
@@ -722,25 +758,25 @@ class _BudgetsSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const SkeletonPulse(
-        child: ResponsiveCenter(
-          padding: EdgeInsets.symmetric(horizontal: Space.gutter),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(height: Space.x4),
-              SkeletonBox(width: 140, height: 28),
-              SizedBox(height: Space.x4),
-              CardSkeleton(height: 190, radius: Radii.xxl),
-              SizedBox(height: Space.x3),
-              SkeletonBox(height: 36, radius: Radii.full),
-              SizedBox(height: Space.x4),
-              CardSkeleton(height: 72),
-              SizedBox(height: Space.x2),
-              CardSkeleton(height: 72),
-              SizedBox(height: Space.x2),
-              CardSkeleton(height: 72),
-            ],
-          ),
-        ),
-      );
+    child: ResponsiveCenter(
+      padding: EdgeInsets.symmetric(horizontal: Space.gutter),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(height: Space.x4),
+          SkeletonBox(width: 140, height: 28),
+          SizedBox(height: Space.x4),
+          CardSkeleton(height: 190, radius: Radii.xxl),
+          SizedBox(height: Space.x3),
+          SkeletonBox(height: 36, radius: Radii.full),
+          SizedBox(height: Space.x4),
+          CardSkeleton(height: 72),
+          SizedBox(height: Space.x2),
+          CardSkeleton(height: 72),
+          SizedBox(height: Space.x2),
+          CardSkeleton(height: 72),
+        ],
+      ),
+    ),
+  );
 }

@@ -22,8 +22,17 @@ abstract final class SyncCollections {
   static const assets = 'assets';
 
   static const all = [
-    transactions, categories, budgets, goals, savingsMovements, loans,
-    loanPayments, subscriptions, pending, settlements, assets,
+    transactions,
+    categories,
+    budgets,
+    goals,
+    savingsMovements,
+    loans,
+    loanPayments,
+    subscriptions,
+    pending,
+    settlements,
+    assets,
   ];
 }
 
@@ -149,10 +158,7 @@ class SyncEngine {
     final target = full ? _SyncState.empty() : _state;
     var since = _state.cursor;
     for (var guard = 0; guard < 10000; guard++) {
-      final data = await api.get('/sync', query: {
-        'since': ?since,
-        if (pageLimit != null) 'limit': '$pageLimit',
-      });
+      final data = await api.get('/sync', query: {'since': ?since, if (pageLimit != null) 'limit': '$pageLimit'});
       if (_userId != user) return; // signed out / switched meanwhile
       if (data is! Map) throw StateError('Unexpected sync response');
       final page = Map<String, Object?>.from(data);
@@ -296,8 +302,8 @@ class _SyncState {
   final Map<String, JsonMap> values;
 
   Map<String, Object?> toJson() => {
-        'cursor': cursor,
-        'collections': {for (final e in collections.entries) e.key: e.value.values.toList()},
-        'values': values,
-      };
+    'cursor': cursor,
+    'collections': {for (final e in collections.entries) e.key: e.value.values.toList()},
+    'values': values,
+  };
 }

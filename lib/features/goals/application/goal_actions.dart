@@ -30,27 +30,27 @@ class GoalInput extends ActionInput {
   final String? note;
 
   factory GoalInput.fromJson(Map<String, Object?> j) => GoalInput(
-        name: In.str(j, 'name'),
-        category: In.enumOpt(j, 'category', GoalCategory.values) ?? GoalCategory.other,
-        target: In.money(j, 'target'),
-        colorIndex: In.intOpt(j, 'colorIndex') ?? 5,
-        targetDate: In.dateOpt(j, 'targetDate'),
-        plannedMonthlyContribution: In.moneyOpt(j, 'plannedMonthlyContribution'),
-        initialAllocation: In.moneyOpt(j, 'initialAllocation'),
-        note: In.strOpt(j, 'note'),
-      );
+    name: In.str(j, 'name'),
+    category: In.enumOpt(j, 'category', GoalCategory.values) ?? GoalCategory.other,
+    target: In.money(j, 'target'),
+    colorIndex: In.intOpt(j, 'colorIndex') ?? 5,
+    targetDate: In.dateOpt(j, 'targetDate'),
+    plannedMonthlyContribution: In.moneyOpt(j, 'plannedMonthlyContribution'),
+    initialAllocation: In.moneyOpt(j, 'initialAllocation'),
+    note: In.strOpt(j, 'note'),
+  );
 
   @override
   Map<String, Object?> toJson() => {
-        'name': name,
-        'category': category.name,
-        'target': Out.money(target),
-        'colorIndex': colorIndex,
-        'targetDate': Out.dateOpt(targetDate),
-        'plannedMonthlyContribution': Out.moneyOpt(plannedMonthlyContribution),
-        'initialAllocation': Out.moneyOpt(initialAllocation),
-        'note': note,
-      };
+    'name': name,
+    'category': category.name,
+    'target': Out.money(target),
+    'colorIndex': colorIndex,
+    'targetDate': Out.dateOpt(targetDate),
+    'plannedMonthlyContribution': Out.moneyOpt(plannedMonthlyContribution),
+    'initialAllocation': Out.moneyOpt(initialAllocation),
+    'note': note,
+  };
 }
 
 Map<String, String> _validateGoal(GoalInput i, FinanceSnapshot s, {String? exceptId}) {
@@ -58,7 +58,9 @@ Map<String, String> _validateGoal(GoalInput i, FinanceSnapshot s, {String? excep
   final name = i.name.trim();
   if (name.isEmpty) e['name'] = 'Give your goal a name.';
   if (name.length > 50) e['name'] = 'Keep the name under 50 characters.';
-  if (s.goals.any((g) => g.id != exceptId && g.status == GoalStatus.active && g.name.toLowerCase() == name.toLowerCase())) {
+  if (s.goals.any(
+    (g) => g.id != exceptId && g.status == GoalStatus.active && g.name.toLowerCase() == name.toLowerCase(),
+  )) {
     e['name'] = 'You already have an active goal with this name.';
   }
   if (!i.target.isPositive) e['target'] = 'Enter a target greater than zero.';
@@ -79,20 +81,20 @@ class CreateGoalAction extends FinancialAction<GoalInput, SavingsGoal> {
 
   @override
   ActionDescriptor get descriptor => const ActionDescriptor(
-        id: 'goals.create',
-        module: 'goals',
-        title: 'Create a savings goal',
-        description: 'Creates a goal. An optional starting amount is earmarked from available cash (not spent).',
-        risk: ActionRisk.low,
-        fields: [
-          ActionFieldSpec('name', FieldKind.string, 'Goal name'),
-          ActionFieldSpec('category', FieldKind.enumeration, 'Goal type', required: false),
-          ActionFieldSpec('target', FieldKind.money, 'Target amount'),
-          ActionFieldSpec('targetDate', FieldKind.date, 'Target date', required: false),
-          ActionFieldSpec('plannedMonthlyContribution', FieldKind.money, 'Planned monthly amount', required: false),
-          ActionFieldSpec('initialAllocation', FieldKind.money, 'Amount to earmark now', required: false),
-        ],
-      );
+    id: 'goals.create',
+    module: 'goals',
+    title: 'Create a savings goal',
+    description: 'Creates a goal. An optional starting amount is earmarked from available cash (not spent).',
+    risk: ActionRisk.low,
+    fields: [
+      ActionFieldSpec('name', FieldKind.string, 'Goal name'),
+      ActionFieldSpec('category', FieldKind.enumeration, 'Goal type', required: false),
+      ActionFieldSpec('target', FieldKind.money, 'Target amount'),
+      ActionFieldSpec('targetDate', FieldKind.date, 'Target date', required: false),
+      ActionFieldSpec('plannedMonthlyContribution', FieldKind.money, 'Planned monthly amount', required: false),
+      ActionFieldSpec('initialAllocation', FieldKind.money, 'Amount to earmark now', required: false),
+    ],
+  );
 
   @override
   GoalInput decode(Map<String, Object?> json) => GoalInput.fromJson(json);
@@ -102,18 +104,24 @@ class CreateGoalAction extends FinancialAction<GoalInput, SavingsGoal> {
     final e = _validateGoal(input, s);
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
     final init = input.initialAllocation ?? Money.zero;
-    return Result.ok(preview(
-      input,
-      title: 'Create ${input.name.trim()}',
-      summary: 'New goal: ${input.name.trim()} · ${input.target.format()}',
-      lines: [
-        PreviewLine('Target', input.target.format(), emphasis: true),
-        if (input.targetDate != null) PreviewLine('By', DateFormats.monthYear.format(input.targetDate!)),
-        if (init.isPositive) PreviewLine('Earmarked now', init.format()),
-        if (init.isPositive) PreviewLine('Available to spend', '${s.balance.available.format()} → ${(s.balance.available - init).format()}'),
-      ],
-      requiresConfirmation: init.isPositive,
-    ));
+    return Result.ok(
+      preview(
+        input,
+        title: 'Create ${input.name.trim()}',
+        summary: 'New goal: ${input.name.trim()} · ${input.target.format()}',
+        lines: [
+          PreviewLine('Target', input.target.format(), emphasis: true),
+          if (input.targetDate != null) PreviewLine('By', DateFormats.monthYear.format(input.targetDate!)),
+          if (init.isPositive) PreviewLine('Earmarked now', init.format()),
+          if (init.isPositive)
+            PreviewLine(
+              'Available to spend',
+              '${s.balance.available.format()} → ${(s.balance.available - init).format()}',
+            ),
+        ],
+        requiresConfirmation: init.isPositive,
+      ),
+    );
   }
 
   @override
@@ -134,16 +142,18 @@ class CreateGoalAction extends FinancialAction<GoalInput, SavingsGoal> {
     await env.repos.goals.save(goal);
     final init = input.initialAllocation;
     if (init != null && init.isPositive) {
-      await env.repos.savingsMovements.save(SavingsMovement(
-        id: env.ids.next('sv'),
-        bucketType: SavingsBucketType.goal,
-        bucketId: goal.id,
-        kind: SavingsMovementKind.contribution,
-        amount: init,
-        date: s.today,
-        note: 'Starting amount',
-        createdAt: now,
-      ));
+      await env.repos.savingsMovements.save(
+        SavingsMovement(
+          id: env.ids.next('sv'),
+          bucketType: SavingsBucketType.goal,
+          bucketId: goal.id,
+          kind: SavingsMovementKind.contribution,
+          amount: init,
+          date: s.today,
+          note: 'Starting amount',
+          createdAt: now,
+        ),
+      );
     }
     return Result.ok(goal);
   }
@@ -164,29 +174,41 @@ class UpdateGoalAction extends FinancialAction<UpdateGoalInput, SavingsGoal> {
 
   @override
   ActionDescriptor get descriptor => const ActionDescriptor(
-        id: 'goals.update',
-        module: 'goals',
-        title: 'Edit a goal',
-        description: 'Changes goal details. The saved amount only changes through contributions and withdrawals.',
-        risk: ActionRisk.low,
-        fields: [ActionFieldSpec('id', FieldKind.id, 'Goal id'), ActionFieldSpec('expectedVersion', FieldKind.integer, 'Version read')],
-      );
+    id: 'goals.update',
+    module: 'goals',
+    title: 'Edit a goal',
+    description: 'Changes goal details. The saved amount only changes through contributions and withdrawals.',
+    risk: ActionRisk.low,
+    fields: [
+      ActionFieldSpec('id', FieldKind.id, 'Goal id'),
+      ActionFieldSpec('expectedVersion', FieldKind.integer, 'Version read'),
+    ],
+  );
 
   @override
-  UpdateGoalInput decode(Map<String, Object?> json) =>
-      UpdateGoalInput(id: In.str(json, 'id'), expectedVersion: In.integer(json, 'expectedVersion'), data: GoalInput.fromJson(json));
+  UpdateGoalInput decode(Map<String, Object?> json) => UpdateGoalInput(
+    id: In.str(json, 'id'),
+    expectedVersion: In.integer(json, 'expectedVersion'),
+    data: GoalInput.fromJson(json),
+  );
 
   @override
   Result<ActionPreview> prepare(UpdateGoalInput input, FinanceSnapshot s, ActionEnvironment env) {
     final g = s.goal(input.id);
     if (g == null) return const Result.err(AppFailure.notFound('This goal no longer exists.'));
     if (g.goal.version != input.expectedVersion) {
-      return const Result.err(AppFailure(FailureCode.staleData, 'This goal changed since you opened it. Reload and try again.'));
+      return const Result.err(
+        AppFailure(FailureCode.staleData, 'This goal changed since you opened it. Reload and try again.'),
+      );
     }
     final data = GoalInput(
-      name: input.data.name, category: input.data.category, target: input.data.target,
-      colorIndex: input.data.colorIndex, targetDate: input.data.targetDate,
-      plannedMonthlyContribution: input.data.plannedMonthlyContribution, note: input.data.note,
+      name: input.data.name,
+      category: input.data.category,
+      target: input.data.target,
+      colorIndex: input.data.colorIndex,
+      targetDate: input.data.targetDate,
+      plannedMonthlyContribution: input.data.plannedMonthlyContribution,
+      note: input.data.note,
     );
     final e = _validateGoal(data, s, exceptId: input.id);
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
@@ -221,14 +243,19 @@ class GoalMovementInput extends ActionInput {
   final String? note;
 
   factory GoalMovementInput.fromJson(Map<String, Object?> j) => GoalMovementInput(
-        goalId: In.str(j, 'goalId'),
-        amount: In.money(j, 'amount'),
-        date: In.date(j, 'date'),
-        note: In.strOpt(j, 'note'),
-      );
+    goalId: In.str(j, 'goalId'),
+    amount: In.money(j, 'amount'),
+    date: In.date(j, 'date'),
+    note: In.strOpt(j, 'note'),
+  );
 
   @override
-  Map<String, Object?> toJson() => {'goalId': goalId, 'amount': Out.money(amount), 'date': Out.date(date), 'note': note};
+  Map<String, Object?> toJson() => {
+    'goalId': goalId,
+    'amount': Out.money(amount),
+    'date': Out.date(date),
+    'note': note,
+  };
 }
 
 const _movementFields = [
@@ -283,23 +310,23 @@ class GoalMovementAction extends FinancialAction<GoalMovementInput, SavingsMovem
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
     final savedAfter = _isContribution ? g.saved + input.amount : g.saved - input.amount;
     final availAfter = _isContribution ? s.balance.available - input.amount : s.balance.available + input.amount;
-    return Result.ok(preview(
-      input,
-      title: _isContribution ? 'Add to ${g.goal.name}' : 'Withdraw from ${g.goal.name}',
-      summary: _isContribution
-          ? 'Set aside ${input.amount.format()} for ${g.goal.name}'
-          : 'Release ${input.amount.format()} from ${g.goal.name}',
-      lines: [
-        PreviewLine('Amount', input.amount.format(), emphasis: true),
-        PreviewLine('Saved in goal', '${g.saved.format()} → ${savedAfter.format()}'),
-        PreviewLine('Available to spend', '${s.balance.available.format()} → ${availAfter.format()}'),
-        const PreviewLine('Net worth', 'Unchanged'),
-      ],
-      warnings: [
-        if (_isContribution && savedAfter >= g.goal.target && !g.isAchieved) 'This completes your goal!',
-      ],
-      basis: {'v': g.goal.version, 'saved': g.saved.paise},
-    ));
+    return Result.ok(
+      preview(
+        input,
+        title: _isContribution ? 'Add to ${g.goal.name}' : 'Withdraw from ${g.goal.name}',
+        summary: _isContribution
+            ? 'Set aside ${input.amount.format()} for ${g.goal.name}'
+            : 'Release ${input.amount.format()} from ${g.goal.name}',
+        lines: [
+          PreviewLine('Amount', input.amount.format(), emphasis: true),
+          PreviewLine('Saved in goal', '${g.saved.format()} → ${savedAfter.format()}'),
+          PreviewLine('Available to spend', '${s.balance.available.format()} → ${availAfter.format()}'),
+          const PreviewLine('Net worth', 'Unchanged'),
+        ],
+        warnings: [if (_isContribution && savedAfter >= g.goal.target && !g.isAchieved) 'This completes your goal!'],
+        basis: {'v': g.goal.version, 'saved': g.saved.paise},
+      ),
+    );
   }
 
   @override
@@ -333,13 +360,13 @@ class ArchiveGoalAction extends FinancialAction<GoalIdInput, SavingsGoal> {
 
   @override
   ActionDescriptor get descriptor => const ActionDescriptor(
-        id: 'goals.toggleArchive',
-        module: 'goals',
-        title: 'Archive or restore a goal',
-        description: 'Hides a goal from the active list (or restores it). Earmarked money is unaffected.',
-        risk: ActionRisk.low,
-        fields: [ActionFieldSpec('id', FieldKind.id, 'Goal id')],
-      );
+    id: 'goals.toggleArchive',
+    module: 'goals',
+    title: 'Archive or restore a goal',
+    description: 'Hides a goal from the active list (or restores it). Earmarked money is unaffected.',
+    risk: ActionRisk.low,
+    fields: [ActionFieldSpec('id', FieldKind.id, 'Goal id')],
+  );
 
   @override
   GoalIdInput decode(Map<String, Object?> json) => GoalIdInput(id: In.str(json, 'id'));
@@ -349,9 +376,13 @@ class ArchiveGoalAction extends FinancialAction<GoalIdInput, SavingsGoal> {
     final g = s.goal(input.id);
     if (g == null) return const Result.err(AppFailure.notFound('This goal no longer exists.'));
     final archiving = g.goal.status == GoalStatus.active;
-    return Result.ok(preview(input,
+    return Result.ok(
+      preview(
+        input,
         title: archiving ? 'Archive ${g.goal.name}?' : 'Restore ${g.goal.name}?',
-        summary: '${archiving ? 'Archive' : 'Restore'} ${g.goal.name}'));
+        summary: '${archiving ? 'Archive' : 'Restore'} ${g.goal.name}',
+      ),
+    );
   }
 
   @override
@@ -373,14 +404,14 @@ class DeleteGoalAction extends FinancialAction<GoalIdInput, SavingsGoal> {
 
   @override
   ActionDescriptor get descriptor => const ActionDescriptor(
-        id: 'goals.delete',
-        module: 'goals',
-        title: 'Delete a goal',
-        description: 'Deletes a goal. Any saved amount is released back to available cash.',
-        risk: ActionRisk.consequential,
-        reversible: false,
-        fields: [ActionFieldSpec('id', FieldKind.id, 'Goal id')],
-      );
+    id: 'goals.delete',
+    module: 'goals',
+    title: 'Delete a goal',
+    description: 'Deletes a goal. Any saved amount is released back to available cash.',
+    risk: ActionRisk.consequential,
+    reversible: false,
+    fields: [ActionFieldSpec('id', FieldKind.id, 'Goal id')],
+  );
 
   @override
   GoalIdInput decode(Map<String, Object?> json) => GoalIdInput(id: In.str(json, 'id'));
@@ -389,14 +420,16 @@ class DeleteGoalAction extends FinancialAction<GoalIdInput, SavingsGoal> {
   Result<ActionPreview> prepare(GoalIdInput input, FinanceSnapshot s, ActionEnvironment env) {
     final g = s.goal(input.id);
     if (g == null) return const Result.err(AppFailure.notFound('This goal no longer exists.'));
-    return Result.ok(preview(
-      input,
-      title: 'Delete ${g.goal.name}?',
-      summary: 'Delete ${g.goal.name}',
-      lines: [if (g.saved.isPositive) PreviewLine('Returned to available cash', g.saved.format(), emphasis: true)],
-      warnings: const ['Contribution history for this goal will be removed.'],
-      basis: {'v': g.goal.version, 'saved': g.saved.paise},
-    ));
+    return Result.ok(
+      preview(
+        input,
+        title: 'Delete ${g.goal.name}?',
+        summary: 'Delete ${g.goal.name}',
+        lines: [if (g.saved.isPositive) PreviewLine('Returned to available cash', g.saved.format(), emphasis: true)],
+        warnings: const ['Contribution history for this goal will be removed.'],
+        basis: {'v': g.goal.version, 'saved': g.saved.paise},
+      ),
+    );
   }
 
   @override

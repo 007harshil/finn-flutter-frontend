@@ -50,8 +50,9 @@ final Map<ToolGroup, RegExp> _keywords = {
   ToolGroup.pending: RegExp(r'\b(split\w*|share|shared|write.?off|forgive|won.?t pay)\b', caseSensitive: false),
   ToolGroup.loans: RegExp(r'\b(emi|loan\w*|instal+ment\w*|prepay\w*|mortgage)\b', caseSensitive: false),
   ToolGroup.subscriptions: RegExp(
-      r'\b(subscri\w*|renew\w*|netflix|spotify|prime|hotstar|youtube|membership|plan)\b',
-      caseSensitive: false),
+    r'\b(subscri\w*|renew\w*|netflix|spotify|prime|hotstar|youtube|membership|plan)\b',
+    caseSensitive: false,
+  ),
   ToolGroup.goals: RegExp(r'\b(goal\w*|saving for|save for|towards)\b', caseSensitive: false),
   ToolGroup.emergencyFund: RegExp(r'\bemergency\b', caseSensitive: false),
 };
@@ -72,8 +73,10 @@ class ToolSelection {
   }
 
   /// The tools to offer now, in toolbox order.
-  List<AgentTool> offered(List<AgentTool> all) =>
-      [for (final t in all) if (_enabled.contains(toolGroupOf[t.name] ?? ToolGroup.core)) t];
+  List<AgentTool> offered(List<AgentTool> all) => [
+    for (final t in all)
+      if (_enabled.contains(toolGroupOf[t.name] ?? ToolGroup.core)) t,
+  ];
 }
 
 /// Lets the model switch on more tool groups when the request needs them.
@@ -87,27 +90,34 @@ class LoadToolsTool extends ReadTool {
   String get progressLabel => 'Getting ready';
 
   @override
-  String get description => 'Adds tool groups from your next step (recording income/expenses is always available): '
-      '${[for (final g in ToolGroup.values) if (g != ToolGroup.core) '${g.name} (${g.summary})'].join('; ')}.';
+  String get description =>
+      'Adds tool groups from your next step (recording income/expenses is always available): '
+      '${[for (final g in ToolGroup.values)
+        if (g != ToolGroup.core) '${g.name} (${g.summary})'].join('; ')}.';
 
   @override
-  Map<String, Object?> get parameters => JsonSchema.object({
-        'groups': {
-          'type': 'array',
-          'items': {
-            'type': 'string',
-            'enum': [for (final g in ToolGroup.values) if (g != ToolGroup.core) g.name],
-          },
+  Map<String, Object?> get parameters => JsonSchema.object(
+    {
+      'groups': {
+        'type': 'array',
+        'items': {
+          'type': 'string',
+          'enum': [
+            for (final g in ToolGroup.values)
+              if (g != ToolGroup.core) g.name,
+          ],
         },
-      }, required: ['groups']);
+      },
+    },
+    required: ['groups'],
+  );
 
   @override
   Future<Map<String, Object?>> run(Map<String, Object?> args, ToolContext context) async {
     final raw = args['groups'];
     final groups = <ToolGroup>[
       if (raw is List)
-        for (final v in raw)
-          ...ToolGroup.values.where((g) => g.name == v && g != ToolGroup.core),
+        for (final v in raw) ...ToolGroup.values.where((g) => g.name == v && g != ToolGroup.core),
     ];
     context.selection?.enable(groups);
     return {

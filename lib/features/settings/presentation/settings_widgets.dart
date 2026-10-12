@@ -68,7 +68,14 @@ class SettingsIcon extends StatelessWidget {
 }
 
 class _RowLayout extends StatelessWidget {
-  const _RowLayout({required this.icon, required this.title, this.subtitle, this.trailing, this.iconColor, this.titleColor});
+  const _RowLayout({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    this.iconColor,
+    this.titleColor,
+  });
 
   final IconData icon;
   final Color? iconColor;
@@ -94,10 +101,7 @@ class _RowLayout extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(title, style: t.bodyStrong.copyWith(color: titleColor)),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: Space.x0_5),
-                    Text(subtitle!, style: t.caption),
-                  ],
+                  if (subtitle != null) ...[const SizedBox(height: Space.x0_5), Text(subtitle!, style: t.caption)],
                 ],
               ),
             ),

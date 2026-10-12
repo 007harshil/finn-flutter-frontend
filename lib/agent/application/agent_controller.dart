@@ -76,15 +76,14 @@ class AgentViewState {
     String? Function()? progress,
     List<ProposedAction>? proposals,
     String? Function()? plan,
-  }) =>
-      AgentViewState(
-        available: available,
-        entries: entries ?? this.entries,
-        status: status ?? this.status,
-        progress: progress == null ? this.progress : progress(),
-        proposals: proposals ?? this.proposals,
-        plan: plan == null ? this.plan : plan(),
-      );
+  }) => AgentViewState(
+    available: available,
+    entries: entries ?? this.entries,
+    status: status ?? this.status,
+    progress: progress == null ? this.progress : progress(),
+    proposals: proposals ?? this.proposals,
+    plan: plan == null ? this.plan : plan(),
+  );
 }
 
 /// The small, stable interface the UI uses: [send], [approve], [decline],
@@ -113,28 +112,28 @@ class AgentController extends Notifier<AgentViewState> {
   }
 
   AgentRunner _runnerFor(LlmProvider provider) => _runner ??= () {
-        final env = ref.read(actionEnvironmentProvider);
-        final config = ref.read(agentConfigProvider);
-        final toolbox = ref.read(agentToolboxProvider);
-        final conversationId = RandomIdGenerator().next('c');
-        final selection = ToolSelection();
-        return AgentRunner(
-          selection: selection,
-          provider: provider,
-          toolbox: toolbox,
-          loadSnapshot: env.loadSnapshot,
-          conversation: Conversation(id: conversationId),
-          config: config,
-          executor: ToolExecutor(
-            toolbox: toolbox,
-            dispatcher: ref.read(actionDispatcherProvider),
-            context: ToolContext(loadSnapshot: env.loadSnapshot, selection: selection),
-            sessionId: conversationId,
-            channel: ActionChannel.agent,
-            maxCallsPerStep: config.maxToolCallsPerStep,
-          ),
-        );
-      }();
+    final env = ref.read(actionEnvironmentProvider);
+    final config = ref.read(agentConfigProvider);
+    final toolbox = ref.read(agentToolboxProvider);
+    final conversationId = RandomIdGenerator().next('c');
+    final selection = ToolSelection();
+    return AgentRunner(
+      selection: selection,
+      provider: provider,
+      toolbox: toolbox,
+      loadSnapshot: env.loadSnapshot,
+      conversation: Conversation(id: conversationId),
+      config: config,
+      executor: ToolExecutor(
+        toolbox: toolbox,
+        dispatcher: ref.read(actionDispatcherProvider),
+        context: ToolContext(loadSnapshot: env.loadSnapshot, selection: selection),
+        sessionId: conversationId,
+        channel: ActionChannel.agent,
+        maxCallsPerStep: config.maxToolCallsPerStep,
+      ),
+    );
+  }();
 
   /// Sends a request. Ignored while a turn is running (no duplicate
   /// submissions).
@@ -172,8 +171,13 @@ class AgentController extends Notifier<AgentViewState> {
     state = state.copyWith(
       entries: [
         ...state.entries,
-        AgentChatEntry('a${_seq++}',
-            text: result.reply, end: result.end, actions: result.actions, retryText: canRetry ? trimmed : null),
+        AgentChatEntry(
+          'a${_seq++}',
+          text: result.reply,
+          end: result.end,
+          actions: result.actions,
+          retryText: canRetry ? trimmed : null,
+        ),
       ],
       status: AgentStatus.idle,
       progress: () => null,

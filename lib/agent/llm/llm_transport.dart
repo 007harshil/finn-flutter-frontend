@@ -26,8 +26,11 @@ class FinnRelayTransport implements LlmTransport {
     try {
       final data = await api.post(path, body: body);
       if (data is Map) return Map<String, Object?>.from(data);
-      throw const LlmException(LlmErrorKind.invalidResponse, 'The assistant sent an unexpected reply. Please try again.',
-          retryable: true);
+      throw const LlmException(
+        LlmErrorKind.invalidResponse,
+        'The assistant sent an unexpected reply. Please try again.',
+        retryable: true,
+      );
     } on AppFailure catch (f) {
       throw llmExceptionFromFailure(f);
     }
@@ -41,8 +44,12 @@ LlmException llmExceptionFromFailure(AppFailure f) {
   final retryAfter = details['retryAfterSeconds'];
   switch (f.code) {
     case FailureCode.unavailable when reason == 'rateLimited' || reason == 'providerRateLimited':
-      return LlmException(LlmErrorKind.rateLimited, f.message,
-          retryable: true, retryAfter: retryAfter is num ? Duration(seconds: retryAfter.ceil()) : null);
+      return LlmException(
+        LlmErrorKind.rateLimited,
+        f.message,
+        retryable: true,
+        retryAfter: retryAfter is num ? Duration(seconds: retryAfter.ceil()) : null,
+      );
     case FailureCode.unavailable when reason == 'notConfigured':
       return LlmException(LlmErrorKind.notConfigured, f.message);
     case FailureCode.unavailable:

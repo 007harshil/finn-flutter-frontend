@@ -15,12 +15,14 @@ final sep = MonthKey(2026, 9);
 
 void main() {
   test('cashFlow returns [count] months ending with [last], oldest first', () {
-    final s = snapshotOf(transactions: [
-      tx(50000, d(2026, 8, 1), income: true),
-      tx(60000, d(2026, 9, 1), income: true),
-      tx(20000, d(2026, 9, 2)),
-      tx(70000, d(2026, 10, 1), income: true),
-    ]);
+    final s = snapshotOf(
+      transactions: [
+        tx(50000, d(2026, 8, 1), income: true),
+        tx(60000, d(2026, 9, 1), income: true),
+        tx(20000, d(2026, 9, 2)),
+        tx(70000, d(2026, 10, 1), income: true),
+      ],
+    );
     final flow = analytics.cashFlow(s, oct, 3);
     expect(flow.map((m) => m.month), [MonthKey(2026, 8), sep, oct]);
     expect(flow.map((m) => m.income), [rs(50000), rs(60000), rs(70000)]);
@@ -29,12 +31,14 @@ void main() {
   });
 
   group('categoryBreakdown', () {
-    final s = snapshotOf(transactions: [
-      tx(5000, d(2026, 9, 3), category: SeedCategoryIds.food),
-      tx(6000, d(2026, 10, 3), category: SeedCategoryIds.food),
-      tx(3000, d(2026, 10, 4), category: SeedCategoryIds.rent),
-      tx(1000, d(2026, 10, 5), category: 'cat_unknown'),
-    ]);
+    final s = snapshotOf(
+      transactions: [
+        tx(5000, d(2026, 9, 3), category: SeedCategoryIds.food),
+        tx(6000, d(2026, 10, 3), category: SeedCategoryIds.food),
+        tx(3000, d(2026, 10, 4), category: SeedCategoryIds.rent),
+        tx(1000, d(2026, 10, 5), category: 'cat_unknown'),
+      ],
+    );
 
     test('shares and comparison with the previous period', () {
       final slices = analytics.categoryBreakdown(s, oct.range, compareTo: sep.range);
@@ -55,12 +59,14 @@ void main() {
   });
 
   group('compare', () {
-    final s = snapshotOf(transactions: [
-      tx(900, d(2026, 8, 31)),
-      tx(1000, d(2026, 9, 21)),
-      tx(400, d(2026, 9, 30)),
-      tx(2000, d(2026, 10, 5)),
-    ]);
+    final s = snapshotOf(
+      transactions: [
+        tx(900, d(2026, 8, 31)),
+        tx(1000, d(2026, 9, 21)),
+        tx(400, d(2026, 9, 30)),
+        tx(2000, d(2026, 10, 5)),
+      ],
+    );
 
     test('a calendar month is compared with the previous calendar month', () {
       final c = analytics.compare(s, oct.range);
@@ -92,11 +98,13 @@ void main() {
   });
 
   test('savingsTrend: cumulative earmarked total at each month end', () {
-    final s = snapshotOf(movements: [
-      goalMove(10000, d(2026, 8, 10)),
-      efMove(5000, d(2026, 9, 1)),
-      goalMove(2000, d(2026, 9, 30), withdraw: true),
-    ]);
+    final s = snapshotOf(
+      movements: [
+        goalMove(10000, d(2026, 8, 10)),
+        efMove(5000, d(2026, 9, 1)),
+        goalMove(2000, d(2026, 9, 30), withdraw: true),
+      ],
+    );
     final trend = analytics.savingsTrend(s, sep, 3);
     expect(trend.map((p) => p.value), [Money.zero, rs(10000), rs(13000)]);
   });
@@ -109,17 +117,23 @@ void main() {
   });
 
   test('discretionaryShareBps excludes essential and system categories from the numerator', () {
-    final s = snapshotOf(transactions: [
-      tx(600, d(2026, 10, 1), category: SeedCategoryIds.food),
-      tx(300, d(2026, 10, 1), category: SeedCategoryIds.rent),
-      tx(100, d(2026, 10, 1), category: SystemCategories.loanEmi, origin: TransactionOrigin.loanRepayment),
-    ]);
+    final s = snapshotOf(
+      transactions: [
+        tx(600, d(2026, 10, 1), category: SeedCategoryIds.food),
+        tx(300, d(2026, 10, 1), category: SeedCategoryIds.rent),
+        tx(100, d(2026, 10, 1), category: SystemCategories.loanEmi, origin: TransactionOrigin.loanRepayment),
+      ],
+    );
     expect(analytics.discretionaryShareBps(s, oct.range), 6000);
     expect(analytics.discretionaryShareBps(snapshotOf(), oct.range), isNull);
   });
 
   test('goalContributions nets contributions and withdrawals in range', () {
-    final ms = [goalMove(1000, d(2026, 10, 1)), goalMove(300, d(2026, 10, 2), withdraw: true), goalMove(50, d(2026, 9, 30))];
+    final ms = [
+      goalMove(1000, d(2026, 10, 1)),
+      goalMove(300, d(2026, 10, 2), withdraw: true),
+      goalMove(50, d(2026, 9, 30)),
+    ];
     expect(analytics.goalContributions(ms, oct.range), rs(700));
   });
 
@@ -149,8 +163,13 @@ void main() {
         'Top category: Rent & Housing',
       ]);
       expect(list.last.title, startsWith('Subscriptions take'));
-      expect(list.map((i) => i.tone),
-          [InsightTone.positive, InsightTone.caution, InsightTone.positive, InsightTone.neutral, InsightTone.neutral]);
+      expect(list.map((i) => i.tone), [
+        InsightTone.positive,
+        InsightTone.caution,
+        InsightTone.positive,
+        InsightTone.neutral,
+        InsightTone.neutral,
+      ]);
     });
 
     test('spending above income is a caution, never a judgement', () {

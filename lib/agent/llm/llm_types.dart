@@ -38,11 +38,11 @@ class LlmMessage {
   /// replay this turn exactly (e.g. encrypted reasoning items); the agent
   /// stores it but never inspects it.
   const LlmMessage.assistant({String? text, List<LlmToolCall> toolCalls = const [], Object? providerState})
-      : this._(role: LlmRole.assistant, content: text, toolCalls: toolCalls, providerState: providerState);
+    : this._(role: LlmRole.assistant, content: text, toolCalls: toolCalls, providerState: providerState);
 
   /// The result of the tool call [callId] (to tool [toolName]), as JSON text.
   const LlmMessage.toolResult({required String callId, required String content, String? toolName})
-      : this._(role: LlmRole.tool, content: content, toolCallId: callId, toolName: toolName);
+    : this._(role: LlmRole.tool, content: content, toolCallId: callId, toolName: toolName);
 
   final LlmRole role;
   final String? content;

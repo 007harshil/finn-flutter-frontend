@@ -23,7 +23,7 @@ class EntityCollection<T> implements CrudRepository<T> {
     required this.decode,
     required this._driver,
     MockBehavior? behavior,
-  })  : behavior = behavior ?? MockBehavior();
+  }) : behavior = behavior ?? MockBehavior();
 
   final String storageKey;
   final String Function(T) idOf;
@@ -46,10 +46,12 @@ class EntityCollection<T> implements CrudRepository<T> {
     final list = (jsonDecode(raw) as List).cast<Map<String, Object?>>();
     _items
       ..clear()
-      ..addEntries(list.map((j) {
-        final item = decode(j);
-        return MapEntry(idOf(item), item);
-      }));
+      ..addEntries(
+        list.map((j) {
+          final item = decode(j);
+          return MapEntry(idOf(item), item);
+        }),
+      );
     _changed(persist: false);
     return true;
   }
@@ -146,8 +148,8 @@ class ValueStore<T> {
     required this._driver,
     required T initial,
     MockBehavior? behavior,
-  })  : _value = initial,
-        behavior = behavior ?? MockBehavior();
+  }) : _value = initial,
+       behavior = behavior ?? MockBehavior();
 
   final String storageKey;
   final JsonMap Function(T) encode;

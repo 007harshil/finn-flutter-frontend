@@ -48,7 +48,9 @@ class RemoteImporter {
       'loans': [for (final l in s.loans.current) LoanDto.toJson(l)],
       'loanPayments': [for (final p in s.loanPayments.current) LoanPaymentDto.toJson(p)],
       'subscriptions': [for (final x in s.subscriptions.current) SubscriptionDto.toJson(x)],
-      'pending': [for (final p in ownPending) {...PendingDto.toJson(p), 'link': null}],
+      'pending': [
+        for (final p in ownPending) {...PendingDto.toJson(p), 'link': null},
+      ],
       'settlements': [
         for (final x in s.settlements.current)
           if (ownPendingIds.contains(x.pendingId)) SettlementDto.toJson(x),

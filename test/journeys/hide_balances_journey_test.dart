@@ -15,12 +15,18 @@ void main() {
     expect(inHero(rupees(b.available)), findsOneWidget);
     expect(inHero(MoneyFormatter.masked), findsNothing);
 
-    // More → Settings → Hide balances.
-    await tapTab(tester, 'More');
-    await scrollAndTap(tester, find.text('Settings'));
+    // Menu → Settings → Hide balances.
+    await openMenu(tester);
+    await scrollAndTap(tester, inDrawer(find.text('Settings')));
     await scrollAndTap(tester, find.byKey(const ValueKey('hide-balances')));
-    expect(tester.widget<Switch>(find.descendant(of: find.byKey(const ValueKey('hide-balances')), matching: find.byType(Switch))).value,
-        isTrue);
+    expect(
+      tester
+          .widget<Switch>(
+            find.descendant(of: find.byKey(const ValueKey('hide-balances')), matching: find.byType(Switch)),
+          )
+          .value,
+      isTrue,
+    );
 
     // Home: available, cash and set-aside are all masked.
     await tapTab(tester, 'Home');

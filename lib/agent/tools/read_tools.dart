@@ -57,7 +57,10 @@ class FinancialOverviewTool extends ReadTool {
       },
       'budgets': {
         'count': budgets.length,
-        'overLimit': [for (final u in budgets) if (u.isOver) s.category(u.budget.categoryId)?.name ?? u.budget.categoryId],
+        'overLimit': [
+          for (final u in budgets)
+            if (u.isOver) s.category(u.budget.categoryId)?.name ?? u.budget.categoryId,
+        ],
         'nearLimit': [
           for (final u in budgets)
             if (u.health.name == 'warning') s.category(u.budget.categoryId)?.name ?? u.budget.categoryId,
@@ -67,13 +70,11 @@ class FinancialOverviewTool extends ReadTool {
       'loans': {'outstandingDebt': _m(s.totalDebt), 'overdueLoans': s.loanStates.where((l) => l.isOverdue).length},
       'subscriptions': {
         'monthlyCommitment': _m(s.monthlySubscriptionCommitment),
-        'dueInNext7Days': [for (final x in upcomingSubs) {'name': x.name, 'due': Out.date(x.nextDueDate), 'amount': _m(x.amount)}],
+        'dueInNext7Days': [
+          for (final x in upcomingSubs) {'name': x.name, 'due': Out.date(x.nextDueDate), 'amount': _m(x.amount)},
+        ],
       },
-      'emergencyFund': {
-        'configured': ef.plan != null,
-        'saved': _m(ef.saved),
-        'target': _m(ef.target),
-      },
+      'emergencyFund': {'configured': ef.plan != null, 'saved': _m(ef.saved), 'target': _m(ef.target)},
     };
   }
 }
@@ -98,12 +99,21 @@ class FindRecordsTool extends ReadTool {
       'payment, goal, loan, subscription or budget. Pending results include match: unique|multiple|none.';
 
   @override
-  Map<String, Object?> get parameters => JsonSchema.object({
-        'kind': {'type': 'string', 'enum': [for (final k in RecordKind.values) k.name]},
-        'query': JsonSchema.string('Name or person; omit to list'),
-        'direction': {'type': 'string', 'enum': ['iOwe', 'owedToMe']},
-        'includeClosed': JsonSchema.boolean('Include closed/settled'),
-      }, required: ['kind']);
+  Map<String, Object?> get parameters => JsonSchema.object(
+    {
+      'kind': {
+        'type': 'string',
+        'enum': [for (final k in RecordKind.values) k.name],
+      },
+      'query': JsonSchema.string('Name or person; omit to list'),
+      'direction': {
+        'type': 'string',
+        'enum': ['iOwe', 'owedToMe'],
+      },
+      'includeClosed': JsonSchema.boolean('Include closed/settled'),
+    },
+    required: ['kind'],
+  );
 
   @override
   Future<Map<String, Object?>> run(Map<String, Object?> args, ToolContext context) async {
@@ -192,34 +202,38 @@ class FindRecordsTool extends ReadTool {
   }
 
   Map<String, Object?> _list(List<Map<String, Object?>> items) => {
-        'count': items.length,
-        'items': items.take(maxResults).toList(),
-        if (items.length > maxResults) 'more': 'Only the first $maxResults are shown. Use a more specific query.',
-      };
+    'count': items.length,
+    'items': items.take(maxResults).toList(),
+    if (items.length > maxResults) 'more': 'Only the first $maxResults are shown. Use a more specific query.',
+  };
 
   Map<String, Object?> _pending(FinanceSnapshot s, Map<String, Object?> args, String? query, bool includeClosed) {
     final direction = In.enumOpt(args, 'direction', PendingDirection.values);
     Map<String, Object?> view(PendingView v) => {
-          'id': v.payment.id,
-          'version': v.payment.version,
-          'counterparty': v.payment.counterparty,
-          'direction': v.payment.direction.name,
-          'purpose': v.payment.purpose,
-          'original': _m(v.payment.originalAmount),
-          'settled': _m(v.settled),
-          'outstanding': _m(v.outstanding),
-          'status': v.status.name,
-          'createdDate': Out.date(v.payment.createdDate),
-          'daysOpen': v.daysOpen,
-          'shared': v.payment.isShared,
-        };
+      'id': v.payment.id,
+      'version': v.payment.version,
+      'counterparty': v.payment.counterparty,
+      'direction': v.payment.direction.name,
+      'purpose': v.payment.purpose,
+      'original': _m(v.payment.originalAmount),
+      'settled': _m(v.settled),
+      'outstanding': _m(v.outstanding),
+      'status': v.status.name,
+      'createdDate': Out.date(v.payment.createdDate),
+      'daysOpen': v.daysOpen,
+      'shared': v.payment.isShared,
+    };
 
     if (query != null && !includeClosed) {
       // Same matching rules as the app's resolver: exact name first, then
       // partial; several candidates are never narrowed down by guessing.
       final resolved = const PendingResolver().resolve(s, query, direction: direction);
       if (resolved case Ok(:final value)) {
-        return {'match': 'unique', 'count': 1, 'items': [view(value)]};
+        return {
+          'match': 'unique',
+          'count': 1,
+          'items': [view(value)],
+        };
       }
     }
     final candidates = [
@@ -257,15 +271,18 @@ class SearchTransactionsTool extends ReadTool {
 
   @override
   Map<String, Object?> get parameters => JsonSchema.object({
-        'query': JsonSchema.string('Text in counterparty/note/category'),
-        'type': {'type': 'string', 'enum': ['income', 'expense']},
-        'categoryId': {'type': 'string'},
-        'from': JsonSchema.date('From date'),
-        'to': JsonSchema.date('To date'),
-        'minAmount': {'type': 'string'},
-        'maxAmount': {'type': 'string'},
-        'limit': {'type': 'integer', 'maximum': maxLimit},
-      });
+    'query': JsonSchema.string('Text in counterparty/note/category'),
+    'type': {
+      'type': 'string',
+      'enum': ['income', 'expense'],
+    },
+    'categoryId': {'type': 'string'},
+    'from': JsonSchema.date('From date'),
+    'to': JsonSchema.date('To date'),
+    'minAmount': {'type': 'string'},
+    'maxAmount': {'type': 'string'},
+    'limit': {'type': 'integer', 'maximum': maxLimit},
+  });
 
   @override
   Future<Map<String, Object?>> run(Map<String, Object?> args, ToolContext context) async {

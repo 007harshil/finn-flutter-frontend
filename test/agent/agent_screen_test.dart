@@ -12,12 +12,12 @@ import 'agent_fakes.dart';
 
 void main() {
   Map<String, Object?> lunch() => {
-        'type': 'expense',
-        'amount': '450',
-        'categoryId': 'cat_food',
-        'date': '2026-10-10',
-        'paymentMethod': 'upi',
-      };
+    'type': 'expense',
+    'amount': '450',
+    'categoryId': 'cat_food',
+    'date': '2026-10-10',
+    'paymentMethod': 'upi',
+  };
 
   group('AgentController', () {
     test('is unavailable without a provider (local mode)', () async {
@@ -35,7 +35,9 @@ void main() {
         callsTools([toolCall('record_transaction', lunch())]),
         says('I will record ₹450 for lunch.'),
       ]);
-      final container = ProviderContainer(overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)]);
+      final container = ProviderContainer(
+        overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)],
+      );
       addTearDown(container.dispose);
       final controller = container.read(agentControllerProvider.notifier);
       final before = (await env.snapshot()).transactions.length;
@@ -67,7 +69,9 @@ void main() {
         callsTools([toolCall('record_transaction', lunch())]),
         says('I will record ₹450 for lunch.'),
       ]);
-      final container = ProviderContainer(overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)]);
+      final container = ProviderContainer(
+        overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)],
+      );
       addTearDown(container.dispose);
       final controller = container.read(agentControllerProvider.notifier);
       final before = (await env.snapshot()).transactions.length;
@@ -88,7 +92,9 @@ void main() {
       final provider = ScriptedProvider([
         const LlmException(LlmErrorKind.rejected, 'The assistant could not process this request.'),
       ]);
-      final container = ProviderContainer(overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)]);
+      final container = ProviderContainer(
+        overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)],
+      );
       addTearDown(container.dispose);
       final controller = container.read(agentControllerProvider.notifier);
       await controller.send('hello');
@@ -113,13 +119,15 @@ void main() {
         callsTools([toolCall('record_transaction', lunch())]),
         says('I will record ₹450 for lunch.'),
       ]);
-      await tester.pumpWidget(ProviderScope(
-        overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)],
-        child: MaterialApp(
-          theme: FinnTheme.light(),
-          home: const MotionScope(reduceMotion: true, child: AgentScreen()),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)],
+          child: MaterialApp(
+            theme: FinnTheme.light(),
+            home: const MotionScope(reduceMotion: true, child: AgentScreen()),
+          ),
         ),
-      ));
+      );
       await tester.pump();
       expect(find.text('Tell FiNN what happened'), findsOneWidget);
 
@@ -130,7 +138,8 @@ void main() {
 
       expect(find.text('Review this change'), findsOneWidget);
       expect(find.text('TRANSACTIONS · NEW'), findsOneWidget);
-      expect(find.text('I will record ₹450 for lunch.'), findsOneWidget);
+      // The plan sits above the review card, which is scrolled into view.
+      expect(find.text('I will record ₹450 for lunch.', skipOffstage: false), findsOneWidget);
       expect(find.textContaining('450'), findsWidgets);
       expect(find.byTooltip('Stop'), findsOneWidget);
 

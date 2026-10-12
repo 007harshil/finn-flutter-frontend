@@ -22,8 +22,12 @@ Future<ActionOutcome<O>> _run<I extends ActionInput, O>(
   final dispatcher = container.read(actionDispatcherProvider);
   var outcome = await dispatcher.dispatch(action, input, idempotencyKey: key);
   if (outcome is ActionNeedsConfirmation<O>) {
-    outcome = await dispatcher.dispatch(action, input,
-        idempotencyKey: key, confirmation: ActionConfirmation(outcome.preview.fingerprint));
+    outcome = await dispatcher.dispatch(
+      action,
+      input,
+      idempotencyKey: key,
+      confirmation: ActionConfirmation(outcome.preview.fingerprint),
+    );
   }
   return outcome;
 }
@@ -91,21 +95,27 @@ void main() {
   test('markPaid rejects a cycle that already has a recorded payment', () async {
     final sub = await byName('Spotify Premium');
     // Simulate an earlier payment recorded for the current cycle.
-    await env.repos.transactions.save(Transaction(
-      id: 'tx_manual_dup',
-      type: TransactionType.expense,
-      amount: sub.amount,
-      categoryId: sub.categoryId,
-      date: testNow.dateOnly,
-      origin: TransactionOrigin.subscription,
-      originRefId: sub.id,
-      note: SubscriptionSchedule.paymentNote(sub, sub.nextDueDate),
-      createdAt: testNow,
-      updatedAt: testNow,
-    ));
+    await env.repos.transactions.save(
+      Transaction(
+        id: 'tx_manual_dup',
+        type: TransactionType.expense,
+        amount: sub.amount,
+        categoryId: sub.categoryId,
+        date: testNow.dateOnly,
+        origin: TransactionOrigin.subscription,
+        originRefId: sub.id,
+        note: SubscriptionSchedule.paymentNote(sub, sub.nextDueDate),
+        createdAt: testNow,
+        updatedAt: testNow,
+      ),
+    );
 
-    final outcome = await _run(container, const MarkSubscriptionPaidAction(),
-        MarkSubscriptionPaidInput(subscriptionId: sub.id), key: 'pay-dup');
+    final outcome = await _run(
+      container,
+      const MarkSubscriptionPaidAction(),
+      MarkSubscriptionPaidInput(subscriptionId: sub.id),
+      key: 'pay-dup',
+    );
 
     expect(outcome, isA<ActionRejected<Transaction>>());
     expect((await byName('Spotify Premium')).nextDueDate, sub.nextDueDate);
@@ -115,14 +125,17 @@ void main() {
     final sub = await byName('YouTube Premium');
     final txCount = (await env.snapshot()).transactions.length;
 
-    final outcome = await _run(container, const SkipSubscriptionCycleAction(),
-        SkipSubscriptionCycleInput(subscriptionId: sub.id, cycleDate: sub.nextDueDate), key: 'skip');
+    final outcome = await _run(
+      container,
+      const SkipSubscriptionCycleAction(),
+      SkipSubscriptionCycleInput(subscriptionId: sub.id, cycleDate: sub.nextDueDate),
+      key: 'skip',
+    );
 
     expect(outcome, isA<ActionCompleted<Subscription>>());
     final snapshot = await env.snapshot();
     expect(snapshot.transactions.length, txCount);
-    expect(snapshot.subscriptions.firstWhere((s) => s.id == sub.id).nextDueDate,
-        addMonthsClamped(sub.nextDueDate, 1));
+    expect(snapshot.subscriptions.firstWhere((s) => s.id == sub.id).nextDueDate, addMonthsClamped(sub.nextDueDate, 1));
   });
 
   test('a due date passing never creates a transaction by itself', () async {
@@ -143,9 +156,12 @@ void main() {
 
   test('paused subscriptions cannot be marked paid', () async {
     final sub = await byName('Disney+ Hotstar');
-    final outcome = await _run(container, const MarkSubscriptionPaidAction(),
-        MarkSubscriptionPaidInput(subscriptionId: sub.id, amount: const Money.rupees(299)), key: 'paused');
+    final outcome = await _run(
+      container,
+      const MarkSubscriptionPaidAction(),
+      MarkSubscriptionPaidInput(subscriptionId: sub.id, amount: const Money.rupees(299)),
+      key: 'paused',
+    );
     expect(outcome, isA<ActionRejected<Transaction>>());
   });
 }
-

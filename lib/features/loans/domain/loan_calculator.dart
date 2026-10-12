@@ -87,9 +87,8 @@ class LoanState {
 
   int? get remainingInstallments => loan.isAmortizing ? schedule.length : null;
 
-  DateTime? get projectedEndDate => loan.isAmortizing
-      ? (schedule.isEmpty ? null : schedule.last.dueDate)
-      : loan.maturityDate;
+  DateTime? get projectedEndDate =>
+      loan.isAmortizing ? (schedule.isEmpty ? null : schedule.last.dueDate) : loan.maturityDate;
 
   @override
   bool operator ==(Object other) =>
@@ -203,15 +202,17 @@ class LoanCalculator {
         isFinal = true;
       }
       b = b - principalPart;
-      rows.add(ScheduleRow(
-        number: n,
-        dueDate: dueDateOf(n),
-        payment: payment,
-        interest: interest,
-        principal: principalPart,
-        balanceAfter: b,
-        isFinal: isFinal || b.isZero,
-      ));
+      rows.add(
+        ScheduleRow(
+          number: n,
+          dueDate: dueDateOf(n),
+          payment: payment,
+          interest: interest,
+          principal: principalPart,
+          balanceAfter: b,
+          isFinal: isFinal || b.isZero,
+        ),
+      );
       n++;
     }
     return rows;
@@ -250,15 +251,17 @@ class LoanCalculator {
       final originalEmi = emi(loan.principal, loan.rate, tenure, ppy);
       // A prepayment happened if more principal was repaid than the original
       // schedule would have repaid after the same number of instalments.
-      final scheduledPrincipal = Money.sum(projectAmortizing(
-        balance: loan.principal,
-        rate: loan.rate,
-        installment: originalEmi,
-        periodsPerYear: ppy,
-        firstNumber: 1,
-        dueDateOf: (k) => loan.firstDueDate,
-        maxRows: paid,
-      ).map((r) => r.principal));
+      final scheduledPrincipal = Money.sum(
+        projectAmortizing(
+          balance: loan.principal,
+          rate: loan.rate,
+          installment: originalEmi,
+          periodsPerYear: ppy,
+          firstNumber: 1,
+          dueDateOf: (k) => loan.firstDueDate,
+          maxRows: paid,
+        ).map((r) => r.principal),
+      );
       final hasPrepayment = principalRepaid > scheduledPrincipal;
       var installment = originalEmi;
       if (hasPrepayment && loan.prepaymentStrategy == PrepaymentStrategy.reduceEmi) {
@@ -303,15 +306,17 @@ class LoanCalculator {
         final atMaturity = loan.maturityDate != null && !due.isBefore(loan.maturityDate!.dateOnly);
         // Interest-free loans have nothing due until maturity.
         if (interest.isZero && !atMaturity) continue;
-        schedule.add(ScheduleRow(
-          number: number,
-          dueDate: due,
-          payment: atMaturity ? interest + outstanding : interest,
-          interest: interest,
-          principal: atMaturity ? outstanding : Money.zero,
-          balanceAfter: atMaturity ? Money.zero : outstanding,
-          isFinal: atMaturity,
-        ));
+        schedule.add(
+          ScheduleRow(
+            number: number,
+            dueDate: due,
+            payment: atMaturity ? interest + outstanding : interest,
+            interest: interest,
+            principal: atMaturity ? outstanding : Money.zero,
+            balanceAfter: atMaturity ? Money.zero : outstanding,
+            isFinal: atMaturity,
+          ),
+        );
         if (atMaturity) break;
       }
     }
@@ -336,8 +341,12 @@ class LoanCalculator {
     required Money amount,
   }) {
     if (!amount.isPositive) {
-      return const Result.err(AppFailure.validation('Enter an amount greater than zero.',
-          fields: {'amount': 'Enter an amount greater than zero.'}));
+      return const Result.err(
+        AppFailure.validation(
+          'Enter an amount greater than zero.',
+          fields: {'amount': 'Enter an amount greater than zero.'},
+        ),
+      );
     }
     if (state.isClosed) {
       return const Result.err(AppFailure(FailureCode.validation, 'This loan is already fully repaid.'));
@@ -347,75 +356,89 @@ class LoanCalculator {
 
     if (kind == LoanPaymentKind.principal) {
       if (amount > outstanding) {
-        return Result.err(AppFailure.validation(
-          'Principal repayment cannot exceed the outstanding ${_fmt(outstanding)}.',
-          fields: {'amount': 'Maximum ${_fmt(outstanding)}'},
-        ));
+        return Result.err(
+          AppFailure.validation(
+            'Principal repayment cannot exceed the outstanding ${_fmt(outstanding)}.',
+            fields: {'amount': 'Maximum ${_fmt(outstanding)}'},
+          ),
+        );
       }
       final after = outstanding - amount;
-      return Result.ok(LoanPaymentPreview(
-        kind: kind,
-        amount: amount,
-        interestPortion: Money.zero,
-        principalPortion: amount,
-        outstandingBefore: outstanding,
-        outstandingAfter: after,
-        periodNumber: null,
-        dueDate: null,
-        closesLoan: after.isZero,
-        includesPrepayment: true,
-      ));
+      return Result.ok(
+        LoanPaymentPreview(
+          kind: kind,
+          amount: amount,
+          interestPortion: Money.zero,
+          principalPortion: amount,
+          outstandingBefore: outstanding,
+          outstandingAfter: after,
+          periodNumber: null,
+          dueDate: null,
+          closesLoan: after.isZero,
+          includesPrepayment: true,
+        ),
+      );
     }
 
     final expectedKind = loan.isAmortizing ? LoanPaymentKind.installment : LoanPaymentKind.interest;
     if (kind != expectedKind) {
-      return Result.err(AppFailure.validation(
-          '${kind.label} is not applicable to a ${loan.structure.label.toLowerCase()}.'));
+      return Result.err(
+        AppFailure.validation('${kind.label} is not applicable to a ${loan.structure.label.toLowerCase()}.'),
+      );
     }
     final row = state.nextDue;
     if (row == null) {
       // E.g. an interest-free loan with no maturity date, or an instalment
       // that no longer covers the interest: nothing is scheduled.
-      return const Result.err(AppFailure.validation(
-          'Nothing is scheduled on this loan right now. Record a principal repayment instead.'));
+      return const Result.err(
+        AppFailure.validation('Nothing is scheduled on this loan right now. Record a principal repayment instead.'),
+      );
     }
     final interestDue = row.interest;
     if (amount < interestDue) {
-      return Result.err(AppFailure.validation(
-        'The payment must at least cover the interest due of ${_fmt(interestDue)}.',
-        fields: {'amount': 'Minimum ${_fmt(interestDue)}'},
-      ));
+      return Result.err(
+        AppFailure.validation(
+          'The payment must at least cover the interest due of ${_fmt(interestDue)}.',
+          fields: {'amount': 'Minimum ${_fmt(interestDue)}'},
+        ),
+      );
     }
     final payoff = interestDue + outstanding;
     if (amount > payoff) {
-      return Result.err(AppFailure.validation(
-        'This is more than the full payoff amount of ${_fmt(payoff)}.',
-        fields: {'amount': 'Maximum ${_fmt(payoff)}'},
-      ));
+      return Result.err(
+        AppFailure.validation(
+          'This is more than the full payoff amount of ${_fmt(payoff)}.',
+          fields: {'amount': 'Maximum ${_fmt(payoff)}'},
+        ),
+      );
     }
     final principalPortion = amount - interestDue;
     final after = outstanding - principalPortion;
-    return Result.ok(LoanPaymentPreview(
-      kind: kind,
-      amount: amount,
-      interestPortion: interestDue,
-      principalPortion: principalPortion,
-      outstandingBefore: outstanding,
-      outstandingAfter: after,
-      periodNumber: row.number,
-      dueDate: row.dueDate,
-      closesLoan: after.isZero,
-      includesPrepayment: amount > row.payment,
-    ));
+    return Result.ok(
+      LoanPaymentPreview(
+        kind: kind,
+        amount: amount,
+        interestPortion: interestDue,
+        principalPortion: principalPortion,
+        outstandingBefore: outstanding,
+        outstandingAfter: after,
+        periodNumber: row.number,
+        dueDate: row.dueDate,
+        closesLoan: after.isZero,
+        includesPrepayment: amount > row.payment,
+      ),
+    );
   }
 
   /// Outstanding principal (signed by direction is the caller's concern) at
   /// the end of [date], from recorded payments.
   Money outstandingOn(Loan loan, List<LoanPayment> payments, DateTime date) {
     if (date.isBefore(loan.startDate.dateOnly)) return Money.zero;
-    final repaid = Money.sum(payments
-        .where((p) => p.loanId == loan.id && !p.date.dateOnly.isAfter(date.dateOnly))
-        .map((p) => p.principalComponent));
+    final repaid = Money.sum(
+      payments
+          .where((p) => p.loanId == loan.id && !p.date.dateOnly.isAfter(date.dateOnly))
+          .map((p) => p.principalComponent),
+    );
     return Money.max(loan.principal - repaid, Money.zero);
   }
 

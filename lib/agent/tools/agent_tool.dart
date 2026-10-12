@@ -85,7 +85,8 @@ class ActionTool extends AgentTool {
   String get description => ['${descriptor.title}. ${descriptor.description}', ?guidance].join(' ');
 
   @override
-  Map<String, Object?> get parameters => _schemas[name] ??= JsonSchema.forAction(descriptor, overrides: fieldOverrides, exclude: excludedFields);
+  Map<String, Object?> get parameters =>
+      _schemas[name] ??= JsonSchema.forAction(descriptor, overrides: fieldOverrides, exclude: excludedFields);
 
   static final Map<String, Map<String, Object?>> _schemas = {};
 }
@@ -117,24 +118,32 @@ final class QueueActionsTool extends AgentTool {
   String get progressLabel => 'Preparing your changes';
 
   @override
-  String get description => 'Queue one or more actions for review in ONE call (preferred over calling action tools '
+  String get description =>
+      'Queue one or more actions for review in ONE call (preferred over calling action tools '
       'one at a time). Each item names an action tool and gives exactly the arguments that tool takes.';
 
   @override
-  Map<String, Object?> get parameters => JsonSchema.object({
-        'actions': {
-          'type': 'array',
-          'minItems': 1,
-          'maxItems': maxActions,
-          'items': JsonSchema.object({
+  Map<String, Object?> get parameters => JsonSchema.object(
+    {
+      'actions': {
+        'type': 'array',
+        'minItems': 1,
+        'maxItems': maxActions,
+        'items': JsonSchema.object(
+          {
             'tool': JsonSchema.string('Action tool name', values: actionToolNames),
             'arguments': {'type': 'object', 'description': "That tool's arguments"},
-          }, required: ['tool', 'arguments']),
-        },
-        doneField: JsonSchema.boolean(
-            'true when these are all the changes left for this request (nothing more to look up, ask or wait for); '
-            'the user then reviews them and you are finished'),
-      }, required: ['actions', doneField]);
+          },
+          required: ['tool', 'arguments'],
+        ),
+      },
+      doneField: JsonSchema.boolean(
+        'true when these are all the changes left for this request (nothing more to look up, ask or wait for); '
+        'the user then reviews them and you are finished',
+      ),
+    },
+    required: ['actions', doneField],
+  );
 }
 
 /// Uniform JSON returned to the model for every tool call.
@@ -147,12 +156,7 @@ class ToolResult {
   factory ToolResult.error(String code, String message, {Map<String, String> fields = const {}, String? hint}) =>
       ToolResult._({
         'ok': false,
-        'error': {
-          'code': code,
-          'message': message,
-          if (fields.isNotEmpty) 'fields': fields,
-          'hint': ?hint,
-        },
+        'error': {'code': code, 'message': message, if (fields.isNotEmpty) 'fields': fields, 'hint': ?hint},
       }, ok: false);
 
   factory ToolResult.failure(AppFailure f, {String? hint}) =>

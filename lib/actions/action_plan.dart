@@ -67,10 +67,12 @@ class PlanExecutor {
         (decoded as Ok<ActionInput>).value,
         channel: plan.channel,
       );
-      reports.add(preview.fold(
-        (p) => StepReport(step: step, status: StepStatus.ready, preview: p),
-        (f) => StepReport(step: step, status: StepStatus.invalid, failure: f),
-      ));
+      reports.add(
+        preview.fold(
+          (p) => StepReport(step: step, status: StepStatus.ready, preview: p),
+          (f) => StepReport(step: step, status: StepStatus.invalid, failure: f),
+        ),
+      );
     }
     return reports;
   }
@@ -120,12 +122,14 @@ class PlanExecutor {
           reports.add(StepReport(step: step, status: StepStatus.succeeded, preview: preview, result: value));
         case ActionNeedsConfirmation(:final preview):
           // Data changed since approval: the preview no longer matches.
-          reports.add(StepReport(
-            step: step,
-            status: StepStatus.notApproved,
-            preview: preview,
-            failure: const AppFailure(FailureCode.staleData, 'Details changed since approval. Please review again.'),
-          ));
+          reports.add(
+            StepReport(
+              step: step,
+              status: StepStatus.notApproved,
+              preview: preview,
+              failure: const AppFailure(FailureCode.staleData, 'Details changed since approval. Please review again.'),
+            ),
+          );
           halted = stopOnFailure;
         case ActionRejected(:final failure):
           reports.add(StepReport(step: step, status: StepStatus.failed, failure: failure));

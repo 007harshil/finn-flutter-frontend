@@ -24,24 +24,23 @@ Loan amortizing({
   PrepaymentStrategy strategy = PrepaymentStrategy.reduceTenure,
   LoanStatus status = LoanStatus.active,
   LoanDirection direction = LoanDirection.borrowed,
-}) =>
-    Loan(
-      id: id,
-      name: 'Car loan',
-      counterparty: 'HDFC Bank',
-      direction: direction,
-      structure: LoanStructure.amortizing,
-      principal: principal,
-      rate: InterestRate(bps),
-      startDate: DateTime(2025, 12, 5),
-      firstDueDate: firstDue ?? DateTime(2026, 11, 5),
-      frequency: frequency,
-      tenureInstallments: n,
-      prepaymentStrategy: strategy,
-      status: status,
-      createdAt: stamp,
-      updatedAt: stamp,
-    );
+}) => Loan(
+  id: id,
+  name: 'Car loan',
+  counterparty: 'HDFC Bank',
+  direction: direction,
+  structure: LoanStructure.amortizing,
+  principal: principal,
+  rate: InterestRate(bps),
+  startDate: DateTime(2025, 12, 5),
+  firstDueDate: firstDue ?? DateTime(2026, 11, 5),
+  frequency: frequency,
+  tenureInstallments: n,
+  prepaymentStrategy: strategy,
+  status: status,
+  createdAt: stamp,
+  updatedAt: stamp,
+);
 
 Loan interestOnly({
   String id = 'loan_i',
@@ -49,22 +48,21 @@ Loan interestOnly({
   int bps = 1200,
   DateTime? firstDue,
   DateTime? maturity,
-}) =>
-    Loan(
-      id: id,
-      name: 'Family loan',
-      counterparty: 'Ramesh Uncle',
-      direction: LoanDirection.borrowed,
-      structure: LoanStructure.interestOnly,
-      principal: principal,
-      rate: InterestRate(bps),
-      startDate: DateTime(2026, 10, 1),
-      firstDueDate: firstDue ?? DateTime(2026, 11, 1),
-      frequency: Frequency.monthly,
-      maturityDate: maturity,
-      createdAt: stamp,
-      updatedAt: stamp,
-    );
+}) => Loan(
+  id: id,
+  name: 'Family loan',
+  counterparty: 'Ramesh Uncle',
+  direction: LoanDirection.borrowed,
+  structure: LoanStructure.interestOnly,
+  principal: principal,
+  rate: InterestRate(bps),
+  startDate: DateTime(2026, 10, 1),
+  firstDueDate: firstDue ?? DateTime(2026, 11, 1),
+  frequency: Frequency.monthly,
+  maturityDate: maturity,
+  createdAt: stamp,
+  updatedAt: stamp,
+);
 
 int _pid = 0;
 LoanPayment payment(Loan loan, LoanPaymentKind kind, DateTime date, Money interest, Money principal, {int? period}) =>
@@ -83,7 +81,8 @@ LoanPayment payment(Loan loan, LoanPaymentKind kind, DateTime date, Money intere
 List<LoanPayment> payInstallments(Loan loan, int count) {
   final rows = calc.originalSchedule(loan).take(count);
   return [
-    for (final r in rows) payment(loan, LoanPaymentKind.installment, r.dueDate, r.interest, r.principal, period: r.number),
+    for (final r in rows)
+      payment(loan, LoanPaymentKind.installment, r.dueDate, r.interest, r.principal, period: r.number),
   ];
 }
 
@@ -176,7 +175,11 @@ void main() {
       var balance = loan.principal;
       for (final r in rows) {
         // Interest is computed independently: half-up of balance·950/120000.
-        final expected = roundDivBig(BigInt.from(balance.paise) * BigInt.from(950), BigInt.from(120000), RoundingMode.halfUp);
+        final expected = roundDivBig(
+          BigInt.from(balance.paise) * BigInt.from(950),
+          BigInt.from(120000),
+          RoundingMode.halfUp,
+        );
         expect(r.interest.paise, expected.toInt(), reason: 'row ${r.number}');
         expect(r.interest + r.principal, r.payment);
         balance -= r.principal;
@@ -192,7 +195,12 @@ void main() {
 
     test('due dates stay anchored to the 31st', () {
       final rows = calc.originalSchedule(amortizing(firstDue: DateTime(2027, 1, 31), n: 4));
-      expect(rows.map((r) => r.dueDate), [DateTime(2027, 1, 31), DateTime(2027, 2, 28), DateTime(2027, 3, 31), DateTime(2027, 4, 30)]);
+      expect(rows.map((r) => r.dueDate), [
+        DateTime(2027, 1, 31),
+        DateTime(2027, 2, 28),
+        DateTime(2027, 3, 31),
+        DateTime(2027, 4, 30),
+      ]);
     });
 
     test('invariants hold across many loans', () {
@@ -293,9 +301,9 @@ void main() {
     group('prepayment strategies', () {
       Loan withStrategy(PrepaymentStrategy s) => amortizing(firstDue: DateTime(2026, 1, 5), strategy: s);
       List<LoanPayment> history(Loan loan) => [
-            ...payInstallments(loan, 3),
-            payment(loan, LoanPaymentKind.principal, DateTime(2026, 4, 10), Money.zero, rs(100000)),
-          ];
+        ...payInstallments(loan, 3),
+        payment(loan, LoanPaymentKind.principal, DateTime(2026, 4, 10), Money.zero, rs(100000)),
+      ];
 
       test('reduceTenure keeps the EMI and finishes earlier', () {
         final loan = withStrategy(PrepaymentStrategy.reduceTenure);
@@ -344,7 +352,10 @@ void main() {
         final st = calc.state(loan, const [], today);
         expect(st.currentInstallment, rs(2000));
         expect(st.schedule.length, 12);
-        expect(st.schedule.every((r) => r.interest == rs(2000) && r.principal.isZero && r.balanceAfter == rs(200000)), isTrue);
+        expect(
+          st.schedule.every((r) => r.interest == rs(2000) && r.principal.isZero && r.balanceAfter == rs(200000)),
+          isTrue,
+        );
         expect(st.schedule.first.dueDate, DateTime(2026, 11, 1));
         expect(st.schedule.last.dueDate, DateTime(2027, 10, 1));
         expect(st.projectedInterest, rs(24000));
@@ -452,24 +463,35 @@ void main() {
     });
 
     test('rejects zero, wrong kind and closed loans', () {
-      expect(err(calc.previewPayment(state: st, kind: LoanPaymentKind.installment, amount: Money.zero)).fieldErrors.keys,
-          contains('amount'));
-      expect(err(calc.previewPayment(state: st, kind: LoanPaymentKind.interest, amount: rs(5000))).code, FailureCode.validation);
+      expect(
+        err(calc.previewPayment(state: st, kind: LoanPaymentKind.installment, amount: Money.zero)).fieldErrors.keys,
+        contains('amount'),
+      );
+      expect(
+        err(calc.previewPayment(state: st, kind: LoanPaymentKind.interest, amount: rs(5000))).code,
+        FailureCode.validation,
+      );
       final closed = calc.state(amortizing(status: LoanStatus.closed), const [], today);
       expect(closed.isClosed, isTrue);
-      expect(err(calc.previewPayment(state: closed, kind: LoanPaymentKind.installment, amount: rs(12602))).code,
-          FailureCode.validation);
+      expect(
+        err(calc.previewPayment(state: closed, kind: LoanPaymentKind.installment, amount: rs(12602))).code,
+        FailureCode.validation,
+      );
       final repaid = calc.state(loan, [payment(loan, LoanPaymentKind.principal, today, Money.zero, rs(600000))], today);
       expect(repaid.isClosed, isTrue);
       expect(repaid.schedule, isEmpty);
-      expect(err(calc.previewPayment(state: repaid, kind: LoanPaymentKind.principal, amount: rs(1))).code,
-          FailureCode.validation);
+      expect(
+        err(calc.previewPayment(state: repaid, kind: LoanPaymentKind.principal, amount: rs(1))).code,
+        FailureCode.validation,
+      );
     });
 
     test('interest-only: minimum is the period interest, maximum the payoff', () {
       final io = calc.state(interestOnly(), const [], today);
-      expect(err(calc.previewPayment(state: io, kind: LoanPaymentKind.interest, amount: rs(1999))).fieldErrors.keys,
-          contains('amount'));
+      expect(
+        err(calc.previewPayment(state: io, kind: LoanPaymentKind.interest, amount: rs(1999))).fieldErrors.keys,
+        contains('amount'),
+      );
       final exact = ok(calc.previewPayment(state: io, kind: LoanPaymentKind.interest, amount: rs(2000)));
       expect(exact.principalPortion, Money.zero);
       expect(exact.includesPrepayment, isFalse);
@@ -477,10 +499,14 @@ void main() {
       expect(extra.principalPortion, rs(50000));
       expect(extra.includesPrepayment, isTrue);
       expect(ok(calc.previewPayment(state: io, kind: LoanPaymentKind.interest, amount: rs(202000))).closesLoan, isTrue);
-      expect(err(calc.previewPayment(state: io, kind: LoanPaymentKind.interest, amount: rs(202000) + ps(1))).code,
-          FailureCode.validation);
-      expect(err(calc.previewPayment(state: io, kind: LoanPaymentKind.installment, amount: rs(2000))).code,
-          FailureCode.validation);
+      expect(
+        err(calc.previewPayment(state: io, kind: LoanPaymentKind.interest, amount: rs(202000) + ps(1))).code,
+        FailureCode.validation,
+      );
+      expect(
+        err(calc.previewPayment(state: io, kind: LoanPaymentKind.installment, amount: rs(2000))).code,
+        FailureCode.validation,
+      );
     });
   });
 

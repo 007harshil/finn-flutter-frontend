@@ -114,17 +114,11 @@ class FinnColors extends ThemeExtension<FinnColors> {
   bool get isDark => brightness == Brightness.dark;
 
   /// Gradient of the FiNN agent mark.
-  LinearGradient get agentGradient => LinearGradient(
-        colors: [agentStart, agentMid, agentEnd],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      );
+  LinearGradient get agentGradient =>
+      LinearGradient(colors: [agentStart, agentMid, agentEnd], begin: Alignment.topLeft, end: Alignment.bottomRight);
 
-  LinearGradient get heroGradient => LinearGradient(
-        colors: [heroStart, heroEnd],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      );
+  LinearGradient get heroGradient =>
+      LinearGradient(colors: [heroStart, heroEnd], begin: Alignment.topLeft, end: Alignment.bottomRight);
 
   static const light = FinnColors(
     brightness: Brightness.light,

@@ -22,16 +22,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'remote_fakes.dart';
 
 Map<String, Object?> previewJson(String actionId, {bool requiresConfirmation = true}) => {
-      'actionId': actionId,
-      'title': 'Add expense?',
-      'summary': 'Record ₹125 expense',
-      'lines': [
-        {'label': 'Amount', 'value': '₹125', 'emphasis': true},
-      ],
-      'warnings': ['This is over budget.'],
-      'fingerprint': 'abc123.def',
-      'requiresConfirmation': requiresConfirmation,
-    };
+  'actionId': actionId,
+  'title': 'Add expense?',
+  'summary': 'Record ₹125 expense',
+  'lines': [
+    {'label': 'Amount', 'value': '₹125', 'emphasis': true},
+  ],
+  'warnings': ['This is over budget.'],
+  'fingerprint': 'abc123.def',
+  'requiresConfirmation': requiresConfirmation,
+};
 
 void main() {
   late List<http.Request> requests;
@@ -78,7 +78,11 @@ void main() {
     respond = (req) {
       final body = jsonDecode(req.body) as Map;
       if (body['confirmation'] == null) {
-        return ok({'status': 'needsConfirmation', 'actionId': 'transactions.create', 'preview': previewJson('transactions.create')});
+        return ok({
+          'status': 'needsConfirmation',
+          'actionId': 'transactions.create',
+          'preview': previewJson('transactions.create'),
+        });
       }
       return ok({
         'status': 'completed',
@@ -86,9 +90,15 @@ void main() {
         'result': txJson('tx_new'),
         'preview': previewJson('transactions.create'),
         'replayed': false,
-        'changes': page(cursor: '42', collections: {
-          'transactions': {'upserted': [txJson('tx_new')], 'deleted': []},
-        }),
+        'changes': page(
+          cursor: '42',
+          collections: {
+            'transactions': {
+              'upserted': [txJson('tx_new')],
+              'deleted': [],
+            },
+          },
+        ),
       });
     };
 
@@ -124,7 +134,8 @@ void main() {
   });
 
   test('error envelopes become ActionRejected with the same code and field errors', () async {
-    respond = (_) => errorResponse(422, 'validation', 'Choose a category.', fields: {'categoryId': 'Choose a category.'});
+    respond = (_) =>
+        errorResponse(422, 'validation', 'Choose a category.', fields: {'categoryId': 'Choose a category.'});
     final outcome = await dispatcher.dispatch(const CreateTransactionAction(), input, idempotencyKey: 'ui_key_0002');
     expect(outcome, isA<ActionRejected<Transaction>>());
     final failure = (outcome as ActionRejected<Transaction>).failure;
@@ -144,9 +155,7 @@ void main() {
   });
 
   test('list outputs (pending.split) decode into typed records', () async {
-    final value = actionResultDecoders['pending.split']!(
-      [pendingJson('pd_1'), pendingJson('pd_2')],
-    );
+    final value = actionResultDecoders['pending.split']!([pendingJson('pd_1'), pendingJson('pd_2')]);
     expect(value, isA<List<PendingPayment>>());
     expect((value as List<PendingPayment>).map((p) => p.id), ['pd_1', 'pd_2']);
   });
@@ -157,14 +166,22 @@ void main() {
 
   test('a concurrent duplicate with the same key is rejected locally', () async {
     respond = (_) => ok({
-          'status': 'completed',
-          'actionId': 'pending.cancel',
-          'result': pendingJson('pd_1'),
-          'preview': previewJson('pending.cancel'),
-          'replayed': false,
-        });
-    final a = dispatcher.dispatch(const CancelPendingAction(), const PendingIdInput(id: 'pd_1'), idempotencyKey: 'ui_key_0003');
-    final b = dispatcher.dispatch(const CancelPendingAction(), const PendingIdInput(id: 'pd_1'), idempotencyKey: 'ui_key_0003');
+      'status': 'completed',
+      'actionId': 'pending.cancel',
+      'result': pendingJson('pd_1'),
+      'preview': previewJson('pending.cancel'),
+      'replayed': false,
+    });
+    final a = dispatcher.dispatch(
+      const CancelPendingAction(),
+      const PendingIdInput(id: 'pd_1'),
+      idempotencyKey: 'ui_key_0003',
+    );
+    final b = dispatcher.dispatch(
+      const CancelPendingAction(),
+      const PendingIdInput(id: 'pd_1'),
+      idempotencyKey: 'ui_key_0003',
+    );
     expect(await b, isA<ActionRejected<PendingPayment>>());
     expect(await a, isA<ActionCompleted<PendingPayment>>());
   });

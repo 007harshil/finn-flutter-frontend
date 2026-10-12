@@ -10,6 +10,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
+import '../../../app/shell/app_drawer.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/result/result.dart';
@@ -40,8 +41,7 @@ class TransactionsScreen extends ConsumerStatefulWidget {
 }
 
 class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
-  late final TextEditingController _search =
-      TextEditingController(text: ref.read(transactionFilterProvider).query);
+  late final TextEditingController _search = TextEditingController(text: ref.read(transactionFilterProvider).query);
   int _visibleRows = _pageSize;
   bool _extendQueued = false;
 
@@ -117,11 +117,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
       title: 'Sort by',
       items: [
         for (final s in TransactionSort.values)
-          FinnMenuItem(
-            value: s,
-            label: s.label,
-            icon: s == current ? LucideIcons.check : _sortIcon(s),
-          ),
+          FinnMenuItem(value: s, label: s.label, icon: s == current ? LucideIcons.check : _sortIcon(s)),
       ],
     );
     if (picked != null) _filter.setSort(picked);
@@ -249,7 +245,9 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     return [
       SliverPadding(
         padding: pad(Space.x3),
-        sliver: SliverToBoxAdapter(child: StaggeredEntrance(child: ActivityPulse(feed: feed))),
+        sliver: SliverToBoxAdapter(
+          child: StaggeredEntrance(child: ActivityPulse(feed: feed)),
+        ),
       ),
       SliverPadding(
         padding: EdgeInsets.fromLTRB(side, Space.x2, side, 0),
@@ -257,17 +255,17 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           itemCount: entryCount,
           itemBuilder: (context, i) => switch (feed.entries[i]) {
             FeedDayHeader(:final date, :final net, :final count) => _DayHeader(
-                key: ValueKey('day-${date.millisecondsSinceEpoch}'),
-                date: date,
-                today: today,
-                net: net,
-                count: count,
-              ),
+              key: ValueKey('day-${date.millisecondsSinceEpoch}'),
+              date: date,
+              today: today,
+              net: net,
+              count: count,
+            ),
             FeedTransaction(:final transaction) => TransactionRow(
-                key: ValueKey(transaction.id),
-                transaction: transaction,
-                showDate: !grouped,
-              ),
+              key: ValueKey(transaction.id),
+              transaction: transaction,
+              showDate: !grouped,
+            ),
           },
         ),
       ),
@@ -300,11 +298,11 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
 }
 
 IconData _sortIcon(TransactionSort s) => switch (s) {
-      TransactionSort.newest => LucideIcons.arrowDownWideNarrow,
-      TransactionSort.oldest => LucideIcons.arrowUpNarrowWide,
-      TransactionSort.highest => LucideIcons.trendingUp,
-      TransactionSort.lowest => LucideIcons.trendingDown,
-    };
+  TransactionSort.newest => LucideIcons.arrowDownWideNarrow,
+  TransactionSort.oldest => LucideIcons.arrowUpNarrowWide,
+  TransactionSort.highest => LucideIcons.trendingUp,
+  TransactionSort.lowest => LucideIcons.trendingDown,
+};
 
 String _rangeLabel(DateRange r) {
   final sameYear = r.start.year == r.end.year;
@@ -378,14 +376,11 @@ class _FilterHeader extends ConsumerWidget {
           children: [
             Row(
               children: [
+                const AppMenuButton(variant: FinnIconButtonVariant.outline, size: FinnButtonSize.sm),
+                if (AppDrawerScope.maybeOf(context) != null) const SizedBox(width: Space.x2),
                 Expanded(
                   child: range == null
-                      ? MonthSwitcher(
-                          month: month,
-                          min: bounds.first,
-                          max: bounds.last,
-                          onChanged: notifier.setMonth,
-                        )
+                      ? MonthSwitcher(month: month, min: bounds.first, max: bounds.last, onChanged: notifier.setMonth)
                       : _RangePill(range: range, onClear: notifier.clearRange, onTap: onPickRange),
                 ),
                 const SizedBox(width: Space.x2),
@@ -475,10 +470,7 @@ class _QuickFilterRow extends ConsumerWidget {
             const SizedBox(width: Space.x1_5),
             _ActiveChip(key: ValueKey('active-filter:$key'), label: label, onRemove: onRemove),
           ],
-          if (chips.isEmpty) ...[
-            const SizedBox(width: Space.x1_5),
-            _AddFilterChip(onTap: onOpenFilters),
-          ],
+          if (chips.isEmpty) ...[const SizedBox(width: Space.x1_5), _AddFilterChip(onTap: onOpenFilters)],
         ],
       ),
     );
@@ -735,9 +727,10 @@ class _DayHeader extends StatelessWidget {
     final label = switch (diff) {
       0 => 'Today',
       -1 => 'Yesterday',
-      _ => date.year == today.year
-          ? DateFormats.shortWeekdayDayMonth.format(date)
-          : '${DateFormats.shortWeekdayDayMonth.format(date)} ${date.year}',
+      _ =>
+        date.year == today.year
+            ? DateFormats.shortWeekdayDayMonth.format(date)
+            : '${DateFormats.shortWeekdayDayMonth.format(date)} ${date.year}',
     };
     return Semantics(
       header: true,

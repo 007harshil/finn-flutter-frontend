@@ -20,13 +20,13 @@ Future<void> settle(WidgetTester tester) async {
 /// The bottom-navigation item labelled [label] ("Home" may carry an alert
 /// count, e.g. "Home, 3 alerts").
 Finder navTab(String label) => find.byWidgetPredicate(
-      (w) =>
-          w is Semantics &&
-          w.properties.button == true &&
-          w.properties.selected != null &&
-          (w.properties.label == label || (w.properties.label?.startsWith('$label,') ?? false)),
-      description: 'bottom nav tab "$label"',
-    );
+  (w) =>
+      w is Semantics &&
+      w.properties.button == true &&
+      w.properties.selected != null &&
+      (w.properties.label == label || (w.properties.label?.startsWith('$label,') ?? false)),
+  description: 'bottom nav tab "$label"',
+);
 
 /// Switches branch through the real bottom navigation bar.
 Future<void> tapTab(WidgetTester tester, String label) async {
@@ -42,6 +42,19 @@ Future<void> tapTab(WidgetTester tester, String label) async {
   await tester.tap(tab);
   await tester.pumpAndSettle();
 }
+
+/// Opens the side drawer (profile, net worth, money modules, settings) from
+/// the current tab's header menu button.
+Future<void> openMenu(WidgetTester tester) async {
+  final menu = find.byTooltip('Menu');
+  expect(menu, findsWidgets, reason: 'the tab header should show a menu button');
+  await tester.tap(menu.first);
+  await tester.pumpAndSettle();
+  expect(find.byKey(const ValueKey('app-drawer')), findsOneWidget);
+}
+
+/// [finder] limited to the open side drawer.
+Finder inDrawer(Finder finder) => find.descendant(of: find.byKey(const ValueKey('app-drawer')), matching: finder);
 
 final _verticalScrollable = find.byWidgetPredicate(
   (w) =>
@@ -78,10 +91,7 @@ Future<void> enterAmount(WidgetTester tester, String text, {int index = 0}) asyn
 
 /// Types [text] into the [FinnTextField] labelled [label].
 Future<void> enterField(WidgetTester tester, String label, String text) async {
-  final field = find.descendant(
-    of: find.widgetWithText(FinnTextField, label),
-    matching: find.byType(EditableText),
-  );
+  final field = find.descendant(of: find.widgetWithText(FinnTextField, label), matching: find.byType(EditableText));
   await scrollTo(tester, field);
   await tester.enterText(field, text);
   await tester.pump();
@@ -117,5 +127,4 @@ Future<void> tapButton(WidgetTester tester, String label) async {
 String rupees(Money m) => MoneyFormatter.format(m, decimals: DecimalDisplay.none);
 
 /// Finds [text] inside the home hero balance card.
-Finder inHero(String text) =>
-    find.descendant(of: find.byType(HeroBalanceCard), matching: find.text(text));
+Finder inHero(String text) => find.descendant(of: find.byType(HeroBalanceCard), matching: find.text(text));

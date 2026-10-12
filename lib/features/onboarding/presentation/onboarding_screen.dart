@@ -418,10 +418,7 @@ class _PageDots extends StatelessWidget {
               margin: const EdgeInsets.symmetric(horizontal: 3),
               width: i == index ? 22 : 7,
               height: 7,
-              decoration: BoxDecoration(
-                color: i == index ? c.primary : c.borderStrong,
-                borderRadius: Radii.rFull,
-              ),
+              decoration: BoxDecoration(color: i == index ? c.primary : c.borderStrong, borderRadius: Radii.rFull),
             ),
         ],
       ),

@@ -48,9 +48,8 @@ class Conversation {
     }
 
     // An assistant turn expands to its text, reasoning and each tool call.
-    int items(int from) => _messages
-        .skip(from)
-        .fold(0, (n, m) => n + (m.role == LlmRole.assistant ? 2 + m.toolCalls.length : 1));
+    int items(int from) =>
+        _messages.skip(from).fold(0, (n, m) => n + (m.role == LlmRole.assistant ? 2 + m.toolCalls.length : 1));
 
     var startIndex = starts.indexOf(first);
     while (startIndex < starts.length - 1 && (size(first) > maxChars || items(first) > maxItems)) {

@@ -67,17 +67,17 @@ class _NotFound extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(Space.x6),
-          child: EmptyState(
-            icon: LucideIcons.searchX,
-            title: 'Transaction not found',
-            message: 'It may have been deleted or changed from another screen.',
-            actionLabel: 'Back to activity',
-            onAction: () => context.go(AppRoutes.transactions),
-          ),
-        ),
-      );
+    child: Padding(
+      padding: const EdgeInsets.all(Space.x6),
+      child: EmptyState(
+        icon: LucideIcons.searchX,
+        title: 'Transaction not found',
+        message: 'It may have been deleted or changed from another screen.',
+        actionLabel: 'Back to activity',
+        onAction: () => context.go(AppRoutes.transactions),
+      ),
+    ),
+  );
 }
 
 class _Details extends ConsumerStatefulWidget {
@@ -129,11 +129,11 @@ class _DetailsState extends ConsumerState<_Details> {
   }
 
   String _sourceName(TransactionOrigin o) => switch (o) {
-        TransactionOrigin.loanRepayment || TransactionOrigin.loanDisbursement => 'loan',
-        TransactionOrigin.subscription => 'subscription',
-        TransactionOrigin.pendingSettlement => 'pending payment',
-        TransactionOrigin.manual => 'entry',
-      };
+    TransactionOrigin.loanRepayment || TransactionOrigin.loanDisbursement => 'loan',
+    TransactionOrigin.subscription => 'subscription',
+    TransactionOrigin.pendingSettlement => 'pending payment',
+    TransactionOrigin.manual => 'entry',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -174,8 +174,7 @@ class _DetailsState extends ConsumerState<_Details> {
                         sign: SignDisplay.always,
                         fit: true,
                         style: text.amountHero.copyWith(color: accent),
-                        semanticsLabel:
-                            '${t.isIncome ? 'Received' : 'Spent'} ${MoneyFormatter.spoken(t.amount)}',
+                        semanticsLabel: '${t.isIncome ? 'Received' : 'Spent'} ${MoneyFormatter.spoken(t.amount)}',
                       ),
                       const SizedBox(height: Space.x3),
                       Wrap(
@@ -188,13 +187,8 @@ class _DetailsState extends ConsumerState<_Details> {
                             color: accent,
                             icon: t.isIncome ? LucideIcons.arrowDownLeft : LucideIcons.arrowUpRight,
                           ),
-                          StatusPill(
-                            label: 'Completed',
-                            color: c.textSecondary,
-                            icon: LucideIcons.circleCheck,
-                          ),
-                          if (t.isLinked)
-                            StatusPill(label: 'Linked', color: c.info, icon: LucideIcons.link2),
+                          StatusPill(label: 'Completed', color: c.textSecondary, icon: LucideIcons.circleCheck),
+                          if (t.isLinked) StatusPill(label: 'Linked', color: c.info, icon: LucideIcons.link2),
                         ],
                       ),
                     ],
@@ -207,7 +201,8 @@ class _DetailsState extends ConsumerState<_Details> {
                   index: 1,
                   child: InfoBanner(
                     title: 'Created by ${t.origin.label}',
-                    message: 'To keep your balances accurate, change or reverse this from the '
+                    message:
+                        'To keep your balances accurate, change or reverse this from the '
                         '${_sourceName(t.origin)} that created it.',
                     icon: LucideIcons.link2,
                     actionLabel: route == null ? null : 'Open ${_sourceName(t.origin)}',

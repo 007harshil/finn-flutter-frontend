@@ -55,15 +55,16 @@ int _callSeq = 0;
 LlmToolCall toolCall(String name, Map<String, Object?> args, {String? id}) =>
     LlmToolCall(id: id ?? 'call_${_callSeq++}', name: name, arguments: jsonEncode(args));
 
-LlmResponse callsTools(List<LlmToolCall> calls) => LlmResponse(toolCalls: calls, finishReason: LlmFinishReason.toolCalls);
+LlmResponse callsTools(List<LlmToolCall> calls) =>
+    LlmResponse(toolCalls: calls, finishReason: LlmFinishReason.toolCalls);
 
 LlmResponse says(String text) => LlmResponse(text: text);
 
 /// Decoded tool results the model received in [request], keyed by call id.
 Map<String, Map<String, Object?>> toolResultsIn(LlmRequest request) => {
-      for (final m in request.messages)
-        if (m.role == LlmRole.tool) m.toolCallId!: Map<String, Object?>.from(jsonDecode(m.content!) as Map),
-    };
+  for (final m in request.messages)
+    if (m.role == LlmRole.tool) m.toolCallId!: Map<String, Object?>.from(jsonDecode(m.content!) as Map),
+};
 
 /// Wires the real toolbox, executor and runner onto an [ActionHarness]
 /// (local dispatcher, in-memory data).
@@ -121,25 +122,24 @@ Future<PendingPayment> addPending(
   required int rupees,
   PendingDirection direction = PendingDirection.owedToMe,
   String purpose = 'Dinner',
-}) =>
-    h.run(
-      const CreatePendingAction(),
-      PendingInput(
-        counterparty: counterparty,
-        direction: direction,
-        kind: PendingKind.sharedExpense,
-        amount: Money.rupees(rupees),
-        purpose: purpose,
-        createdDate: DateTime(2026, 10, 1),
-      ),
-    );
+}) => h.run(
+  const CreatePendingAction(),
+  PendingInput(
+    counterparty: counterparty,
+    direction: direction,
+    kind: PendingKind.sharedExpense,
+    amount: Money.rupees(rupees),
+    purpose: purpose,
+    createdDate: DateTime(2026, 10, 1),
+  ),
+);
 
 /// A dispatcher whose writes fail like a dropped connection, while
 /// previews work normally. Counts write attempts per idempotency key.
 class FlakyDispatcher extends OperationDispatcher {
   FlakyDispatcher(OperationDispatcher inner, {this.failures = 1})
-      : _inner = inner,
-        super(environment: inner.environment);
+    : _inner = inner,
+      super(environment: inner.environment);
 
   final OperationDispatcher _inner;
   int failures;
@@ -154,8 +154,13 @@ class FlakyDispatcher extends OperationDispatcher {
     ActionChannel channel = ActionChannel.ui,
   }) async {
     attemptsByKey[idempotencyKey] = (attemptsByKey[idempotencyKey] ?? 0) + 1;
-    final out = await _inner.dispatch(action, input,
-        idempotencyKey: idempotencyKey, confirmation: confirmation, channel: channel);
+    final out = await _inner.dispatch(
+      action,
+      input,
+      idempotencyKey: idempotencyKey,
+      confirmation: confirmation,
+      channel: channel,
+    );
     if (failures > 0 && out is ActionCompleted<O>) {
       // The write happened, but the reply was lost.
       failures--;

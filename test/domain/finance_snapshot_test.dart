@@ -32,8 +32,13 @@ void main() {
 
       test('earmarked = Σ goal saved + emergency fund saved', () {
         final goalIds = {for (final g in s.goals) g.id};
-        expect(s.savingsMovements.where((m) => m.bucketType == SavingsBucketType.goal).every((m) => goalIds.contains(m.bucketId)),
-            isTrue, reason: 'no orphaned goal movements in the seed');
+        expect(
+          s.savingsMovements
+              .where((m) => m.bucketType == SavingsBucketType.goal)
+              .every((m) => goalIds.contains(m.bucketId)),
+          isTrue,
+          reason: 'no orphaned goal movements in the seed',
+        );
         expect(s.balance.earmarkedGoals, Money.sum(s.goalProgress.map((g) => g.saved)));
         expect(s.balance.earmarkedEmergency, s.emergency.saved);
         expect(s.balance.available, s.balance.cash - s.balance.earmarked);
@@ -133,11 +138,13 @@ void main() {
     });
 
     test('totalDebt ignores lent and closed loans', () {
-      final s = snapshotOf(loans: [
-        emiLoan(id: 'b', principal: 100000),
-        emiLoan(id: 'l', principal: 50000, direction: LoanDirection.lent),
-        emiLoan(id: 'c', principal: 70000, status: LoanStatus.closed),
-      ]);
+      final s = snapshotOf(
+        loans: [
+          emiLoan(id: 'b', principal: 100000),
+          emiLoan(id: 'l', principal: 50000, direction: LoanDirection.lent),
+          emiLoan(id: 'c', principal: 70000, status: LoanStatus.closed),
+        ],
+      );
       expect(s.totalDebt, rs(100000));
     });
   });

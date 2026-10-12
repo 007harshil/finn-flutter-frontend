@@ -26,10 +26,7 @@ abstract final class AppRoutes {
   // Transactions branch
   static const transactions = '/transactions';
   static String transactionsFiltered({TransactionType? type, MonthKey? month}) {
-    final q = <String>[
-      if (type != null) 'type=${type.name}',
-      if (month != null) 'month=${month.id}',
-    ];
+    final q = <String>[if (type != null) 'type=${type.name}', if (month != null) 'month=${month.id}'];
     return q.isEmpty ? transactions : '$transactions?${q.join('&')}';
   }
 
@@ -41,6 +38,7 @@ abstract final class AppRoutes {
   // Budgets branch
   static const budgets = '/budgets';
   static const newBudget = '/budgets/new';
+
   /// A budget; [month] opens a past month read-only.
   static String budget(String id, {MonthKey? month}) =>
       month == null ? '/budgets/$id' : '/budgets/$id?month=${month.id}';

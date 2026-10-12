@@ -18,9 +18,9 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: Space.x1_5),
-        child: Text(text, style: context.text.label),
-      );
+    padding: const EdgeInsets.only(bottom: Space.x1_5),
+    child: Text(text, style: context.text.label),
+  );
 }
 
 Widget _labelled(String? label, Widget field) {
@@ -136,7 +136,10 @@ class AmountInputFormatter extends TextInputFormatter {
     if (stripped == text) return newValue;
     final removed = text.length - stripped.length;
     final offset = (newValue.selection.extentOffset - removed).clamp(0, stripped.length);
-    return TextEditingValue(text: stripped, selection: TextSelection.collapsed(offset: offset));
+    return TextEditingValue(
+      text: stripped,
+      selection: TextSelection.collapsed(offset: offset),
+    );
   }
 }
 
@@ -200,10 +203,7 @@ class AmountField extends StatelessWidget {
           prefixIcon: Padding(
             padding: const EdgeInsets.only(left: Space.x4, right: Space.x1_5),
             child: ExcludeSemantics(
-              child: Text(
-                MoneyFormatter.symbol,
-                style: style.copyWith(color: c.textSecondary),
-              ),
+              child: Text(MoneyFormatter.symbol, style: style.copyWith(color: c.textSecondary)),
             ),
           ),
           prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
@@ -330,9 +330,7 @@ class DateField extends StatelessWidget {
 
   Future<void> _pick(BuildContext context) async {
     final current = value ?? DateTime.now();
-    final initial = current.isBefore(firstDate)
-        ? firstDate
-        : (current.isAfter(lastDate) ? lastDate : current);
+    final initial = current.isBefore(firstDate) ? firstDate : (current.isAfter(lastDate) ? lastDate : current);
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,

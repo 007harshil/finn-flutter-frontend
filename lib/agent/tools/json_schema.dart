@@ -10,27 +10,22 @@ abstract final class JsonSchema {
   static Map<String, Object?> object(
     Map<String, Map<String, Object?>> properties, {
     List<String> required = const [],
-  }) =>
-      {
-        'type': 'object',
-        'properties': properties,
-        if (required.isNotEmpty) 'required': required,
-      };
+  }) => {'type': 'object', 'properties': properties, if (required.isNotEmpty) 'required': required};
 
   static Map<String, Object?> string(String description, {List<String>? values, String? pattern, int? maxLength}) => {
-        'type': 'string',
-        'description': description,
-        'enum': ?values,
-        'pattern': ?pattern,
-        'maxLength': ?maxLength,
-      };
+    'type': 'string',
+    'description': description,
+    'enum': ?values,
+    'pattern': ?pattern,
+    'maxLength': ?maxLength,
+  };
 
   static Map<String, Object?> integer(String description, {int? minimum, int? maximum}) => {
-        'type': 'integer',
-        'description': description,
-        'minimum': ?minimum,
-        'maximum': ?maximum,
-      };
+    'type': 'integer',
+    'description': description,
+    'minimum': ?minimum,
+    'maximum': ?maximum,
+  };
 
   static Map<String, Object?> boolean(String description) => {'type': 'boolean', 'description': description};
 
@@ -42,14 +37,14 @@ abstract final class JsonSchema {
 
   /// Schema for one field of an action.
   static Map<String, Object?> forField(ActionFieldSpec f) => switch (f.kind) {
-        FieldKind.money => money(f.description),
-        FieldKind.date => date(f.description),
-        FieldKind.integer || FieldKind.rate => integer(f.description),
-        FieldKind.boolean => boolean(f.description),
-        FieldKind.enumeration => string(f.description, values: f.allowedValues),
-        FieldKind.id => string(f.description),
-        FieldKind.string => string(f.description),
-      };
+    FieldKind.money => money(f.description),
+    FieldKind.date => date(f.description),
+    FieldKind.integer || FieldKind.rate => integer(f.description),
+    FieldKind.boolean => boolean(f.description),
+    FieldKind.enumeration => string(f.description, values: f.allowedValues),
+    FieldKind.id => string(f.description),
+    FieldKind.string => string(f.description),
+  };
 
   /// Parameters schema for an action's descriptor. [overrides] replaces the
   /// schema of individual fields (for fields whose spec is too coarse, such
@@ -63,7 +58,10 @@ abstract final class JsonSchema {
     final fields = d.fields.where((f) => !exclude.contains(f.name) || f.required);
     return object(
       {for (final f in fields) f.name: overrides[f.name] ?? forField(f)},
-      required: [for (final f in fields) if (f.required) f.name],
+      required: [
+        for (final f in fields)
+          if (f.required) f.name,
+      ],
     );
   }
 

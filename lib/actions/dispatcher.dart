@@ -44,13 +44,9 @@ final class ActionRejected<O> extends ActionOutcome<O> {
 /// * **Policy**: an [ActionPolicy] decides what each channel may do.
 /// * **Audit**: every execution is recorded in the [AuditLog].
 class OperationDispatcher {
-  OperationDispatcher({
-    required this.environment,
-    ActionPolicy? policy,
-    AuditLog? audit,
-    this.maxRememberedKeys = 500,
-  })  : policy = policy ?? const DefaultActionPolicy(),
-        audit = audit ?? AuditLog();
+  OperationDispatcher({required this.environment, ActionPolicy? policy, AuditLog? audit, this.maxRememberedKeys = 500})
+    : policy = policy ?? const DefaultActionPolicy(),
+      audit = audit ?? AuditLog();
 
   final ActionEnvironment environment;
   final ActionPolicy policy;
@@ -91,8 +87,9 @@ class OperationDispatcher {
     final existing = _keys[idempotencyKey];
     if (existing != null) {
       if (existing.actionId != descriptor.id || existing.fingerprint != requestFingerprint) {
-        return const ActionRejected(AppFailure(FailureCode.conflict,
-            'This request id was already used for a different operation.'));
+        return const ActionRejected(
+          AppFailure(FailureCode.conflict, 'This request id was already used for a different operation.'),
+        );
       }
       if (existing.inFlight) {
         return const ActionRejected(AppFailure(FailureCode.duplicate, 'This is already being processed.'));
@@ -127,25 +124,29 @@ class OperationDispatcher {
             ..inFlight = false
             ..result = value
             ..preview = preview;
-          audit.record(AuditEntry(
-            actionId: descriptor.id,
-            summary: preview.summary,
-            channel: channel,
-            at: environment.clock.now(),
-            confirmedBy: confirmation?.confirmedBy,
-            succeeded: true,
-          ));
+          audit.record(
+            AuditEntry(
+              actionId: descriptor.id,
+              summary: preview.summary,
+              channel: channel,
+              at: environment.clock.now(),
+              confirmedBy: confirmation?.confirmedBy,
+              succeeded: true,
+            ),
+          );
           return ActionCompleted(value, preview);
         case Err(:final failure):
           _forget(idempotencyKey); // failed attempts may be retried
-          audit.record(AuditEntry(
-            actionId: descriptor.id,
-            summary: preview.summary,
-            channel: channel,
-            at: environment.clock.now(),
-            succeeded: false,
-            failure: failure.message,
-          ));
+          audit.record(
+            AuditEntry(
+              actionId: descriptor.id,
+              summary: preview.summary,
+              channel: channel,
+              at: environment.clock.now(),
+              succeeded: false,
+              failure: failure.message,
+            ),
+          );
           return ActionRejected(failure);
       }
     } on AppFailure catch (f) {
@@ -154,7 +155,9 @@ class OperationDispatcher {
     } catch (e, st) {
       _forget(idempotencyKey);
       debugPrint('Action ${descriptor.id} failed: $e\n$st');
-      return ActionRejected(AppFailure(FailureCode.unknown, 'Something went wrong. Nothing was changed.', cause: e, retryable: true));
+      return ActionRejected(
+        AppFailure(FailureCode.unknown, 'Something went wrong. Nothing was changed.', cause: e, retryable: true),
+      );
     }
   }
 

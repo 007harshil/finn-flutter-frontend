@@ -11,7 +11,10 @@ import 'profile_avatar.dart';
 
 /// Signed-in account summary at the top of the More tab; opens the profile.
 class ProfileEntryCard extends ConsumerWidget {
-  const ProfileEntryCard({super.key});
+  const ProfileEntryCard({super.key, this.onTap});
+
+  /// Overrides opening the profile (the side drawer closes itself first).
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -22,7 +25,7 @@ class ProfileEntryCard extends ConsumerWidget {
     final hasName = name != null && name.isNotEmpty;
     return FinnCard(
       key: const ValueKey('profile-entry'),
-      onTap: () => context.push(AppRoutes.account),
+      onTap: onTap ?? () => context.push(AppRoutes.account),
       semanticLabel: 'Profile, ${hasName ? name : 'not set up'}${email == null ? '' : ', $email'}. Open',
       child: Row(
         children: [
@@ -34,12 +37,7 @@ class ProfileEntryCard extends ConsumerWidget {
               children: [
                 Text(hasName ? name : 'Your profile', style: t.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: Space.x0_5),
-                Text(
-                  email ?? 'Account and sign-in',
-                  style: t.caption,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Text(email ?? 'Account and sign-in', style: t.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
               ],
             ),
           ),

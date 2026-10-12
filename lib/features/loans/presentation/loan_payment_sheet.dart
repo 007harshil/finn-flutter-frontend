@@ -49,11 +49,11 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
       l.isAmortizing ? LoanPaymentKind.installment : LoanPaymentKind.interest;
 
   void _selectKind(LoanState s, LoanPaymentKind k) => setState(() {
-        _kind = k;
-        _errors = const {};
-        final next = s.nextDue;
-        _amount.text = k != LoanPaymentKind.principal && next != null ? MoneyFormatter.editable(next.payment) : '';
-      });
+    _kind = k;
+    _errors = const {};
+    final next = s.nextDue;
+    _amount.text = k != LoanPaymentKind.principal && next != null ? MoneyFormatter.editable(next.payment) : '';
+  });
 
   LoanPaymentInput _input(LoanState s, LoanPaymentKind kind, DateTime today) {
     final note = _note.text.trim();
@@ -103,7 +103,15 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
     if (s == null || snapshot == null) {
       return const FinnSheetScaffold(
         title: 'Record a payment',
-        child: SkeletonPulse(child: Column(children: [CardSkeleton(height: 120), SizedBox(height: Space.x4), CardSkeleton(height: 220)])),
+        child: SkeletonPulse(
+          child: Column(
+            children: [
+              CardSkeleton(height: 120),
+              SizedBox(height: Space.x4),
+              CardSkeleton(height: 220),
+            ],
+          ),
+        ),
       );
     }
     if (s.isClosed) return _Closed(state: s);
@@ -154,7 +162,7 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
                   next == null
                       ? 'Nothing scheduled right now'
                       : '${loanDueName(l, next)} #${next.number} of ${maskedAmount(context, next.payment)} '
-                          '${DateFormats.dueIn(next.dueDate, s.today)} (${DateFormats.dayMonth.format(next.dueDate)})',
+                            '${DateFormats.dueIn(next.dueDate, s.today)} (${DateFormats.dayMonth.format(next.dueDate)})',
                   style: t.caption,
                 ),
               ],
@@ -174,8 +182,8 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
           Text(
             kind == LoanPaymentKind.principal
                 ? (l.isAmortizing
-                    ? 'A part-prepayment. It reduces the principal: ${l.prepaymentStrategy.description.toLowerCase()}.'
-                    : 'Repays part or all of the principal. Future interest goes down.')
+                      ? 'A part-prepayment. It reduces the principal: ${l.prepaymentStrategy.description.toLowerCase()}.'
+                      : 'Repays part or all of the principal. Future interest goes down.')
                 : 'Interest due is covered first; anything above the scheduled amount reduces the principal.',
             style: t.micro,
           ),
@@ -186,10 +194,7 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
             errorText: _errors['amount'],
             onChanged: (_) => setState(() {}),
           ),
-          if (split != null) ...[
-            const SizedBox(height: Space.x3),
-            _SplitPreview(result: split, borrowed: borrowed),
-          ],
+          if (split != null) ...[const SizedBox(height: Space.x3), _SplitPreview(result: split, borrowed: borrowed)],
           const SizedBox(height: Space.x5),
           DateField(
             label: borrowed ? 'Paid on' : 'Received on',
@@ -206,7 +211,9 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
           LoanSwitchCard(
             title: 'Record as cash movement',
             message: _recordCash
-                ? (borrowed ? 'Adds an expense and lowers your balance once.' : 'Adds income and raises your balance once.')
+                ? (borrowed
+                      ? 'Adds an expense and lowers your balance once.'
+                      : 'Adds income and raises your balance once.')
                 : 'Off: paid outside your FiNN-tracked cash. The loan updates; your balance stays the same.',
             value: _recordCash,
             onChanged: (b) => setState(() => _recordCash = b),
@@ -243,7 +250,9 @@ class _SplitPreview extends StatelessWidget {
         children: [
           Icon(LucideIcons.info, size: 14, color: c.warning),
           const SizedBox(width: Space.x1_5),
-          Expanded(child: Text(failure.message, style: t.micro.copyWith(color: c.textPrimary))),
+          Expanded(
+            child: Text(failure.message, style: t.micro.copyWith(color: c.textPrimary)),
+          ),
         ],
       );
     }
@@ -255,8 +264,16 @@ class _SplitPreview extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          KeyValueRow(label: 'Towards interest', valueWidget: AmountText(p.interestPortion, style: t.bodyStrong), padding: pad),
-          KeyValueRow(label: 'Towards principal', valueWidget: AmountText(p.principalPortion, style: t.bodyStrong), padding: pad),
+          KeyValueRow(
+            label: 'Towards interest',
+            valueWidget: AmountText(p.interestPortion, style: t.bodyStrong),
+            padding: pad,
+          ),
+          KeyValueRow(
+            label: 'Towards principal',
+            valueWidget: AmountText(p.principalPortion, style: t.bodyStrong),
+            padding: pad,
+          ),
           KeyValueRow(
             label: 'Outstanding after',
             valueWidget: AmountText(p.outstandingAfter, style: t.bodyStrong),
@@ -292,16 +309,16 @@ class _Closed extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => FinnSheetScaffold(
-        title: 'Fully repaid',
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: Space.x6),
-          child: EmptyState(
-            icon: LucideIcons.circleCheck,
-            title: 'Nothing left to pay',
-            message: '${state.loan.name} is fully repaid. No further payments can be recorded.',
-            actionLabel: 'Close',
-            onAction: () => Navigator.of(context).maybePop(),
-          ),
-        ),
-      );
+    title: 'Fully repaid',
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: Space.x6),
+      child: EmptyState(
+        icon: LucideIcons.circleCheck,
+        title: 'Nothing left to pay',
+        message: '${state.loan.name} is fully repaid. No further payments can be recorded.',
+        actionLabel: 'Close',
+        onAction: () => Navigator.of(context).maybePop(),
+      ),
+    ),
+  );
 }

@@ -29,23 +29,23 @@ class CategoryInput extends ActionInput {
   final bool isEssential;
 
   factory CategoryInput.fromJson(Map<String, Object?> j) => CategoryInput(
-        name: In.str(j, 'name'),
-        type: In.enumeration(j, 'type', TransactionType.values),
-        iconKey: In.str(j, 'iconKey'),
-        colorIndex: In.integer(j, 'colorIndex'),
-        description: In.strOpt(j, 'description') ?? '',
-        isEssential: In.boolean(j, 'isEssential', fallback: false),
-      );
+    name: In.str(j, 'name'),
+    type: In.enumeration(j, 'type', TransactionType.values),
+    iconKey: In.str(j, 'iconKey'),
+    colorIndex: In.integer(j, 'colorIndex'),
+    description: In.strOpt(j, 'description') ?? '',
+    isEssential: In.boolean(j, 'isEssential', fallback: false),
+  );
 
   @override
   Map<String, Object?> toJson() => {
-        'name': name,
-        'type': type.name,
-        'iconKey': iconKey,
-        'colorIndex': colorIndex,
-        'description': description,
-        'isEssential': isEssential,
-      };
+    'name': name,
+    'type': type.name,
+    'iconKey': iconKey,
+    'colorIndex': colorIndex,
+    'description': description,
+    'isEssential': isEssential,
+  };
 }
 
 const _fields = [
@@ -54,8 +54,12 @@ const _fields = [
   ActionFieldSpec('iconKey', FieldKind.string, 'Icon key, e.g. utensils'),
   ActionFieldSpec('colorIndex', FieldKind.integer, 'Colour swatch index, 0–13'),
   ActionFieldSpec('description', FieldKind.string, 'What belongs here', required: false),
-  ActionFieldSpec('isEssential', FieldKind.boolean, 'Essential spending (used for the emergency-fund suggestion)',
-      required: false),
+  ActionFieldSpec(
+    'isEssential',
+    FieldKind.boolean,
+    'Essential spending (used for the emergency-fund suggestion)',
+    required: false,
+  ),
 ];
 
 /// How often a category is referenced elsewhere.
@@ -90,10 +94,10 @@ class CategoryUsage {
 }
 
 CategoryUsage categoryUsage(String categoryId, FinanceSnapshot s) => CategoryUsage(
-      transactions: s.transactions.where((t) => t.categoryId == categoryId).length,
-      budgets: s.budgets.where((b) => b.categoryId == categoryId).length,
-      subscriptions: s.subscriptions.where((x) => x.categoryId == categoryId).length,
-    );
+  transactions: s.transactions.where((t) => t.categoryId == categoryId).length,
+  budgets: s.budgets.where((b) => b.categoryId == categoryId).length,
+  subscriptions: s.subscriptions.where((x) => x.categoryId == categoryId).length,
+);
 
 /// Field validation shared by create and update. [selfId] is excluded from
 /// the uniqueness check when editing.
@@ -103,8 +107,9 @@ Map<String, String> validateCategory(CategoryInput i, FinanceSnapshot s, {String
   if (name.length < categoryNameMin || name.length > categoryNameMax) {
     errors['name'] = 'Use $categoryNameMin to $categoryNameMax characters.';
   } else {
-    final clash = s.categories.where((c) =>
-        c.id != selfId && c.type == i.type && c.name.trim().toLowerCase() == name.toLowerCase());
+    final clash = s.categories.where(
+      (c) => c.id != selfId && c.type == i.type && c.name.trim().toLowerCase() == name.toLowerCase(),
+    );
     if (clash.isNotEmpty) {
       final existing = clash.first;
       errors['name'] = existing.isArchived
@@ -121,23 +126,23 @@ Map<String, String> validateCategory(CategoryInput i, FinanceSnapshot s, {String
 }
 
 List<PreviewLine> _lines(CategoryInput i) => [
-      PreviewLine('Name', i.name.trim()),
-      PreviewLine('Type', i.type.label),
-      if (i.type == TransactionType.expense) PreviewLine('Essential', i.isEssential ? 'Yes' : 'No'),
-    ];
+  PreviewLine('Name', i.name.trim()),
+  PreviewLine('Type', i.type.label),
+  if (i.type == TransactionType.expense) PreviewLine('Essential', i.isEssential ? 'Yes' : 'No'),
+];
 
 class CreateCategoryAction extends FinancialAction<CategoryInput, TransactionCategory> {
   const CreateCategoryAction();
 
   @override
   ActionDescriptor get descriptor => const ActionDescriptor(
-        id: 'categories.create',
-        module: 'categories',
-        title: 'Create a category',
-        description: 'Adds a custom income or expense category. Does not move money.',
-        risk: ActionRisk.low,
-        fields: _fields,
-      );
+    id: 'categories.create',
+    module: 'categories',
+    title: 'Create a category',
+    description: 'Adds a custom income or expense category. Does not move money.',
+    risk: ActionRisk.low,
+    fields: _fields,
+  );
 
   @override
   CategoryInput decode(Map<String, Object?> json) => CategoryInput.fromJson(json);
@@ -146,12 +151,14 @@ class CreateCategoryAction extends FinancialAction<CategoryInput, TransactionCat
   Result<ActionPreview> prepare(CategoryInput input, FinanceSnapshot s, ActionEnvironment env) {
     final errors = validateCategory(input, s);
     if (errors.isNotEmpty) return Result.err(AppFailure.validation(errors.values.first, fields: errors));
-    return Result.ok(preview(
-      input,
-      title: 'Create category',
-      summary: 'Category "${input.name.trim()}" created',
-      lines: _lines(input),
-    ));
+    return Result.ok(
+      preview(
+        input,
+        title: 'Create category',
+        summary: 'Category "${input.name.trim()}" created',
+        lines: _lines(input),
+      ),
+    );
   }
 
   @override
@@ -187,24 +194,24 @@ class UpdateCategoryAction extends FinancialAction<UpdateCategoryInput, Transact
 
   @override
   ActionDescriptor get descriptor => const ActionDescriptor(
-        id: 'categories.update',
-        module: 'categories',
-        title: 'Edit a category',
-        description: 'Renames or restyles a category. System categories only allow icon and colour changes.',
-        risk: ActionRisk.low,
-        fields: [
-          ActionFieldSpec('id', FieldKind.id, 'Category id'),
-          ActionFieldSpec('expectedVersion', FieldKind.integer, 'Version that was read'),
-          ..._fields,
-        ],
-      );
+    id: 'categories.update',
+    module: 'categories',
+    title: 'Edit a category',
+    description: 'Renames or restyles a category. System categories only allow icon and colour changes.',
+    risk: ActionRisk.low,
+    fields: [
+      ActionFieldSpec('id', FieldKind.id, 'Category id'),
+      ActionFieldSpec('expectedVersion', FieldKind.integer, 'Version that was read'),
+      ..._fields,
+    ],
+  );
 
   @override
   UpdateCategoryInput decode(Map<String, Object?> json) => UpdateCategoryInput(
-        id: In.str(json, 'id'),
-        expectedVersion: In.integer(json, 'expectedVersion'),
-        data: CategoryInput.fromJson(json),
-      );
+    id: In.str(json, 'id'),
+    expectedVersion: In.integer(json, 'expectedVersion'),
+    data: CategoryInput.fromJson(json),
+  );
 
   @override
   Result<ActionPreview> prepare(UpdateCategoryInput input, FinanceSnapshot s, ActionEnvironment env) {
@@ -212,17 +219,23 @@ class UpdateCategoryAction extends FinancialAction<UpdateCategoryInput, Transact
     if (existing == null) return const Result.err(AppFailure.notFound('This category no longer exists.'));
     if (existing.version != input.expectedVersion) {
       return const Result.err(
-          AppFailure(FailureCode.staleData, 'This category changed since you opened it. Reload and try again.'));
+        AppFailure(FailureCode.staleData, 'This category changed since you opened it. Reload and try again.'),
+      );
     }
     final d = input.data;
     if (existing.isSystem) {
-      final changed = d.name.trim() != existing.name ||
+      final changed =
+          d.name.trim() != existing.name ||
           d.type != existing.type ||
           d.description.trim() != existing.description ||
           d.isEssential != existing.isEssential;
       if (changed) {
-        return const Result.err(AppFailure(FailureCode.notPermitted,
-            'This category is managed automatically. Only its icon and colour can change.'));
+        return const Result.err(
+          AppFailure(
+            FailureCode.notPermitted,
+            'This category is managed automatically. Only its icon and colour can change.',
+          ),
+        );
       }
     }
     final errors = validateCategory(d, s, selfId: existing.id);
@@ -233,16 +246,17 @@ class UpdateCategoryAction extends FinancialAction<UpdateCategoryInput, Transact
       }
     }
     if (errors.isNotEmpty) return Result.err(AppFailure.validation(errors.values.first, fields: errors));
-    return Result.ok(preview(
-      input,
-      title: 'Save changes',
-      summary: 'Category "${d.name.trim()}" updated',
-      lines: _lines(d),
-    ));
+    return Result.ok(
+      preview(input, title: 'Save changes', summary: 'Category "${d.name.trim()}" updated', lines: _lines(d)),
+    );
   }
 
   @override
-  Future<Result<TransactionCategory>> execute(UpdateCategoryInput input, FinanceSnapshot s, ActionEnvironment env) async {
+  Future<Result<TransactionCategory>> execute(
+    UpdateCategoryInput input,
+    FinanceSnapshot s,
+    ActionEnvironment env,
+  ) async {
     final existing = s.category(input.id)!;
     final d = input.data;
     final updated = existing.copyWith(
@@ -272,13 +286,13 @@ class ArchiveCategoryAction extends FinancialAction<CategoryIdInput, Transaction
 
   @override
   ActionDescriptor get descriptor => const ActionDescriptor(
-        id: 'categories.toggleArchive',
-        module: 'categories',
-        title: 'Archive or restore a category',
-        description: 'Hides a category from pickers (or restores it). Past transactions keep their category.',
-        risk: ActionRisk.low,
-        fields: [ActionFieldSpec('id', FieldKind.id, 'Category id')],
-      );
+    id: 'categories.toggleArchive',
+    module: 'categories',
+    title: 'Archive or restore a category',
+    description: 'Hides a category from pickers (or restores it). Past transactions keep their category.',
+    risk: ActionRisk.low,
+    fields: [ActionFieldSpec('id', FieldKind.id, 'Category id')],
+  );
 
   @override
   CategoryIdInput decode(Map<String, Object?> json) => CategoryIdInput(id: In.str(json, 'id'));
@@ -289,22 +303,26 @@ class ArchiveCategoryAction extends FinancialAction<CategoryIdInput, Transaction
     if (c == null) return const Result.err(AppFailure.notFound('This category no longer exists.'));
     if (c.isSystem) {
       return const Result.err(
-          AppFailure(FailureCode.notPermitted, 'System categories are always available and cannot be archived.'));
+        AppFailure(FailureCode.notPermitted, 'System categories are always available and cannot be archived.'),
+      );
     }
     final archiving = !c.isArchived;
     final warnings = <String>[];
     if (archiving) {
       final budgets = s.budgets.where((b) => b.categoryId == c.id).length;
       final subs = s.subscriptions.where((x) => x.categoryId == c.id && x.isActive).length;
-      if (budgets > 0) warnings.add('$budgets budget${budgets == 1 ? '' : 's'} still track${budgets == 1 ? 's' : ''} this category.');
+      if (budgets > 0)
+        warnings.add('$budgets budget${budgets == 1 ? '' : 's'} still track${budgets == 1 ? 's' : ''} this category.');
       if (subs > 0) warnings.add('$subs active subscription${subs == 1 ? '' : 's'} still use this category.');
     }
-    return Result.ok(preview(
-      input,
-      title: archiving ? 'Archive ${c.name}?' : 'Restore ${c.name}?',
-      summary: archiving ? '${c.name} archived' : '${c.name} restored',
-      warnings: warnings,
-    ));
+    return Result.ok(
+      preview(
+        input,
+        title: archiving ? 'Archive ${c.name}?' : 'Restore ${c.name}?',
+        summary: archiving ? '${c.name} archived' : '${c.name} restored',
+        warnings: warnings,
+      ),
+    );
   }
 
   @override
@@ -321,14 +339,14 @@ class DeleteCategoryAction extends FinancialAction<CategoryIdInput, TransactionC
 
   @override
   ActionDescriptor get descriptor => const ActionDescriptor(
-        id: 'categories.delete',
-        module: 'categories',
-        title: 'Delete a category',
-        description: 'Permanently removes a category that no transaction, budget or subscription uses.',
-        risk: ActionRisk.consequential,
-        reversible: false,
-        fields: [ActionFieldSpec('id', FieldKind.id, 'Category id')],
-      );
+    id: 'categories.delete',
+    module: 'categories',
+    title: 'Delete a category',
+    description: 'Permanently removes a category that no transaction, budget or subscription uses.',
+    risk: ActionRisk.consequential,
+    reversible: false,
+    fields: [ActionFieldSpec('id', FieldKind.id, 'Category id')],
+  );
 
   @override
   CategoryIdInput decode(Map<String, Object?> json) => CategoryIdInput(id: In.str(json, 'id'));
@@ -342,16 +360,22 @@ class DeleteCategoryAction extends FinancialAction<CategoryIdInput, TransactionC
     }
     final usage = categoryUsage(c.id, s);
     if (usage.isInUse) {
-      return Result.err(AppFailure(FailureCode.conflict,
-          '${c.name} is used by ${usage.describe()}. Archive it instead to hide it from pickers.'));
+      return Result.err(
+        AppFailure(
+          FailureCode.conflict,
+          '${c.name} is used by ${usage.describe()}. Archive it instead to hide it from pickers.',
+        ),
+      );
     }
-    return Result.ok(preview(
-      input,
-      title: 'Delete ${c.name}?',
-      summary: '${c.name} deleted',
-      lines: [PreviewLine('Type', c.type.label)],
-      warnings: const ['This cannot be undone.'],
-    ));
+    return Result.ok(
+      preview(
+        input,
+        title: 'Delete ${c.name}?',
+        summary: '${c.name} deleted',
+        lines: [PreviewLine('Type', c.type.label)],
+        warnings: const ['This cannot be undone.'],
+      ),
+    );
   }
 
   @override

@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/core_providers.dart';
 import '../../../../app/di/data_providers.dart';
 import '../../../../app/router/routes.dart';
+import '../../../../app/shell/app_drawer.dart';
 import '../../../../core/time/dates.dart';
 import '../../../../design_system/design_system.dart';
 
@@ -35,6 +36,8 @@ class HomeHeader extends ConsumerWidget {
       padding: const EdgeInsets.only(top: Space.x2),
       child: Row(
         children: [
+          const AppMenuButton(),
+          if (AppDrawerScope.maybeOf(context) != null) const SizedBox(width: Space.x3),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

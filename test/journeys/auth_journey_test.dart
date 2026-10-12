@@ -35,12 +35,12 @@ void main() {
     expect(find.byType(OnboardingScreen), findsOneWidget);
   });
 
-  testWidgets('More tab opens the profile; signing out returns to login', (tester) async {
+  testWidgets('the menu opens the profile; signing out returns to login', (tester) async {
     final env = await TestEnv.create();
     await env.pumpApp(tester);
     await settle(tester);
 
-    await tapTab(tester, 'More');
+    await openMenu(tester);
     await tester.tap(find.byKey(const ValueKey('profile-entry')));
     await tester.pumpAndSettle();
     expect(find.byType(ProfileScreen), findsOneWidget);

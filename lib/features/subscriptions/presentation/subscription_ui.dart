@@ -109,18 +109,18 @@ enum IncomeImpact {
   }
 
   Color color(FinnColors c) => switch (this) {
-        IncomeImpact.healthy => c.positive,
-        IncomeImpact.moderate => c.warning,
-        IncomeImpact.high => c.attention,
-        IncomeImpact.critical => c.negative,
-      };
+    IncomeImpact.healthy => c.positive,
+    IncomeImpact.moderate => c.warning,
+    IncomeImpact.high => c.attention,
+    IncomeImpact.critical => c.negative,
+  };
 
   IconData get icon => switch (this) {
-        IncomeImpact.healthy => LucideIcons.circleCheck,
-        IncomeImpact.moderate => LucideIcons.gauge,
-        IncomeImpact.high => LucideIcons.triangleAlert,
-        IncomeImpact.critical => LucideIcons.triangleAlert,
-      };
+    IncomeImpact.healthy => LucideIcons.circleCheck,
+    IncomeImpact.moderate => LucideIcons.gauge,
+    IncomeImpact.high => LucideIcons.triangleAlert,
+    IncomeImpact.critical => LucideIcons.triangleAlert,
+  };
 }
 
 final subscriptionsOverviewProvider = Provider<AsyncValue<SubscriptionsOverview>>(
@@ -174,7 +174,11 @@ final subscriptionDetailProvider = Provider.family<AsyncValue<SubscriptionDetail
 });
 
 /// "Overdue · 2 days", "Due today", "in 5 days".
-({String label, Color color, IconData icon}) subscriptionDueLabel(BuildContext context, Subscription s, DateTime today) {
+({String label, Color color, IconData icon}) subscriptionDueLabel(
+  BuildContext context,
+  Subscription s,
+  DateTime today,
+) {
   final c = context.colors;
   if (!s.isActive) {
     return s.status == SubscriptionStatus.paused
@@ -182,7 +186,12 @@ final subscriptionDetailProvider = Provider.family<AsyncValue<SubscriptionDetail
         : (label: 'Cancelled', color: c.textSecondary, icon: LucideIcons.circleX);
   }
   final days = daysBetween(today, s.nextDueDate);
-  if (days < 0) return (label: 'Overdue · ${-days} ${-days == 1 ? 'day' : 'days'}', color: c.negative, icon: LucideIcons.triangleAlert);
+  if (days < 0)
+    return (
+      label: 'Overdue · ${-days} ${-days == 1 ? 'day' : 'days'}',
+      color: c.negative,
+      icon: LucideIcons.triangleAlert,
+    );
   if (days == 0) return (label: 'Due today', color: c.attention, icon: LucideIcons.bell);
   if (days == 1) return (label: 'Tomorrow', color: c.warning, icon: LucideIcons.clock);
   if (days <= 7) return (label: 'in $days days', color: c.warning, icon: LucideIcons.clock);
@@ -204,16 +213,16 @@ class SubscriptionDueChip extends StatelessWidget {
 
 /// Records the current renewal as paid (review sheet confirms details).
 Future<Transaction?> markSubscriptionPaid(BuildContext context, WidgetRef ref, Subscription s) => runAction(
-      context,
-      ref,
-      action: const MarkSubscriptionPaidAction(),
-      input: MarkSubscriptionPaidInput(subscriptionId: s.id, cycleDate: s.nextDueDate, method: s.paymentMethod),
-      // Stable per cycle: double taps never record twice.
-      idempotencyKey: 'sub-paid-${s.id}-${Out.date(s.nextDueDate)}',
-      celebrate: true,
-      successTitle: '${s.name} marked as paid',
-      successSubtitle: 'Next renewal ${DateFormats.dayMonthYear.format(SubscriptionSchedule.nextCycleAfterCurrent(s))}',
-    );
+  context,
+  ref,
+  action: const MarkSubscriptionPaidAction(),
+  input: MarkSubscriptionPaidInput(subscriptionId: s.id, cycleDate: s.nextDueDate, method: s.paymentMethod),
+  // Stable per cycle: double taps never record twice.
+  idempotencyKey: 'sub-paid-${s.id}-${Out.date(s.nextDueDate)}',
+  celebrate: true,
+  successTitle: '${s.name} marked as paid',
+  successSubtitle: 'Next renewal ${DateFormats.dayMonthYear.format(SubscriptionSchedule.nextCycleAfterCurrent(s))}',
+);
 
 /// Category avatar for a subscription (watches only its category).
 class SubscriptionAvatar extends ConsumerWidget {
@@ -258,16 +267,21 @@ class SubscriptionTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              Opacity(opacity: inactive ? 0.5 : 1, child: SubscriptionAvatar(categoryId: s.categoryId)),
+              Opacity(
+                opacity: inactive ? 0.5 : 1,
+                child: SubscriptionAvatar(categoryId: s.categoryId),
+              ),
               const SizedBox(width: Space.x3),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(s.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: t.bodyStrong.copyWith(color: inactive ? c.textSecondary : null)),
+                    Text(
+                      s.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.bodyStrong.copyWith(color: inactive ? c.textSecondary : null),
+                    ),
                     const SizedBox(height: 2),
                     Row(
                       children: [
@@ -304,8 +318,11 @@ class SubscriptionTile extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text('Renewal due ${DateFormats.relativeDay(s.nextDueDate, today).toLowerCase()} — not yet paid',
-                      style: t.micro, maxLines: 2),
+                  child: Text(
+                    'Renewal due ${DateFormats.relativeDay(s.nextDueDate, today).toLowerCase()} — not yet paid',
+                    style: t.micro,
+                    maxLines: 2,
+                  ),
                 ),
                 const SizedBox(width: Space.x2),
                 FinnButton(
@@ -332,7 +349,7 @@ class SubscriptionFieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: Space.x1_5),
-        child: Text(text, style: context.text.label),
-      );
+    padding: const EdgeInsets.only(bottom: Space.x1_5),
+    child: Text(text, style: context.text.label),
+  );
 }

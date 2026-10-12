@@ -26,13 +26,15 @@ class _FakeSink implements ExportFileSink {
 Future<void> _pump(WidgetTester tester, TestEnv env, _FakeSink sink) async {
   tester.view.physicalSize = const Size(420, 1400) * tester.view.devicePixelRatio;
   addTearDown(tester.view.resetPhysicalSize);
-  await tester.pumpWidget(ProviderScope(
-    overrides: [...env.overrides, exportFileSinkProvider.overrideWithValue(sink)],
-    child: MaterialApp(
-      theme: FinnTheme.light(),
-      home: const MotionScope(reduceMotion: true, child: ExportScreen()),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [...env.overrides, exportFileSinkProvider.overrideWithValue(sink)],
+      child: MaterialApp(
+        theme: FinnTheme.light(),
+        home: const MotionScope(reduceMotion: true, child: ExportScreen()),
+      ),
     ),
-  ));
+  );
   await tester.pump();
   await tester.pumpAndSettle();
 }

@@ -13,15 +13,19 @@ import '../../home/application/home_overview.dart';
 import '../../net_worth/domain/net_worth.dart';
 import '../../profile/presentation/profile_entry_card.dart';
 
-/// Profile entry, then the financial overview hub: net worth teaser,
-/// subscriptions, then app-level settings.
+/// Opens a menu destination. The side drawer closes itself first.
+typedef MoreOpen = void Function(BuildContext context, String route);
+
+void _push(BuildContext context, String route) => context.push(route);
+
+/// Full-screen version of the menu at `/more` (deep links). The main entry
+/// point is the side drawer ([MoreDrawer]) opened from each tab's header.
 class MoreScreen extends ConsumerWidget {
   const MoreScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
-    final t = context.text;
     return Scaffold(
       backgroundColor: c.background,
       body: SafeArea(
@@ -31,68 +35,7 @@ class MoreScreen extends ConsumerWidget {
           slivers: [
             SliverPadding(
               padding: EdgeInsets.fromLTRB(Space.gutter, Space.x4, Space.gutter, context.bottomClearance),
-              sliver: SliverToBoxAdapter(
-                child: ResponsiveCenter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const StaggeredEntrance(index: 0, child: ProfileEntryCard()),
-                      const SizedBox(height: Space.x6),
-                      Semantics(header: true, child: Text('Financial overview', style: t.pageTitle)),
-                      const SizedBox(height: Space.x1),
-                      Text('Everything you own, owe and have planned, in one place.', style: t.caption),
-                      const SizedBox(height: Space.x5),
-                      const StaggeredEntrance(index: 0, child: _NetWorthTeaser()),
-                      const SizedBox(height: Space.section),
-                      // Other modules open from Home's quick-access grid;
-                      // subscriptions have no tile there, so they live here.
-                      const StaggeredEntrance(
-                        index: 1,
-                        child: _Group(title: 'Money', children: [_SubscriptionsTile()]),
-                      ),
-                      const SizedBox(height: Space.section),
-                      StaggeredEntrance(
-                        index: 2,
-                        child: _Group(
-                          title: 'App',
-                          children: [
-                            _ModuleTile(
-                              icon: LucideIcons.settings,
-                              color: c.accentTransactions,
-                              title: 'Settings',
-                              summary: const Text('Profile, privacy, alerts and appearance'),
-                              route: AppRoutes.settings,
-                            ),
-                            _ModuleTile(
-                              icon: LucideIcons.tags,
-                              color: c.accentBudgets,
-                              title: 'Categories',
-                              summary: const Text('Organise how income and spending are grouped'),
-                              route: AppRoutes.categories,
-                            ),
-                            _ModuleTile(
-                              icon: LucideIcons.download,
-                              color: c.accentNetWorth,
-                              title: 'Export data',
-                              summary: const Text('Download a copy of your records'),
-                              route: AppRoutes.export,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: Space.x5),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(LucideIcons.lock, size: 12, color: c.textTertiary),
-                          const SizedBox(width: Space.x1_5),
-                          Text('Your data stays on this device', style: t.micro),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              sliver: const SliverToBoxAdapter(child: ResponsiveCenter(child: MoreMenu())),
             ),
           ],
         ),
@@ -101,8 +44,113 @@ class MoreScreen extends ConsumerWidget {
   }
 }
 
+/// Profile entry, then the financial overview hub: net worth teaser, money
+/// modules, then app-level settings. Shared by [MoreScreen] and the drawer.
+class MoreMenu extends StatelessWidget {
+  const MoreMenu({super.key, this.open = _push});
+
+  final MoreOpen open;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final t = context.text;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        StaggeredEntrance(index: 0, child: ProfileEntryCard(onTap: () => open(context, AppRoutes.account))),
+        const SizedBox(height: Space.x6),
+        Semantics(header: true, child: Text('Financial overview', style: t.pageTitle)),
+        const SizedBox(height: Space.x1),
+        Text('Everything you own, owe and have planned, in one place.', style: t.caption),
+        const SizedBox(height: Space.x5),
+        StaggeredEntrance(index: 0, child: _NetWorthTeaser(open: open)),
+        const SizedBox(height: Space.section),
+        StaggeredEntrance(
+          index: 1,
+          child: _Group(
+            title: 'Money',
+            children: [
+              _ModuleTile(
+                icon: LucideIcons.landmark,
+                color: c.accentLoans,
+                title: 'Loans & EMIs',
+                summary: const Text('Repayments and outstanding balances'),
+                route: AppRoutes.loans,
+                open: open,
+              ),
+              _ModuleTile(
+                icon: LucideIcons.handCoins,
+                color: c.accentPending,
+                title: 'Pending payments',
+                summary: const Text('What you owe and what is owed to you'),
+                route: AppRoutes.pending,
+                open: open,
+              ),
+              _SubscriptionsTile(open: open),
+              _ModuleTile(
+                icon: LucideIcons.chartColumnIncreasing,
+                color: c.accentAnalytics,
+                title: 'Insights',
+                summary: const Text('Patterns and trends in your money'),
+                route: AppRoutes.analytics,
+                open: open,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: Space.section),
+        StaggeredEntrance(
+          index: 2,
+          child: _Group(
+            title: 'App',
+            children: [
+              _ModuleTile(
+                icon: LucideIcons.settings,
+                color: c.accentTransactions,
+                title: 'Settings',
+                summary: const Text('Profile, privacy, alerts and appearance'),
+                route: AppRoutes.settings,
+                open: open,
+              ),
+              _ModuleTile(
+                icon: LucideIcons.tags,
+                color: c.accentBudgets,
+                title: 'Categories',
+                summary: const Text('Organise how income and spending are grouped'),
+                route: AppRoutes.categories,
+                open: open,
+              ),
+              _ModuleTile(
+                icon: LucideIcons.download,
+                color: c.accentNetWorth,
+                title: 'Export data',
+                summary: const Text('Download a copy of your records'),
+                route: AppRoutes.export,
+                open: open,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: Space.x5),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(LucideIcons.lock, size: 12, color: c.textTertiary),
+            const SizedBox(width: Space.x1_5),
+            Flexible(
+              child: Text('Your data stays on this device', style: t.micro, textAlign: TextAlign.center),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _NetWorthTeaser extends ConsumerWidget {
-  const _NetWorthTeaser();
+  const _NetWorthTeaser({required this.open});
+  final MoreOpen open;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -113,7 +161,7 @@ class _NetWorthTeaser extends ConsumerWidget {
         final c = context.colors;
         final t = context.text;
         return FinnCard(
-          onTap: () => context.push(AppRoutes.netWorth),
+          onTap: () => open(context, AppRoutes.netWorth),
           semanticLabel: 'Net worth. Open details',
           padding: const EdgeInsets.all(Space.x5),
           child: Column(
@@ -139,8 +187,12 @@ class _NetWorthTeaser extends ConsumerWidget {
               const SizedBox(height: Space.x2),
               Row(
                 children: [
-                  Expanded(child: _Mini(label: 'Own', amount: nw.totalAssets, color: c.positive)),
-                  Expanded(child: _Mini(label: 'Owe', amount: nw.liabilities, color: c.negative)),
+                  Expanded(
+                    child: _Mini(label: 'Own', amount: nw.totalAssets, color: c.positive),
+                  ),
+                  Expanded(
+                    child: _Mini(label: 'Owe', amount: nw.liabilities, color: c.negative),
+                  ),
                 ],
               ),
             ],
@@ -164,7 +216,11 @@ class _Mini extends StatelessWidget {
     return MergeSemantics(
       child: Row(
         children: [
-          Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
           const SizedBox(width: Space.x1_5),
           Text('$label ', style: t.caption),
           Flexible(child: AmountText(amount, compact: true, style: t.amountSmall)),
@@ -196,10 +252,7 @@ class _Group extends StatelessWidget {
             type: MaterialType.transparency,
             child: Column(
               children: [
-                for (var i = 0; i < children.length; i++) ...[
-                  if (i > 0) const FinnDivider(indent: 64),
-                  children[i],
-                ],
+                for (var i = 0; i < children.length; i++) ...[if (i > 0) const FinnDivider(indent: 64), children[i]],
               ],
             ),
           ),
@@ -217,6 +270,7 @@ class _ModuleTile extends StatelessWidget {
     required this.title,
     required this.summary,
     required this.route,
+    required this.open,
   });
 
   final IconData icon;
@@ -224,6 +278,7 @@ class _ModuleTile extends StatelessWidget {
   final String title;
   final Widget summary;
   final String route;
+  final MoreOpen open;
 
   @override
   Widget build(BuildContext context) {
@@ -232,7 +287,7 @@ class _ModuleTile extends StatelessWidget {
     return Semantics(
       button: true,
       child: InkWell(
-        onTap: () => context.push(route),
+        onTap: () => open(context, route),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 64),
           child: Padding(
@@ -275,7 +330,8 @@ class _ModuleTile extends StatelessWidget {
 }
 
 class _SubscriptionsTile extends ConsumerWidget {
-  const _SubscriptionsTile();
+  const _SubscriptionsTile({required this.open});
+  final MoreOpen open;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -296,6 +352,7 @@ class _SubscriptionsTile extends ConsumerWidget {
       title: 'Subscriptions',
       route: AppRoutes.subscriptions,
       summary: Text(summary),
+      open: open,
     );
   }
 }

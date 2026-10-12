@@ -19,19 +19,22 @@ import 'subscription_ui.dart';
 /// "Uncategorised"), "Subscriptions"-like ones first.
 final _subscriptionCategoriesProvider = Provider<List<TransactionCategory>>((ref) {
   final all = ref.watch(categoriesByIdProvider).value?.values ?? const <TransactionCategory>[];
-  final list = all
-      .where((c) =>
-          c.type == TransactionType.expense &&
-          !c.isArchived &&
-          (!c.isSystem || c.id == SystemCategories.uncategorizedExpense))
-      .toList()
-    ..sort((a, b) {
-      int rank(TransactionCategory c) => c.name.toLowerCase().contains('subscription')
-          ? 0
-          : (c.id == SystemCategories.uncategorizedExpense ? 2 : 1);
-      final r = rank(a).compareTo(rank(b));
-      return r != 0 ? r : a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
+  final list =
+      all
+          .where(
+            (c) =>
+                c.type == TransactionType.expense &&
+                !c.isArchived &&
+                (!c.isSystem || c.id == SystemCategories.uncategorizedExpense),
+          )
+          .toList()
+        ..sort((a, b) {
+          int rank(TransactionCategory c) => c.name.toLowerCase().contains('subscription')
+              ? 0
+              : (c.id == SystemCategories.uncategorizedExpense ? 2 : 1);
+          final r = rank(a).compareTo(rank(b));
+          return r != 0 ? r : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
   return list;
 });
 
@@ -112,13 +115,22 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
     void onErrors(Map<String, String> e) => setState(() => _errors = e);
     final existing = _existing;
     final Object? result = existing == null
-        ? await runAction(context, ref,
-            action: const CreateSubscriptionAction(), input: input, idempotencyKey: _key, onFieldErrors: onErrors)
-        : await runAction(context, ref,
+        ? await runAction(
+            context,
+            ref,
+            action: const CreateSubscriptionAction(),
+            input: input,
+            idempotencyKey: _key,
+            onFieldErrors: onErrors,
+          )
+        : await runAction(
+            context,
+            ref,
             action: const UpdateSubscriptionAction(),
             input: UpdateSubscriptionInput(id: existing.id, expectedVersion: existing.version, data: input),
             idempotencyKey: _key,
-            onFieldErrors: onErrors);
+            onFieldErrors: onErrors,
+          );
     if (!mounted) return;
     setState(() => _busy = false);
     if (result != null) Navigator.of(context).maybePop();
@@ -136,7 +148,15 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
     if (_editing && _existing == null) {
       return const FinnSheetScaffold(
         title: 'Edit subscription',
-        child: SkeletonPulse(child: Column(children: [CardSkeleton(height: 60), SizedBox(height: Space.x4), CardSkeleton(height: 240)])),
+        child: SkeletonPulse(
+          child: Column(
+            children: [
+              CardSkeleton(height: 60),
+              SizedBox(height: Space.x4),
+              CardSkeleton(height: 240),
+            ],
+          ),
+        ),
       );
     }
     final categories = ref.watch(_subscriptionCategoriesProvider);
@@ -233,7 +253,9 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
             FilterChipBar<String>(
               padding: EdgeInsets.zero,
               multiSelect: false,
-              items: [for (final cat in categories) FilterChipItem(cat.id, cat.name, icon: CategoryIcons.of(cat.iconKey))],
+              items: [
+                for (final cat in categories) FilterChipItem(cat.id, cat.name, icon: CategoryIcons.of(cat.iconKey)),
+              ],
               selected: {?categoryId},
               onChanged: (s) => setState(() => _categoryId = s.first),
             ),
@@ -290,7 +312,8 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
           ),
           const SizedBox(height: Space.x4),
           const InfoBanner(
-            message: 'Saving does not change your balance, and past renewals are not imported. '
+            message:
+                'Saving does not change your balance, and past renewals are not imported. '
                 'Each renewal becomes an expense only when you mark it as paid.',
           ),
         ],
@@ -300,10 +323,10 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
 }
 
 IconData _methodIcon(PaymentMethod m) => switch (m) {
-      PaymentMethod.upi => LucideIcons.smartphone,
-      PaymentMethod.card => LucideIcons.creditCard,
-      PaymentMethod.cash => LucideIcons.banknote,
-      PaymentMethod.bankTransfer => LucideIcons.landmark,
-      PaymentMethod.wallet => LucideIcons.wallet,
-      PaymentMethod.other => LucideIcons.circleDot,
-    };
+  PaymentMethod.upi => LucideIcons.smartphone,
+  PaymentMethod.card => LucideIcons.creditCard,
+  PaymentMethod.cash => LucideIcons.banknote,
+  PaymentMethod.bankTransfer => LucideIcons.landmark,
+  PaymentMethod.wallet => LucideIcons.wallet,
+  PaymentMethod.other => LucideIcons.circleDot,
+};

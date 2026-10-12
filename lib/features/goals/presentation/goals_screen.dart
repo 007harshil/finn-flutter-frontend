@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
+import '../../../app/shell/app_drawer.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
 import '../../../shared/presentation/async_view.dart';
@@ -86,7 +87,9 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
                 _boxed(const _Header(), top: Space.x4),
                 if (b.active.isNotEmpty)
                   _boxed(
-                    StaggeredEntrance(child: _BoardCard(board: b, filter: _filter, onPace: _togglePace)),
+                    StaggeredEntrance(
+                      child: _BoardCard(board: b, filter: _filter, onPace: _togglePace),
+                    ),
                     top: Space.x3,
                   ),
                 _boxed(const StaggeredEntrance(index: 1, child: _EmergencyLine()), top: Space.x3),
@@ -95,7 +98,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
                     EmptyState(
                       icon: LucideIcons.target,
                       title: 'Start your first goal',
-                      message: 'A trip, a new laptop, a home down payment — give it a name and a target, '
+                      message:
+                          'A trip, a new laptop, a home down payment — give it a name and a target, '
                           'and set money aside at your own pace.',
                       actionLabel: 'Create a goal',
                       actionIcon: LucideIcons.plus,
@@ -138,7 +142,13 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
                                   context,
                                   (a) => a
                                       .fadeIn(delay: 40.ms * i, duration: 260.ms)
-                                      .slideY(begin: 0.2, end: 0, delay: 40.ms * i, duration: 380.ms, curve: Curves.easeOutCubic),
+                                      .slideY(
+                                        begin: 0.2,
+                                        end: 0,
+                                        delay: 40.ms * i,
+                                        duration: 380.ms,
+                                        curve: Curves.easeOutCubic,
+                                      ),
                                 ),
                         );
                       },
@@ -165,30 +175,30 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
     }
     return switch (_filter.tab) {
       GoalTab.active => EmptyState(
-          icon: LucideIcons.target,
-          title: 'No active goals',
-          message: 'Every goal is done or archived. Start a new one when you are ready.',
-          actionLabel: 'Create a goal',
-          actionIcon: LucideIcons.plus,
-          onAction: () => context.push(AppRoutes.newGoal),
-        ),
+        icon: LucideIcons.target,
+        title: 'No active goals',
+        message: 'Every goal is done or archived. Start a new one when you are ready.',
+        actionLabel: 'Create a goal',
+        actionIcon: LucideIcons.plus,
+        onAction: () => context.push(AppRoutes.newGoal),
+      ),
       GoalTab.completed => const EmptyState(
-          icon: LucideIcons.partyPopper,
-          title: 'Nothing completed yet',
-          message: 'Goals you fully fund will appear here.',
-        ),
+        icon: LucideIcons.partyPopper,
+        title: 'Nothing completed yet',
+        message: 'Goals you fully fund will appear here.',
+      ),
       GoalTab.archived => const EmptyState(
-          icon: LucideIcons.archive,
-          title: 'No archived goals',
-          message: 'Archive a goal to hide it without losing its history.',
-        ),
+        icon: LucideIcons.archive,
+        title: 'No archived goals',
+        message: 'Archive a goal to hide it without losing its history.',
+      ),
     };
   }
 }
 
 Widget _boxed(Widget child, {double top = 0}) => SliverToBoxAdapter(
-      child: ResponsiveCenter(padding: EdgeInsets.fromLTRB(Space.gutter, top, Space.gutter, 0), child: child),
-    );
+  child: ResponsiveCenter(padding: EdgeInsets.fromLTRB(Space.gutter, top, Space.gutter, 0), child: child),
+);
 
 class _Header extends StatelessWidget {
   const _Header();
@@ -198,16 +208,23 @@ class _Header extends StatelessWidget {
     final t = context.text;
     return Row(
       children: [
+        const AppMenuButton(),
+        if (AppDrawerScope.maybeOf(context) != null) const SizedBox(width: Space.x3),
         Expanded(
           child: Semantics(
             header: true,
             label: 'Your vision',
             excludeSemantics: true,
             child: Text.rich(
-              TextSpan(children: [
-                const TextSpan(text: 'Your '),
-                TextSpan(text: 'vision', style: TextStyle(color: context.colors.accentGoals)),
-              ]),
+              TextSpan(
+                children: [
+                  const TextSpan(text: 'Your '),
+                  TextSpan(
+                    text: 'vision',
+                    style: TextStyle(color: context.colors.accentGoals),
+                  ),
+                ],
+              ),
               style: t.pageTitle,
             ),
           ),
@@ -262,14 +279,19 @@ class _BoardCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Flexible(
-                child: AnimatedAmount(b.saved, animateOnMount: true, fit: true, style: t.amountLarge),
-              ),
+              Flexible(child: AnimatedAmount(b.saved, animateOnMount: true, fit: true, style: t.amountLarge)),
               const SizedBox(width: Space.x2),
-              Flexible(child: Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text('of ${savingsMoney(context, b.target)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: t.caption),
-              )),
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    'of ${savingsMoney(context, b.target)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.caption,
+                  ),
+                ),
+              ),
               const Spacer(),
               Padding(
                 padding: const EdgeInsets.only(bottom: 2),
@@ -294,25 +316,32 @@ class _BoardCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(short ? LucideIcons.trendingDown : LucideIcons.trendingUp,
-                      size: 16, color: short ? c.warning : c.positive),
+                  Icon(
+                    short ? LucideIcons.trendingDown : LucideIcons.trendingUp,
+                    size: 16,
+                    color: short ? c.warning : c.positive,
+                  ),
                   const SizedBox(width: Space.x2),
                   Expanded(
                     child: Text.rich(
-                      TextSpan(children: [
-                        if (need.isPositive) ...[
+                      TextSpan(
+                        children: [
+                          if (need.isPositive) ...[
+                            TextSpan(
+                              text: '${savingsMoney(context, need)}/month',
+                              style: const TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                            const TextSpan(text: ' keeps every dated goal on time'),
+                          ] else
+                            const TextSpan(text: 'No target dates set'),
                           TextSpan(
-                            text: '${savingsMoney(context, need)}/month',
-                            style: const TextStyle(fontWeight: FontWeight.w900),
+                            text: plan.isPositive
+                                ? ' · you put in ~${savingsMoney(context, plan)}'
+                                : ' · no monthly plan yet',
+                            style: TextStyle(color: c.textSecondary),
                           ),
-                          const TextSpan(text: ' keeps every dated goal on time'),
-                        ] else
-                          const TextSpan(text: 'No target dates set'),
-                        TextSpan(
-                          text: plan.isPositive ? ' · you put in ~${savingsMoney(context, plan)}' : ' · no monthly plan yet',
-                          style: TextStyle(color: c.textSecondary),
-                        ),
-                      ]),
+                        ],
+                      ),
                       style: t.label.copyWith(color: c.textPrimary),
                     ),
                   ),
@@ -333,7 +362,8 @@ class _BoardCard extends StatelessWidget {
                       label: shortcuts[i].countLabel(b.count(shortcuts[i])),
                       icon: shortcuts[i].icon,
                       color: shortcuts[i] == GoalPace.noPlan ? c.textSecondary : shortcuts[i].color(c),
-                      selected: filter.tab == GoalTab.active &&
+                      selected:
+                          filter.tab == GoalTab.active &&
                           filter.paces.length == 1 &&
                           filter.paces.contains(shortcuts[i]),
                       height: 32,
@@ -342,7 +372,13 @@ class _BoardCard extends StatelessWidget {
                       context,
                       (a) => a
                           .fadeIn(delay: 300.ms + 70.ms * i, duration: 280.ms)
-                          .slideX(begin: 0.3, end: 0, delay: 300.ms + 70.ms * i, duration: 420.ms, curve: Curves.easeOutCubic),
+                          .slideX(
+                            begin: 0.3,
+                            end: 0,
+                            delay: 300.ms + 70.ms * i,
+                            duration: 420.ms,
+                            curve: Curves.easeOutCubic,
+                          ),
                     ),
                   ],
                 ],
@@ -397,9 +433,14 @@ class _EmergencyLine extends ConsumerWidget {
               children: [
                 Row(
                   children: [
-                    Flexible(child: Text('Emergency fund', maxLines: 1, overflow: TextOverflow.ellipsis, style: t.bodyStrong)),
+                    Flexible(
+                      child: Text('Emergency fund', maxLines: 1, overflow: TextOverflow.ellipsis, style: t.bodyStrong),
+                    ),
                     const SizedBox(width: Space.x2),
-                    if (configured) Flexible(child: AmountText(s.saved, fit: true, style: t.label.copyWith(fontWeight: FontWeight.w800))),
+                    if (configured)
+                      Flexible(
+                        child: AmountText(s.saved, fit: true, style: t.label.copyWith(fontWeight: FontWeight.w800)),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -448,12 +489,16 @@ class GoalRow extends StatelessWidget {
     final archived = g.goal.status == GoalStatus.archived;
     return Semantics(
       container: true,
-      label: '${g.goal.name}. ${savingsMoney(context, g.saved)} saved of ${savingsMoney(context, g.goal.target)}, '
+      label:
+          '${g.goal.name}. ${savingsMoney(context, g.saved)} saved of ${savingsMoney(context, g.goal.target)}, '
           '${formatPct(g.progress)}. ${pace.label}. $hint.',
       child: PressableScale(
         child: Material(
           color: archived ? c.surfaceMuted : c.surface,
-          shape: RoundedRectangleBorder(borderRadius: Radii.rXl, side: BorderSide(color: c.border)),
+          shape: RoundedRectangleBorder(
+            borderRadius: Radii.rXl,
+            side: BorderSide(color: c.border),
+          ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () {
@@ -489,7 +534,12 @@ class GoalRow extends StatelessWidget {
                         Row(
                           children: [
                             Expanded(
-                              child: Text(g.goal.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.bodyStrong),
+                              child: Text(
+                                g.goal.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: t.bodyStrong,
+                              ),
                             ),
                             const SizedBox(width: Space.x2),
                             Text(
@@ -699,16 +749,18 @@ class _Controls extends StatelessWidget {
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: Space.x1_5),
                                   child: Text.rich(
-                                    TextSpan(children: [
-                                      TextSpan(text: tab.label),
-                                      TextSpan(
-                                        text: ' ${counts[tab] ?? 0}',
-                                        style: TextStyle(
-                                          color: tab == filter.tab ? c.accentGoals : c.textTertiary,
-                                          fontWeight: FontWeight.w900,
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(text: tab.label),
+                                        TextSpan(
+                                          text: ' ${counts[tab] ?? 0}',
+                                          style: TextStyle(
+                                            color: tab == filter.tab ? c.accentGoals : c.textTertiary,
+                                            fontWeight: FontWeight.w900,
+                                          ),
                                         ),
-                                      ),
-                                    ]),
+                                      ],
+                                    ),
                                     maxLines: 1,
                                     style: t.label.copyWith(
                                       color: tab == filter.tab ? c.textPrimary : c.textSecondary,
@@ -824,16 +876,16 @@ class _OptionsSheetState extends State<_OptionsSheet> {
     final c = context.colors;
     final t = context.text;
     Widget section(String title, List<Widget> chips) => Padding(
-          padding: const EdgeInsets.only(bottom: Space.x5),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(title, style: t.eyebrow),
-              const SizedBox(height: Space.x2),
-              Wrap(spacing: Space.x2, runSpacing: Space.x2, children: chips),
-            ],
-          ),
-        );
+      padding: const EdgeInsets.only(bottom: Space.x5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: t.eyebrow),
+          const SizedBox(height: Space.x2),
+          Wrap(spacing: Space.x2, runSpacing: Space.x2, children: chips),
+        ],
+      ),
+    );
     return FinnSheetScaffold(
       title: 'Sort & filter',
       footer: Row(
@@ -914,25 +966,25 @@ class _GoalsSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const SkeletonPulse(
-        child: ResponsiveCenter(
-          padding: EdgeInsets.symmetric(horizontal: Space.gutter),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(height: Space.x4),
-              SkeletonBox(width: 160, height: 28),
-              SizedBox(height: Space.x4),
-              CardSkeleton(height: 200, radius: Radii.xxl),
-              SizedBox(height: Space.x3),
-              CardSkeleton(height: 64),
-              SizedBox(height: Space.x3),
-              SkeletonBox(height: 40, radius: Radii.full),
-              SizedBox(height: Space.x4),
-              CardSkeleton(height: 76),
-              SizedBox(height: Space.x2),
-              CardSkeleton(height: 76),
-            ],
-          ),
-        ),
-      );
+    child: ResponsiveCenter(
+      padding: EdgeInsets.symmetric(horizontal: Space.gutter),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(height: Space.x4),
+          SkeletonBox(width: 160, height: 28),
+          SizedBox(height: Space.x4),
+          CardSkeleton(height: 200, radius: Radii.xxl),
+          SizedBox(height: Space.x3),
+          CardSkeleton(height: 64),
+          SizedBox(height: Space.x3),
+          SkeletonBox(height: 40, radius: Radii.full),
+          SizedBox(height: Space.x4),
+          CardSkeleton(height: 76),
+          SizedBox(height: Space.x2),
+          CardSkeleton(height: 76),
+        ],
+      ),
+    ),
+  );
 }

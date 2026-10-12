@@ -19,9 +19,9 @@ void main() {
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
 
-    // More → Subscriptions → Cult.fit Elite.
-    await tapTab(tester, 'More');
-    await scrollAndTap(tester, find.text('Subscriptions'));
+    // Menu → Subscriptions → Cult.fit Elite.
+    await openMenu(tester);
+    await scrollAndTap(tester, inDrawer(find.text('Subscriptions')));
     await scrollAndTap(tester, find.descendant(of: find.byKey(ValueKey(sub.id)), matching: find.text(sub.name)));
     expect(find.textContaining(DateFormats.dayMonthYear.format(sub.nextDueDate)), findsWidgets);
 

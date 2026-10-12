@@ -35,11 +35,10 @@ Future<void> main() async {
   );
   await store.open(scenario: scenario, today: const SystemClock().today());
 
-  runApp(ProviderScope(
-    overrides: [
-      sharedPreferencesProvider.overrideWithValue(prefs),
-      localDataStoreProvider.overrideWithValue(store),
-    ],
-    child: const FinnApp(),
-  ));
+  runApp(
+    ProviderScope(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs), localDataStoreProvider.overrideWithValue(store)],
+      child: const FinnApp(),
+    ),
+  );
 }

@@ -34,8 +34,14 @@ class ProbeAction extends FinancialAction<ProbeInput, int> {
   int executions = 0;
 
   @override
-  ActionDescriptor get descriptor =>
-      ActionDescriptor(id: id, module: 'probe', title: 'Probe', description: 'Test action', risk: risk, fields: const []);
+  ActionDescriptor get descriptor => ActionDescriptor(
+    id: id,
+    module: 'probe',
+    title: 'Probe',
+    description: 'Test action',
+    risk: risk,
+    fields: const [],
+  );
 
   @override
   ProbeInput decode(Map<String, Object?> json) => ProbeInput(In.integer(json, 'value'));
@@ -143,7 +149,9 @@ void main() {
     test('audit log keeps the newest entries up to its capacity', () {
       final log = AuditLog(capacity: 2);
       for (var i = 0; i < 3; i++) {
-        log.record(AuditEntry(actionId: 'a$i', summary: '', channel: ActionChannel.ui, at: harnessNow, succeeded: true));
+        log.record(
+          AuditEntry(actionId: 'a$i', summary: '', channel: ActionChannel.ui, at: harnessNow, succeeded: true),
+        );
       }
       expect(log.entries.map((e) => e.actionId), ['a2', 'a1']);
     });
@@ -166,7 +174,11 @@ void main() {
       await dispatcher.dispatch(probe, const ProbeInput(5), idempotencyKey: 'k');
       final other = await dispatcher.dispatch(probe, const ProbeInput(6), idempotencyKey: 'k');
       expect((other as ActionRejected<int>).failure.code, FailureCode.conflict);
-      final otherAction = await dispatcher.dispatch(ProbeAction(id: 'probe.other'), const ProbeInput(5), idempotencyKey: 'k');
+      final otherAction = await dispatcher.dispatch(
+        ProbeAction(id: 'probe.other'),
+        const ProbeInput(5),
+        idempotencyKey: 'k',
+      );
       expect((otherAction as ActionRejected<int>).failure.code, FailureCode.conflict);
       expect(probe.executions, 1);
     });
@@ -203,8 +215,14 @@ void main() {
         await d.dispatch(probe, const ProbeInput(1), idempotencyKey: k);
       }
       expect(probe.executions, 3);
-      expect((await d.dispatch(probe, const ProbeInput(1), idempotencyKey: 'k3') as ActionCompleted<int>).replayed, isTrue);
-      expect((await d.dispatch(probe, const ProbeInput(1), idempotencyKey: 'k1') as ActionCompleted<int>).replayed, isFalse);
+      expect(
+        (await d.dispatch(probe, const ProbeInput(1), idempotencyKey: 'k3') as ActionCompleted<int>).replayed,
+        isTrue,
+      );
+      expect(
+        (await d.dispatch(probe, const ProbeInput(1), idempotencyKey: 'k1') as ActionCompleted<int>).replayed,
+        isFalse,
+      );
       expect(probe.executions, 4);
     });
   });
@@ -218,17 +236,29 @@ void main() {
       expect(preview.requiresConfirmation, isTrue);
       expect(probe.executions, 0);
 
-      final wrong = await dispatcher.dispatch(probe, const ProbeInput(7),
-          idempotencyKey: 'k', confirmation: const ActionConfirmation('not-it'));
+      final wrong = await dispatcher.dispatch(
+        probe,
+        const ProbeInput(7),
+        idempotencyKey: 'k',
+        confirmation: const ActionConfirmation('not-it'),
+      );
       expect(wrong, isA<ActionNeedsConfirmation<int>>());
 
-      final approvedOther = await dispatcher.dispatch(probe, const ProbeInput(8),
-          idempotencyKey: 'k2', confirmation: ActionConfirmation(preview.fingerprint));
+      final approvedOther = await dispatcher.dispatch(
+        probe,
+        const ProbeInput(8),
+        idempotencyKey: 'k2',
+        confirmation: ActionConfirmation(preview.fingerprint),
+      );
       expect(approvedOther, isA<ActionNeedsConfirmation<int>>(), reason: 'approval was for different input');
       expect(probe.executions, 0);
 
-      final ok = await dispatcher.dispatch(probe, const ProbeInput(7),
-          idempotencyKey: 'k', confirmation: ActionConfirmation(preview.fingerprint, confirmedBy: 'Asha'));
+      final ok = await dispatcher.dispatch(
+        probe,
+        const ProbeInput(7),
+        idempotencyKey: 'k',
+        confirmation: ActionConfirmation(preview.fingerprint, confirmedBy: 'Asha'),
+      );
       expect(ok, isA<ActionCompleted<int>>());
       expect(dispatcher.audit.entries.single.confirmedBy, 'Asha');
     });
@@ -238,8 +268,12 @@ void main() {
       final asked = await dispatcher.dispatch(probe, const ProbeInput(1), idempotencyKey: 'k');
       final old = (asked as ActionNeedsConfirmation<int>).preview.fingerprint;
       probe.basis = {'v': 2};
-      final stale = await dispatcher.dispatch(probe, const ProbeInput(1),
-          idempotencyKey: 'k', confirmation: ActionConfirmation(old));
+      final stale = await dispatcher.dispatch(
+        probe,
+        const ProbeInput(1),
+        idempotencyKey: 'k',
+        confirmation: ActionConfirmation(old),
+      );
       expect(stale, isA<ActionNeedsConfirmation<int>>());
       final fresh = (stale as ActionNeedsConfirmation<int>).preview.fingerprint;
       expect(fresh, isNot(old));
@@ -253,7 +287,11 @@ void main() {
       final tx = await h.run(
         const CreateTransactionAction(),
         TransactionInput(
-            type: TransactionType.expense, amount: const Money.rupees(500), categoryId: SeedCategoryIds.food, date: DateTime(2026, 10, 1)),
+          type: TransactionType.expense,
+          amount: const Money.rupees(500),
+          categoryId: SeedCategoryIds.food,
+          date: DateTime(2026, 10, 1),
+        ),
       );
       final del = DeleteTransactionInput(id: tx.id);
       final asked = await dispatcher.dispatch(const DeleteTransactionAction(), del, idempotencyKey: 'del');
@@ -265,11 +303,19 @@ void main() {
           id: tx.id,
           expectedVersion: 1,
           data: TransactionInput(
-              type: TransactionType.expense, amount: const Money.rupees(5000), categoryId: SeedCategoryIds.food, date: DateTime(2026, 10, 1)),
+            type: TransactionType.expense,
+            amount: const Money.rupees(5000),
+            categoryId: SeedCategoryIds.food,
+            date: DateTime(2026, 10, 1),
+          ),
         ),
       );
-      final stale = await dispatcher.dispatch(const DeleteTransactionAction(), del,
-          idempotencyKey: 'del', confirmation: ActionConfirmation(fp));
+      final stale = await dispatcher.dispatch(
+        const DeleteTransactionAction(),
+        del,
+        idempotencyKey: 'del',
+        confirmation: ActionConfirmation(fp),
+      );
       expect(stale, isA<ActionNeedsConfirmation<Transaction>>());
       expect((await h.snapshot()).transactionById[tx.id], isNotNull);
     });
@@ -279,11 +325,21 @@ void main() {
     test('agent and voice channels confirm every action, even low-risk ones', () async {
       for (final channel in [ActionChannel.agent, ActionChannel.voice]) {
         final probe = ProbeAction();
-        final out = await dispatcher.dispatch(probe, const ProbeInput(1), idempotencyKey: 'k-$channel', channel: channel);
+        final out = await dispatcher.dispatch(
+          probe,
+          const ProbeInput(1),
+          idempotencyKey: 'k-$channel',
+          channel: channel,
+        );
         expect(out, isA<ActionNeedsConfirmation<int>>());
         final fp = (out as ActionNeedsConfirmation<int>).preview.fingerprint;
-        final done = await dispatcher.dispatch(probe, const ProbeInput(1),
-            idempotencyKey: 'k-$channel', channel: channel, confirmation: ActionConfirmation(fp));
+        final done = await dispatcher.dispatch(
+          probe,
+          const ProbeInput(1),
+          idempotencyKey: 'k-$channel',
+          channel: channel,
+          confirmation: ActionConfirmation(fp),
+        );
         expect(done, isA<ActionCompleted<int>>());
         expect(dispatcher.audit.entries.first.channel, channel);
       }
@@ -293,28 +349,53 @@ void main() {
       final probe = ProbeAction(id: 'probe.delete', risk: ActionRisk.consequential);
       final fp = previewFingerprintOf('probe.delete', const ProbeInput(1));
       for (final channel in [ActionChannel.agent, ActionChannel.voice]) {
-        final out = await dispatcher.dispatch(probe, const ProbeInput(1),
-            idempotencyKey: 'k-$channel', channel: channel, confirmation: ActionConfirmation(fp));
+        final out = await dispatcher.dispatch(
+          probe,
+          const ProbeInput(1),
+          idempotencyKey: 'k-$channel',
+          channel: channel,
+          confirmation: ActionConfirmation(fp),
+        );
         expect((out as ActionRejected<int>).failure.code, FailureCode.notPermitted);
-        expect((await dispatcher.preview(probe, const ProbeInput(1), channel: channel)).failureOrNull!.code,
-            FailureCode.notPermitted);
+        expect(
+          (await dispatcher.preview(probe, const ProbeInput(1), channel: channel)).failureOrNull!.code,
+          FailureCode.notPermitted,
+        );
       }
       expect(probe.executions, 0);
-      final ui = await dispatcher.dispatch(probe, const ProbeInput(1), idempotencyKey: 'ui', confirmation: ActionConfirmation(fp));
+      final ui = await dispatcher.dispatch(
+        probe,
+        const ProbeInput(1),
+        idempotencyKey: 'ui',
+        confirmation: ActionConfirmation(fp),
+      );
       expect(ui, isA<ActionCompleted<int>>());
     });
 
     test('imports may only create', () async {
-      final create = await dispatcher.dispatch(ProbeAction(), const ProbeInput(1), idempotencyKey: 'a', channel: ActionChannel.import);
+      final create = await dispatcher.dispatch(
+        ProbeAction(),
+        const ProbeInput(1),
+        idempotencyKey: 'a',
+        channel: ActionChannel.import,
+      );
       expect(create, isA<ActionCompleted<int>>());
-      final update = await dispatcher.dispatch(ProbeAction(id: 'probe.update'), const ProbeInput(1),
-          idempotencyKey: 'b', channel: ActionChannel.import);
+      final update = await dispatcher.dispatch(
+        ProbeAction(id: 'probe.update'),
+        const ProbeInput(1),
+        idempotencyKey: 'b',
+        channel: ActionChannel.import,
+      );
       expect((update as ActionRejected<int>).failure.code, FailureCode.notPermitted);
     });
 
     test('the system channel behaves like the UI', () async {
-      final out = await dispatcher.dispatch(ProbeAction(id: 'probe.delete'), const ProbeInput(1),
-          idempotencyKey: 'k', channel: ActionChannel.system);
+      final out = await dispatcher.dispatch(
+        ProbeAction(id: 'probe.delete'),
+        const ProbeInput(1),
+        idempotencyKey: 'k',
+        channel: ActionChannel.system,
+      );
       expect(out, isA<ActionCompleted<int>>());
     });
   });
@@ -325,7 +406,10 @@ void main() {
       const b = ProbeInput(1, extra: {'a': 1, 'b': 2});
       expect(fingerprintOf('x.create', a), fingerprintOf('x.create', b));
       expect(fingerprintOf('x.create', a), isNot(fingerprintOf('y.create', a)));
-      expect(fingerprintOf('x.create', a), isNot(fingerprintOf('x.create', const ProbeInput(2, extra: {'b': 2, 'a': 1}))));
+      expect(
+        fingerprintOf('x.create', a),
+        isNot(fingerprintOf('x.create', const ProbeInput(2, extra: {'b': 2, 'a': 1}))),
+      );
     });
 
     test('preview fingerprint = request fingerprint [+ "." + state hash]', () {

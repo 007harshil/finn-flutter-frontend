@@ -103,11 +103,7 @@ final loansOverviewProvider = Provider<AsyncValue<LoansOverview>>(
 ({String label, Color color, IconData icon}) loanDueLabel(BuildContext context, LoanState s) {
   final c = context.colors;
   if (s.isClosed) {
-    return (
-      label: s.loan.isBorrowed ? 'Repaid' : 'Fully received',
-      color: c.positive,
-      icon: LucideIcons.circleCheck,
-    );
+    return (label: s.loan.isBorrowed ? 'Repaid' : 'Fully received', color: c.positive, icon: LucideIcons.circleCheck);
   }
   final days = s.daysUntilNextDue;
   if (days == null) return (label: 'Nothing scheduled', color: c.textSecondary, icon: LucideIcons.calendar);
@@ -143,10 +139,10 @@ class LoanDirectionPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => StatusPill(
-        label: direction.pill,
-        color: onGradient ? Colors.white : direction.color(context.colors),
-        icon: direction.icon,
-      );
+    label: direction.pill,
+    color: onGradient ? Colors.white : direction.color(context.colors),
+    icon: direction.icon,
+  );
 }
 
 /// One loan in the list.
@@ -171,12 +167,13 @@ class LoanCard extends StatelessWidget {
     final subtitle = s.isClosed
         ? '${l.counterparty} · ${l.structure.label}'
         : (next == null
-            ? '${l.counterparty} · ${l.rate.label} p.a.'
-            : '${l.counterparty} · ${loanDueName(l, next)} ${maskedAmount(context, next.payment)} · ${DateFormats.dayMonth.format(next.dueDate)}');
+              ? '${l.counterparty} · ${l.rate.label} p.a.'
+              : '${l.counterparty} · ${loanDueName(l, next)} ${maskedAmount(context, next.payment)} · ${DateFormats.dayMonth.format(next.dueDate)}');
     return FinnCard(
       padding: const EdgeInsets.all(Space.x4),
       onTap: onTap,
-      semanticLabel: '${l.name}, ${l.direction.sentence(l.counterparty)}, '
+      semanticLabel:
+          '${l.name}, ${l.direction.sentence(l.counterparty)}, '
           'outstanding ${AmountText.spokenLabel(s.outstanding)}, ${due.label}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -269,9 +266,9 @@ class LoanFieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: Space.x1_5),
-        child: Text(text, style: context.text.label),
-      );
+    padding: const EdgeInsets.only(bottom: Space.x1_5),
+    child: Text(text, style: context.text.label),
+  );
 }
 
 /// Single-select payment method chips.
@@ -292,12 +289,12 @@ class LoanMethodChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => FilterChipBar<PaymentMethod>(
-        padding: EdgeInsets.zero,
-        multiSelect: false,
-        items: [for (final m in PaymentMethod.values) FilterChipItem(m, m.label, icon: _icons[m])],
-        selected: {?selected},
-        onChanged: (s) => onChanged(s.first),
-      );
+    padding: EdgeInsets.zero,
+    multiSelect: false,
+    items: [for (final m in PaymentMethod.values) FilterChipItem(m, m.label, icon: _icons[m])],
+    selected: {?selected},
+    onChanged: (s) => onChanged(s.first),
+  );
 }
 
 /// A switch row inside an outlined card, with an explanation underneath.

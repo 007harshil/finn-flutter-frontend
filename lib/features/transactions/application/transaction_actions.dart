@@ -28,25 +28,25 @@ class TransactionInput extends ActionInput {
   final String? note;
 
   factory TransactionInput.fromJson(Map<String, Object?> j) => TransactionInput(
-        type: In.enumeration(j, 'type', TransactionType.values),
-        amount: In.money(j, 'amount'),
-        categoryId: In.str(j, 'categoryId'),
-        date: In.date(j, 'date'),
-        paymentMethod: In.enumOpt(j, 'paymentMethod', PaymentMethod.values),
-        counterparty: In.strOpt(j, 'counterparty'),
-        note: In.strOpt(j, 'note'),
-      );
+    type: In.enumeration(j, 'type', TransactionType.values),
+    amount: In.money(j, 'amount'),
+    categoryId: In.str(j, 'categoryId'),
+    date: In.date(j, 'date'),
+    paymentMethod: In.enumOpt(j, 'paymentMethod', PaymentMethod.values),
+    counterparty: In.strOpt(j, 'counterparty'),
+    note: In.strOpt(j, 'note'),
+  );
 
   @override
   Map<String, Object?> toJson() => {
-        'type': type.name,
-        'amount': Out.money(amount),
-        'categoryId': categoryId,
-        'date': Out.date(date),
-        'paymentMethod': paymentMethod?.name,
-        'counterparty': counterparty,
-        'note': note,
-      };
+    'type': type.name,
+    'amount': Out.money(amount),
+    'categoryId': categoryId,
+    'date': Out.date(date),
+    'paymentMethod': paymentMethod?.name,
+    'counterparty': counterparty,
+    'note': note,
+  };
 }
 
 const _fields = [
@@ -54,8 +54,13 @@ const _fields = [
   ActionFieldSpec('amount', FieldKind.money, 'Amount in rupees, greater than zero'),
   ActionFieldSpec('categoryId', FieldKind.id, 'Category id matching the type'),
   ActionFieldSpec('date', FieldKind.date, 'Date the money moved (not in the future)'),
-  ActionFieldSpec('paymentMethod', FieldKind.enumeration, 'How it was paid', required: false,
-      allowedValues: ['upi', 'card', 'cash', 'bankTransfer', 'wallet', 'other']),
+  ActionFieldSpec(
+    'paymentMethod',
+    FieldKind.enumeration,
+    'How it was paid',
+    required: false,
+    allowedValues: ['upi', 'card', 'cash', 'bankTransfer', 'wallet', 'other'],
+  ),
   ActionFieldSpec('counterparty', FieldKind.string, 'Merchant or person', required: false),
   ActionFieldSpec('note', FieldKind.string, 'Free-text note', required: false),
 ];
@@ -82,27 +87,27 @@ Map<String, String> validateTransaction(TransactionInput i, FinanceSnapshot s) {
 }
 
 List<PreviewLine> _lines(TransactionInput i, FinanceSnapshot s) => [
-      PreviewLine('Type', i.type.label),
-      PreviewLine('Amount', i.amount.format(), emphasis: true),
-      PreviewLine('Category', s.category(i.categoryId)?.name ?? '—'),
-      PreviewLine('Date', DateFormats.dayMonthYear.format(i.date)),
-      if (i.paymentMethod != null) PreviewLine('Paid via', i.paymentMethod!.label),
-      if (i.counterparty != null) PreviewLine(i.type.isIncome ? 'From' : 'To', i.counterparty!),
-    ];
+  PreviewLine('Type', i.type.label),
+  PreviewLine('Amount', i.amount.format(), emphasis: true),
+  PreviewLine('Category', s.category(i.categoryId)?.name ?? '—'),
+  PreviewLine('Date', DateFormats.dayMonthYear.format(i.date)),
+  if (i.paymentMethod != null) PreviewLine('Paid via', i.paymentMethod!.label),
+  if (i.counterparty != null) PreviewLine(i.type.isIncome ? 'From' : 'To', i.counterparty!),
+];
 
 class CreateTransactionAction extends FinancialAction<TransactionInput, Transaction> {
   const CreateTransactionAction();
 
   @override
   ActionDescriptor get descriptor => const ActionDescriptor(
-        id: 'transactions.create',
-        module: 'transactions',
-        title: 'Record a transaction',
-        description: 'Records completed income or an expense. Changes the cash balance.',
-        risk: ActionRisk.low,
-        movesMoney: true,
-        fields: _fields,
-      );
+    id: 'transactions.create',
+    module: 'transactions',
+    title: 'Record a transaction',
+    description: 'Records completed income or an expense. Changes the cash balance.',
+    risk: ActionRisk.low,
+    movesMoney: true,
+    fields: _fields,
+  );
 
   @override
   TransactionInput decode(Map<String, Object?> json) => TransactionInput.fromJson(json);
@@ -115,13 +120,15 @@ class CreateTransactionAction extends FinancialAction<TransactionInput, Transact
     if (input.isExpense && input.amount > s.balance.available) {
       warnings.add('This is more than your available balance of ${s.balance.available.format()}.');
     }
-    return Result.ok(preview(
-      input,
-      title: 'Record ${input.type.label.toLowerCase()}',
-      summary: '${input.type.isIncome ? 'Received' : 'Spent'} ${input.amount.format()}',
-      lines: _lines(input, s),
-      warnings: warnings,
-    ));
+    return Result.ok(
+      preview(
+        input,
+        title: 'Record ${input.type.label.toLowerCase()}',
+        summary: '${input.type.isIncome ? 'Received' : 'Spent'} ${input.amount.format()}',
+        lines: _lines(input, s),
+        warnings: warnings,
+      ),
+    );
   }
 
   @override
@@ -165,45 +172,54 @@ class UpdateTransactionAction extends FinancialAction<UpdateTransactionInput, Tr
 
   @override
   ActionDescriptor get descriptor => const ActionDescriptor(
-        id: 'transactions.update',
-        module: 'transactions',
-        title: 'Edit a transaction',
-        description: 'Changes a manual transaction. Balances, budgets and analytics update automatically.',
-        risk: ActionRisk.low,
-        movesMoney: true,
-        fields: [
-          ActionFieldSpec('id', FieldKind.id, 'Transaction id'),
-          ActionFieldSpec('expectedVersion', FieldKind.integer, 'Version that was read'),
-          ..._fields,
-        ],
-      );
+    id: 'transactions.update',
+    module: 'transactions',
+    title: 'Edit a transaction',
+    description: 'Changes a manual transaction. Balances, budgets and analytics update automatically.',
+    risk: ActionRisk.low,
+    movesMoney: true,
+    fields: [
+      ActionFieldSpec('id', FieldKind.id, 'Transaction id'),
+      ActionFieldSpec('expectedVersion', FieldKind.integer, 'Version that was read'),
+      ..._fields,
+    ],
+  );
 
   @override
   UpdateTransactionInput decode(Map<String, Object?> json) => UpdateTransactionInput(
-        id: In.str(json, 'id'),
-        expectedVersion: In.integer(json, 'expectedVersion'),
-        data: TransactionInput.fromJson(json),
-      );
+    id: In.str(json, 'id'),
+    expectedVersion: In.integer(json, 'expectedVersion'),
+    data: TransactionInput.fromJson(json),
+  );
 
   @override
   Result<ActionPreview> prepare(UpdateTransactionInput input, FinanceSnapshot s, ActionEnvironment env) {
     final existing = s.transactionById[input.id];
     if (existing == null) return const Result.err(AppFailure.notFound('This transaction no longer exists.'));
     if (existing.isLinked) {
-      return Result.err(AppFailure(FailureCode.notPermitted,
-          'This transaction was created by ${existing.origin.label.toLowerCase()}. Change it from there.'));
+      return Result.err(
+        AppFailure(
+          FailureCode.notPermitted,
+          'This transaction was created by ${existing.origin.label.toLowerCase()}. Change it from there.',
+        ),
+      );
     }
     if (existing.version != input.expectedVersion) {
-      return const Result.err(AppFailure(FailureCode.staleData, 'This transaction changed since you opened it. Reload and try again.'));
+      return const Result.err(
+        AppFailure(FailureCode.staleData, 'This transaction changed since you opened it. Reload and try again.'),
+      );
     }
     final errors = validateTransaction(input.data, s);
     if (errors.isNotEmpty) return Result.err(AppFailure.validation(errors.values.first, fields: errors));
-    return Result.ok(preview(
-      input,
-      title: 'Save changes',
-      summary: 'Update ${existing.amount.format()} ${existing.type.label.toLowerCase()} to ${input.data.amount.format()}',
-      lines: _lines(input.data, s),
-    ));
+    return Result.ok(
+      preview(
+        input,
+        title: 'Save changes',
+        summary:
+            'Update ${existing.amount.format()} ${existing.type.label.toLowerCase()} to ${input.data.amount.format()}',
+        lines: _lines(input.data, s),
+      ),
+    );
   }
 
   @override
@@ -239,15 +255,15 @@ class DeleteTransactionAction extends FinancialAction<DeleteTransactionInput, Tr
 
   @override
   ActionDescriptor get descriptor => const ActionDescriptor(
-        id: 'transactions.delete',
-        module: 'transactions',
-        title: 'Delete a transaction',
-        description: 'Permanently removes a manual transaction and reverses its effect on balances.',
-        risk: ActionRisk.consequential,
-        reversible: false,
-        movesMoney: true,
-        fields: [ActionFieldSpec('id', FieldKind.id, 'Transaction id')],
-      );
+    id: 'transactions.delete',
+    module: 'transactions',
+    title: 'Delete a transaction',
+    description: 'Permanently removes a manual transaction and reverses its effect on balances.',
+    risk: ActionRisk.consequential,
+    reversible: false,
+    movesMoney: true,
+    fields: [ActionFieldSpec('id', FieldKind.id, 'Transaction id')],
+  );
 
   @override
   DeleteTransactionInput decode(Map<String, Object?> json) => DeleteTransactionInput(id: In.str(json, 'id'));
@@ -257,20 +273,31 @@ class DeleteTransactionAction extends FinancialAction<DeleteTransactionInput, Tr
     final t = s.transactionById[input.id];
     if (t == null) return const Result.err(AppFailure.notFound('This transaction no longer exists.'));
     if (t.isLinked) {
-      return Result.err(AppFailure(FailureCode.notPermitted,
-          'This transaction belongs to a ${t.origin.label.toLowerCase()}. Reverse it from there.'));
+      return Result.err(
+        AppFailure(
+          FailureCode.notPermitted,
+          'This transaction belongs to a ${t.origin.label.toLowerCase()}. Reverse it from there.',
+        ),
+      );
     }
-    return Result.ok(preview(
-      input,
-      title: 'Delete transaction?',
-      summary: 'Delete ${t.amount.format()} ${t.type.label.toLowerCase()} on ${DateFormats.dayMonthYear.format(t.date)}',
-      lines: [
-        PreviewLine('Category', s.category(t.categoryId)?.name ?? '—'),
-        PreviewLine('Balance effect', (t.isIncome ? -t.amount : t.amount).format(sign: SignDisplay.always), emphasis: true),
-      ],
-      warnings: const ['This cannot be undone.'],
-      basis: {'v': t.version},
-    ));
+    return Result.ok(
+      preview(
+        input,
+        title: 'Delete transaction?',
+        summary:
+            'Delete ${t.amount.format()} ${t.type.label.toLowerCase()} on ${DateFormats.dayMonthYear.format(t.date)}',
+        lines: [
+          PreviewLine('Category', s.category(t.categoryId)?.name ?? '—'),
+          PreviewLine(
+            'Balance effect',
+            (t.isIncome ? -t.amount : t.amount).format(sign: SignDisplay.always),
+            emphasis: true,
+          ),
+        ],
+        warnings: const ['This cannot be undone.'],
+        basis: {'v': t.version},
+      ),
+    );
   }
 
   @override

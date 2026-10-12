@@ -29,11 +29,11 @@ final Map<String, Object?> fixtures = Map<String, Object?>.from(
   jsonDecode(File('test/remote/fixtures/server_contract.json').readAsStringSync()) as Map,
 );
 
-List<Map<String, Object?>> get actionCalls =>
-    [for (final a in fixtures['actions']! as List) Map<String, Object?>.from(a as Map)];
+List<Map<String, Object?>> get actionCalls => [
+  for (final a in fixtures['actions']! as List) Map<String, Object?>.from(a as Map),
+];
 
-Map<String, Object?> httpFixture(String name) =>
-    Map<String, Object?>.from((fixtures['http']! as Map)[name] as Map);
+Map<String, Object?> httpFixture(String name) => Map<String, Object?>.from((fixtures['http']! as Map)[name] as Map);
 
 /// The fixture's response body and status.
 http.Response responseOf(String name) {
@@ -81,7 +81,9 @@ void main() {
       final id = call['actionId']! as String;
       final result = registry.decode(id, Map<String, Object?>.from(call['input']! as Map));
       if (result case Err(:final failure)) {
-        fail('$id input rejected by the client: ${failure.message} ${failure.fieldErrors}\n${jsonEncode(call['input'])}');
+        fail(
+          '$id input rejected by the client: ${failure.message} ${failure.fieldErrors}\n${jsonEncode(call['input'])}',
+        );
       }
     }
   });
@@ -95,19 +97,19 @@ void main() {
     final repos = buildRemoteRepositories(engine, apiWith(MockClient((_) async => ok(null))));
     final collections = Map<String, Object?>.from(data['collections']! as Map);
     Future<int> countOf(String name) async => switch (name) {
-          SyncCollections.transactions => (await repos.transactions.getAll()).length,
-          SyncCollections.categories => (await repos.categories.getAll()).length,
-          SyncCollections.budgets => (await repos.budgets.getAll()).length,
-          SyncCollections.goals => (await repos.goals.getAll()).length,
-          SyncCollections.savingsMovements => (await repos.savingsMovements.getAll()).length,
-          SyncCollections.loans => (await repos.loans.getAll()).length,
-          SyncCollections.loanPayments => (await repos.loanPayments.getAll()).length,
-          SyncCollections.subscriptions => (await repos.subscriptions.getAll()).length,
-          SyncCollections.pending => (await repos.pending.getAll()).length,
-          SyncCollections.settlements => (await repos.settlements.getAll()).length,
-          SyncCollections.assets => (await repos.assets.getAll()).length,
-          _ => throw StateError('Unknown collection $name'),
-        };
+      SyncCollections.transactions => (await repos.transactions.getAll()).length,
+      SyncCollections.categories => (await repos.categories.getAll()).length,
+      SyncCollections.budgets => (await repos.budgets.getAll()).length,
+      SyncCollections.goals => (await repos.goals.getAll()).length,
+      SyncCollections.savingsMovements => (await repos.savingsMovements.getAll()).length,
+      SyncCollections.loans => (await repos.loans.getAll()).length,
+      SyncCollections.loanPayments => (await repos.loanPayments.getAll()).length,
+      SyncCollections.subscriptions => (await repos.subscriptions.getAll()).length,
+      SyncCollections.pending => (await repos.pending.getAll()).length,
+      SyncCollections.settlements => (await repos.settlements.getAll()).length,
+      SyncCollections.assets => (await repos.assets.getAll()).length,
+      _ => throw StateError('Unknown collection $name'),
+    };
     for (final entry in collections.entries) {
       final upserted = ((entry.value! as Map)['upserted'] as List).length;
       // Every record decodes (unreadable records would be skipped).
@@ -144,7 +146,9 @@ void main() {
 
   group('action envelopes through RemoteOperationDispatcher', () {
     Future<RemoteOperationDispatcher> dispatcherFor(String fixture) async {
-      final client = MockClient((req) async => req.url.path == '/api/v1/sync' ? ok(page(cursor: '1')) : responseOf(fixture));
+      final client = MockClient(
+        (req) async => req.url.path == '/api/v1/sync' ? ok(page(cursor: '1')) : responseOf(fixture),
+      );
       final api = apiWith(client);
       final engine = await engineWith('alice', client: client);
       final repos = buildRemoteRepositories(engine, api);
@@ -169,7 +173,11 @@ void main() {
     test('needsConfirmation', () async {
       final dispatcher = await dispatcherFor('actionNeedsConfirmation');
       final action = registry.lookup('transactions.delete')!;
-      final outcome = await dispatcher.dispatch(action, inputFor('transactions.delete'), idempotencyKey: 'ui_contract_1');
+      final outcome = await dispatcher.dispatch(
+        action,
+        inputFor('transactions.delete'),
+        idempotencyKey: 'ui_contract_1',
+      );
       expect(outcome, isA<ActionNeedsConfirmation<Object?>>());
       final preview = (outcome as ActionNeedsConfirmation<Object?>).preview;
       expect(preview.title, 'Delete transaction?');
@@ -181,7 +189,11 @@ void main() {
     test('completed', () async {
       final dispatcher = await dispatcherFor('actionCompleted');
       final action = registry.lookup('transactions.create')!;
-      final outcome = await dispatcher.dispatch(action, inputFor('transactions.create'), idempotencyKey: 'ui_contract_2');
+      final outcome = await dispatcher.dispatch(
+        action,
+        inputFor('transactions.create'),
+        idempotencyKey: 'ui_contract_2',
+      );
       expect(outcome, isA<ActionCompleted<Object?>>());
       final done = outcome as ActionCompleted<Object?>;
       expect(done.value, isA<Transaction>());
@@ -193,7 +205,11 @@ void main() {
     test('validation error', () async {
       final dispatcher = await dispatcherFor('actionValidationError');
       final action = registry.lookup('transactions.create')!;
-      final outcome = await dispatcher.dispatch(action, inputFor('transactions.create'), idempotencyKey: 'ui_contract_3');
+      final outcome = await dispatcher.dispatch(
+        action,
+        inputFor('transactions.create'),
+        idempotencyKey: 'ui_contract_3',
+      );
       final failure = (outcome as ActionRejected<Object?>).failure;
       expect(failure.code, FailureCode.validation);
       expect(failure.fieldErrors, {'amount': 'Enter an amount greater than zero'});
@@ -242,13 +258,28 @@ void main() {
   test('restoring dismissed alerts sends restore keys', () async {
     late Map<String, Object?> sent;
     final engine = await engineWith('alice');
-    engine.setValue(SyncValues.alertInbox, {'read': ['a1'], 'dismissed': ['a1', 'a2']});
-    final repo = RemoteAlertInboxRepository(engine, apiWith(MockClient((req) async {
-      sent = Map<String, Object?>.from(jsonDecode(req.body) as Map);
-      return ok({'read': ['a1'], 'dismissed': <String>[]});
-    })));
+    engine.setValue(SyncValues.alertInbox, {
+      'read': ['a1'],
+      'dismissed': ['a1', 'a2'],
+    });
+    final repo = RemoteAlertInboxRepository(
+      engine,
+      apiWith(
+        MockClient((req) async {
+          sent = Map<String, Object?>.from(jsonDecode(req.body) as Map);
+          return ok({
+            'read': ['a1'],
+            'dismissed': <String>[],
+          });
+        }),
+      ),
+    );
     await repo.set(repo.current.copyWith(dismissedKeys: {}));
-    expect(sent, {'read': <Object?>[], 'dismissed': <Object?>[], 'restore': unorderedEquals(['a1', 'a2'])});
+    expect(sent, {
+      'read': <Object?>[],
+      'dismissed': <Object?>[],
+      'restore': unorderedEquals(['a1', 'a2']),
+    });
     expect(repo.current.dismissedKeys, isEmpty);
   });
 

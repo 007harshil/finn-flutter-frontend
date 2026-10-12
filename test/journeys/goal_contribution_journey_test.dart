@@ -20,13 +20,18 @@ void main() {
     expect(inHero(rupees(before.balance.cash)), findsOneWidget);
     expect(inHero(rupees(before.balance.earmarked)), findsOneWidget);
 
-    // More tab: note the net worth shown before.
-    await tapTab(tester, 'More');
+    // Menu: note the net worth shown before.
+    await openMenu(tester);
     expect(find.text(rupees(before.netWorth.netWorth)), findsOneWidget);
 
     // Goals tab → MacBook Pro → Add money.
+    await tester.tap(find.byTooltip('Close menu'));
+    await tester.pumpAndSettle();
     await tapTab(tester, 'Goals');
-    await scrollAndTap(tester, find.descendant(of: find.byKey(const ValueKey(goalId)), matching: find.text('MacBook Pro')));
+    await scrollAndTap(
+      tester,
+      find.descendant(of: find.byKey(const ValueKey(goalId)), matching: find.text('MacBook Pro')),
+    );
     expect(find.text('MacBook Pro'), findsWidgets);
     await tapButton(tester, 'Add money');
     await tester.pumpAndSettle();
@@ -54,8 +59,8 @@ void main() {
     expect(inHero(rupees(before.balance.cash)), findsOneWidget);
     expect(inHero(rupees(before.balance.available)), findsNothing);
 
-    // More tab: net worth unchanged.
-    await tapTab(tester, 'More');
+    // Menu: net worth unchanged.
+    await openMenu(tester);
     expect(find.text(rupees(before.netWorth.netWorth)), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

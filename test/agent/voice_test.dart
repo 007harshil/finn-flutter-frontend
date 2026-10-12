@@ -91,10 +91,12 @@ void main() {
 
   group('VoiceInputController', () {
     ProviderContainer containerWith(FakeCapture capture, SpeechTranscriber? transcriber) {
-      final container = ProviderContainer(overrides: [
-        voiceCaptureFactoryProvider.overrideWithValue(() => capture),
-        speechTranscriberProvider.overrideWithValue(transcriber),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          voiceCaptureFactoryProvider.overrideWithValue(() => capture),
+          speechTranscriberProvider.overrideWithValue(transcriber),
+        ],
+      );
       addTearDown(container.dispose);
       return container;
     }
@@ -154,7 +156,9 @@ void main() {
       final capture = FakeCapture();
       final container = containerWith(
         capture,
-        FakeTranscriber(const AppFailure(FailureCode.unavailable, "You're sending requests too quickly.", retryable: true)),
+        FakeTranscriber(
+          const AppFailure(FailureCode.unavailable, "You're sending requests too quickly.", retryable: true),
+        ),
       );
       final voice = container.read(voiceInputProvider.notifier);
       await voice.start();
@@ -182,11 +186,13 @@ void main() {
     test('closing agent mode cancels an open microphone', () async {
       final capture = FakeCapture();
       final env = await TestEnv.create();
-      final container = ProviderContainer(overrides: [
-        ...env.overrides,
-        voiceCaptureFactoryProvider.overrideWithValue(() => capture),
-        speechTranscriberProvider.overrideWithValue(FakeTranscriber('x')),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          ...env.overrides,
+          voiceCaptureFactoryProvider.overrideWithValue(() => capture),
+          speechTranscriberProvider.overrideWithValue(FakeTranscriber('x')),
+        ],
+      );
       addTearDown(container.dispose);
       container.read(agentModeProvider.notifier).open();
       await container.read(voiceInputProvider.notifier).start();
@@ -213,18 +219,20 @@ void main() {
       ]),
       says('I will record ₹450 for lunch.'),
     ]);
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        ...env.overrides,
-        llmProviderProvider.overrideWithValue(provider),
-        voiceCaptureFactoryProvider.overrideWithValue(() => capture),
-        speechTranscriberProvider.overrideWithValue(FakeTranscriber('Spent 450 on lunch')),
-      ],
-      child: MaterialApp(
-        theme: FinnTheme.light(),
-        home: const MotionScope(reduceMotion: true, child: AgentScreen()),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...env.overrides,
+          llmProviderProvider.overrideWithValue(provider),
+          voiceCaptureFactoryProvider.overrideWithValue(() => capture),
+          speechTranscriberProvider.overrideWithValue(FakeTranscriber('Spent 450 on lunch')),
+        ],
+        child: MaterialApp(
+          theme: FinnTheme.light(),
+          home: const MotionScope(reduceMotion: true, child: AgentScreen()),
+        ),
       ),
-    ));
+    );
     await tester.pump();
 
     await tester.tap(find.byTooltip('Speak'));
@@ -236,7 +244,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    final sent = ProviderScope.containerOf(tester.element(find.byType(AgentScreen))).read(agentControllerProvider).entries;
+    final sent = ProviderScope.containerOf(tester.element(find.byType(AgentScreen)))
+        .read(agentControllerProvider)
+        .entries;
     expect((sent.single as UserChatEntry).text, 'Spent 450 on lunch', reason: 'transcript sent as the user message');
     expect(find.text('Review this change'), findsOneWidget);
     expect(find.text('Nothing is saved until you approve.'), findsOneWidget);

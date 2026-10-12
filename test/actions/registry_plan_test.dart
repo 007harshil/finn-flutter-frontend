@@ -31,17 +31,32 @@ void main() {
       final create = described.firstWhere((d) => d['id'] == 'transactions.create');
       expect(create['risk'], 'low');
       expect(create['movesMoney'], isTrue);
-      expect((create['fields'] as List).map((f) => (f as Map)['name']), containsAll(['type', 'amount', 'categoryId', 'date']));
-      expect(() => ActionRegistry([const CreateTransactionAction(), const CreateTransactionAction()]), throwsStateError);
+      expect(
+        (create['fields'] as List).map((f) => (f as Map)['name']),
+        containsAll(['type', 'amount', 'categoryId', 'date']),
+      );
+      expect(
+        () => ActionRegistry([const CreateTransactionAction(), const CreateTransactionAction()]),
+        throwsStateError,
+      );
     });
 
     test('decode reports unknown operations and malformed input', () {
       expect(registry.decode('nope.create', const {}).failureOrNull!.code, FailureCode.notFound);
-      final bad = registry.decode('transactions.create', {'type': 'expense', 'amount': '12.345', 'categoryId': 'c', 'date': '2026-10-01'});
+      final bad = registry.decode('transactions.create', {
+        'type': 'expense',
+        'amount': '12.345',
+        'categoryId': 'c',
+        'date': '2026-10-01',
+      });
       expect(bad.failureOrNull!.code, FailureCode.validation);
       expect(bad.failureOrNull!.fieldErrors.keys, ['amount']);
-      final ok = registry.decode('transactions.create',
-          {'type': 'expense', 'amount': '1,250.50', 'categoryId': SeedCategoryIds.food, 'date': '2026-10-01'});
+      final ok = registry.decode('transactions.create', {
+        'type': 'expense',
+        'amount': '1,250.50',
+        'categoryId': SeedCategoryIds.food,
+        'date': '2026-10-01',
+      });
       final input = ok.valueOrNull! as TransactionInput;
       expect(input.amount, Money.fromPaise(125050));
       expect(input.date, DateTime(2026, 10, 1));
@@ -52,8 +67,13 @@ void main() {
       final asked = await registry.dispatchJson(h.dispatcher, 'transactions.create', json, idempotencyKey: 'a1');
       expect(asked, isA<ActionNeedsConfirmation<Object?>>());
       final fp = (asked as ActionNeedsConfirmation<Object?>).preview.fingerprint;
-      final done = await registry.dispatchJson(h.dispatcher, 'transactions.create', json,
-          idempotencyKey: 'a1', confirmation: ActionConfirmation(fp, confirmedBy: 'agent-user'));
+      final done = await registry.dispatchJson(
+        h.dispatcher,
+        'transactions.create',
+        json,
+        idempotencyKey: 'a1',
+        confirmation: ActionConfirmation(fp, confirmedBy: 'agent-user'),
+      );
       expect(done, isA<ActionCompleted<Object?>>());
       expect((await h.snapshot()).transactions.single.amount, const Money.rupees(300));
       expect(h.dispatcher.audit.entries.single.channel, ActionChannel.agent);
@@ -114,35 +134,52 @@ void main() {
     });
 
     ActionPlan plan(String id, {List<PlannedStep>? steps}) => ActionPlan(
-          planId: id,
-          steps: steps ??
-              [
-                const PlannedStep(stepId: 'pay', actionId: 'transactions.create', input: {
-                  'type': 'expense',
-                  'amount': 500,
-                  'categoryId': SeedCategoryIds.food,
-                  'date': '2026-10-09',
-                  'counterparty': 'Rahul',
-                }),
-                PlannedStep(
-                  stepId: 'save',
-                  actionId: 'goals.contribute',
-                  input: {'goalId': goal.id, 'amount': 2000, 'date': '2026-10-10'},
-                  dependsOn: const ['pay'],
-                ),
-              ],
-        );
+      planId: id,
+      steps:
+          steps ??
+          [
+            const PlannedStep(
+              stepId: 'pay',
+              actionId: 'transactions.create',
+              input: {
+                'type': 'expense',
+                'amount': 500,
+                'categoryId': SeedCategoryIds.food,
+                'date': '2026-10-09',
+                'counterparty': 'Rahul',
+              },
+            ),
+            PlannedStep(
+              stepId: 'save',
+              actionId: 'goals.contribute',
+              input: {'goalId': goal.id, 'amount': 2000, 'date': '2026-10-10'},
+              dependsOn: const ['pay'],
+            ),
+          ],
+    );
 
-    Future<Set<String>> approveAll(ActionPlan p) async =>
-        {for (final r in await executor.prepare(p)) if (r.preview != null) r.preview!.fingerprint};
+    Future<Set<String>> approveAll(ActionPlan p) async => {
+      for (final r in await executor.prepare(p))
+        if (r.preview != null) r.preview!.fingerprint,
+    };
 
     test('prepare validates every step without executing anything', () async {
-      final reports = await executor.prepare(plan('p', steps: [
-        ...plan('p').steps,
-        const PlannedStep(stepId: 'bad', actionId: 'transactions.create', input: {'type': 'expense'}),
-        const PlannedStep(stepId: 'unknown', actionId: 'nope.create', input: {}),
-      ]));
-      expect(reports.map((r) => r.status), [StepStatus.ready, StepStatus.ready, StepStatus.invalid, StepStatus.invalid]);
+      final reports = await executor.prepare(
+        plan(
+          'p',
+          steps: [
+            ...plan('p').steps,
+            const PlannedStep(stepId: 'bad', actionId: 'transactions.create', input: {'type': 'expense'}),
+            const PlannedStep(stepId: 'unknown', actionId: 'nope.create', input: {}),
+          ],
+        ),
+      );
+      expect(reports.map((r) => r.status), [
+        StepStatus.ready,
+        StepStatus.ready,
+        StepStatus.invalid,
+        StepStatus.invalid,
+      ]);
       expect(reports[1].preview!.summary, 'Set aside ₹2,000 for Japan trip');
       final s = await h.snapshot();
       expect(s.transactions, isEmpty);
@@ -179,19 +216,27 @@ void main() {
     });
 
     test('a step whose record changed after approval is stale and halts the plan', () async {
-      final p = plan('p3', steps: [
-        PlannedStep(stepId: 'save', actionId: 'goals.contribute', input: {'goalId': goal.id, 'amount': 2000, 'date': '2026-10-10'}),
-        const PlannedStep(stepId: 'pay', actionId: 'transactions.create', input: {
-          'type': 'expense',
-          'amount': 500,
-          'categoryId': SeedCategoryIds.food,
-          'date': '2026-10-09',
-        }),
-      ]);
+      final p = plan(
+        'p3',
+        steps: [
+          PlannedStep(
+            stepId: 'save',
+            actionId: 'goals.contribute',
+            input: {'goalId': goal.id, 'amount': 2000, 'date': '2026-10-10'},
+          ),
+          const PlannedStep(
+            stepId: 'pay',
+            actionId: 'transactions.create',
+            input: {'type': 'expense', 'amount': 500, 'categoryId': SeedCategoryIds.food, 'date': '2026-10-09'},
+          ),
+        ],
+      );
       final approved = await approveAll(p);
       // Meanwhile, money is added to the goal from another screen.
-      await h.run(const GoalMovementAction.contribute(),
-          GoalMovementInput(goalId: goal.id, amount: const Money.rupees(100), date: DateTime(2026, 10, 10)));
+      await h.run(
+        const GoalMovementAction.contribute(),
+        GoalMovementInput(goalId: goal.id, amount: const Money.rupees(100), date: DateTime(2026, 10, 10)),
+      );
 
       final reports = await executor.execute(p, approvedFingerprints: approved);
       expect(reports.map((r) => r.status), [StepStatus.notApproved, StepStatus.skipped]);
@@ -201,25 +246,34 @@ void main() {
 
     test('a failing step halts the rest unless stopOnFailure is false', () async {
       PlannedStep tooMuch(String id) => PlannedStep(
-          stepId: id, actionId: 'goals.contribute', input: {'goalId': goal.id, 'amount': 99999999, 'date': '2026-10-10'});
-      const pay = PlannedStep(stepId: 'pay', actionId: 'transactions.create', input: {
-        'type': 'expense',
-        'amount': 500,
-        'categoryId': SeedCategoryIds.food,
-        'date': '2026-10-09',
-      });
+        stepId: id,
+        actionId: 'goals.contribute',
+        input: {'goalId': goal.id, 'amount': 99999999, 'date': '2026-10-10'},
+      );
+      const pay = PlannedStep(
+        stepId: 'pay',
+        actionId: 'transactions.create',
+        input: {'type': 'expense', 'amount': 500, 'categoryId': SeedCategoryIds.food, 'date': '2026-10-09'},
+      );
       final payFp = (await executor.prepare(ActionPlan(planId: 'x', steps: const [pay]))).single.preview!.fingerprint;
       final contributeFp = previewFingerprintOf(
-          'goals.contribute', GoalMovementInput(goalId: goal.id, amount: const Money.rupees(99999999), date: DateTime(2026, 10, 10)),
-          basis: {'v': 1, 'saved': 0});
+        'goals.contribute',
+        GoalMovementInput(goalId: goal.id, amount: const Money.rupees(99999999), date: DateTime(2026, 10, 10)),
+        basis: {'v': 1, 'saved': 0},
+      );
 
-      final halted = await executor.execute(ActionPlan(planId: 'h', steps: [tooMuch('big'), pay]),
-          approvedFingerprints: {payFp, contributeFp});
+      final halted = await executor.execute(
+        ActionPlan(planId: 'h', steps: [tooMuch('big'), pay]),
+        approvedFingerprints: {payFp, contributeFp},
+      );
       expect(halted.map((r) => r.status), [StepStatus.failed, StepStatus.skipped]);
       expect(halted.first.failure!.code, FailureCode.validation);
 
-      final continued = await executor.execute(ActionPlan(planId: 'c', steps: [tooMuch('big'), pay]),
-          approvedFingerprints: {payFp, contributeFp}, stopOnFailure: false);
+      final continued = await executor.execute(
+        ActionPlan(planId: 'c', steps: [tooMuch('big'), pay]),
+        approvedFingerprints: {payFp, contributeFp},
+        stopOnFailure: false,
+      );
       expect(continued.map((r) => r.status), [StepStatus.failed, StepStatus.succeeded]);
     });
   });

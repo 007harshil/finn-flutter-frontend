@@ -16,9 +16,9 @@ class LastPaymentMethodController extends Notifier<Map<TransactionType, PaymentM
   }
 }
 
-final lastPaymentMethodProvider =
-    NotifierProvider<LastPaymentMethodController, Map<TransactionType, PaymentMethod>>(
-        LastPaymentMethodController.new);
+final lastPaymentMethodProvider = NotifierProvider<LastPaymentMethodController, Map<TransactionType, PaymentMethod>>(
+  LastPaymentMethodController.new,
+);
 
 /// Default method when nothing was used yet this session.
 PaymentMethod defaultPaymentMethod(TransactionType type) =>
@@ -27,8 +27,7 @@ PaymentMethod defaultPaymentMethod(TransactionType type) =>
 /// Categories a manual transaction of [type] may use: active, non-system
 /// categories plus the "Other" fallback (see `validateTransaction`).
 /// "Other" is listed last.
-final pickableCategoriesProvider =
-    Provider.family<AsyncValue<List<TransactionCategory>>, TransactionType>((ref, type) {
+final pickableCategoriesProvider = Provider.family<AsyncValue<List<TransactionCategory>>, TransactionType>((ref, type) {
   return ref.watch(categoriesByIdProvider).whenData((byId) {
     final regular = <TransactionCategory>[];
     final fallback = <TransactionCategory>[];

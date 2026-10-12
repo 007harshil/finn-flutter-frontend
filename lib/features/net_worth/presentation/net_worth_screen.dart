@@ -46,22 +46,22 @@ class _Skeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const SkeletonPulse(
-        child: SingleChildScrollView(
-          physics: NeverScrollableScrollPhysics(),
-          child: ResponsiveCenter(
-          padding: EdgeInsets.all(Space.gutter),
-          child: Column(
-            children: [
-              CardSkeleton(height: 200, radius: Radii.xxxl),
-              SizedBox(height: Space.x4),
-              CardSkeleton(height: 150),
-              SizedBox(height: Space.x4),
-              CardSkeleton(height: 260),
-            ],
-          ),
+    child: SingleChildScrollView(
+      physics: NeverScrollableScrollPhysics(),
+      child: ResponsiveCenter(
+        padding: EdgeInsets.all(Space.gutter),
+        child: Column(
+          children: [
+            CardSkeleton(height: 200, radius: Radii.xxxl),
+            SizedBox(height: Space.x4),
+            CardSkeleton(height: 150),
+            SizedBox(height: Space.x4),
+            CardSkeleton(height: 260),
+          ],
         ),
-        ),
-      );
+      ),
+    ),
+  );
 }
 
 class _Body extends StatelessWidget {
@@ -93,7 +93,8 @@ class _Body extends StatelessWidget {
       const InfoBanner(
         tone: FinnTone.info,
         title: 'How this is worked out',
-        message: 'Cash is counted once — it already includes money set aside for goals and your emergency fund. '
+        message:
+            'Cash is counted once — it already includes money set aside for goals and your emergency fund. '
             'Asset values are your own estimates; update them when they change.',
       ),
     ];
@@ -209,11 +210,11 @@ class _HeroStat extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 Color _sliceColor(FinnColors c, NetWorthGroup g) => switch (g) {
-      NetWorthGroup.cash => c.primary,
-      NetWorthGroup.assets => c.positive,
-      NetWorthGroup.receivables => c.info,
-      NetWorthGroup.liabilities => c.negative,
-    };
+  NetWorthGroup.cash => c.primary,
+  NetWorthGroup.assets => c.positive,
+  NetWorthGroup.receivables => c.info,
+  NetWorthGroup.liabilities => c.negative,
+};
 
 class _Composition extends StatelessWidget {
   const _Composition({required this.view});
@@ -356,7 +357,9 @@ class _AssetsSection extends StatelessWidget {
           icon: LucideIcons.landmark,
           title: 'Assets',
           tileColor: c.accentNetWorth,
-          subtitle: view.assets.isEmpty ? null : 'Your estimates · ${view.snapshot.assets.format(decimals: DecimalDisplay.none)}',
+          subtitle: view.assets.isEmpty
+              ? null
+              : 'Your estimates · ${view.snapshot.assets.format(decimals: DecimalDisplay.none)}',
           trailing: view.assets.isEmpty
               ? null
               : TextButton.icon(
@@ -491,12 +494,7 @@ class _LinesSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionHeader(
-          icon: icon,
-          title: title,
-          tileColor: liability ? c.negative : c.info,
-          subtitle: subtitle,
-        ),
+        SectionHeader(icon: icon, title: title, tileColor: liability ? c.negative : c.info, subtitle: subtitle),
         const SizedBox(height: Space.x3),
         if (lines.isEmpty)
           FinnCard(

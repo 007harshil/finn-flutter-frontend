@@ -41,15 +41,17 @@ class RemoteBackend {
 
 /// Provider overrides that switch the app to [backend].
 List<Override> remoteOverrides(RemoteBackend backend) => [
-      remoteModeProvider.overrideWithValue(true),
-      remoteBackendProvider.overrideWithValue(backend),
-      financeRepositoriesProvider.overrideWithValue(backend.repositories),
-      authServiceProvider.overrideWithValue(backend.authService),
-      actionDispatcherProvider.overrideWith((ref) => RemoteOperationDispatcher(
-            environment: ref.watch(actionEnvironmentProvider),
-            audit: ref.watch(auditLogProvider),
-            api: backend.api,
-            engine: backend.engine,
-          )),
-      auditEntriesProvider.overrideWith((ref) => watchRemoteAudit(backend.api, backend.engine)),
-    ];
+  remoteModeProvider.overrideWithValue(true),
+  remoteBackendProvider.overrideWithValue(backend),
+  financeRepositoriesProvider.overrideWithValue(backend.repositories),
+  authServiceProvider.overrideWithValue(backend.authService),
+  actionDispatcherProvider.overrideWith(
+    (ref) => RemoteOperationDispatcher(
+      environment: ref.watch(actionEnvironmentProvider),
+      audit: ref.watch(auditLogProvider),
+      api: backend.api,
+      engine: backend.engine,
+    ),
+  ),
+  auditEntriesProvider.overrideWith((ref) => watchRemoteAudit(backend.api, backend.engine)),
+];

@@ -101,7 +101,8 @@ class RemoteGoalRepository extends RemoteCollection<SavingsGoal> implements Goal
 }
 
 class RemoteSavingsMovementRepository extends RemoteCollection<SavingsMovement> implements SavingsMovementRepository {
-  RemoteSavingsMovementRepository(SyncEngine e) : super(e, SyncCollections.savingsMovements, SavingsMovementDto.fromJson);
+  RemoteSavingsMovementRepository(SyncEngine e)
+    : super(e, SyncCollections.savingsMovements, SavingsMovementDto.fromJson);
 }
 
 class RemoteLoanRepository extends RemoteCollection<Loan> implements LoanRepository {
@@ -170,8 +171,8 @@ class RemoteValue<T> implements ValueRepository<T> {
 /// the `profile.update` action endpoint.
 class RemoteProfileRepository extends RemoteValue<FinancialProfile?> implements ProfileRepository {
   RemoteProfileRepository(SyncEngine e, this.api, {String Function()? newKey})
-      : _newKey = newKey ?? _defaultKey,
-        super(e, SyncValues.profile, ProfileDto.fromJson, null);
+    : _newKey = newKey ?? _defaultKey,
+      super(e, SyncValues.profile, ProfileDto.fromJson, null);
 
   final ApiClient api;
   final String Function() _newKey;
@@ -197,8 +198,10 @@ class RemoteProfileRepository extends RemoteValue<FinancialProfile?> implements 
     );
     if (data is! Map) return;
     if (data['status'] == 'needsConfirmation') {
-      throw const AppFailure(FailureCode.confirmationRequired,
-          'Changing your opening balance needs a review. Edit it from your profile instead.');
+      throw const AppFailure(
+        FailureCode.confirmationRequired,
+        'Changing your opening balance needs a review. Edit it from your profile instead.',
+      );
     }
     final changes = data['changes'];
     if (changes is Map) engine.applyChanges(Map<String, Object?>.from(changes));
@@ -219,7 +222,7 @@ class RemoteEmergencyPlanRepository extends RemoteValue<EmergencyFundPlan?> impl
 /// removed (no endpoint, and nothing in the app un-reads an alert).
 class RemoteAlertInboxRepository extends RemoteValue<AlertInboxState> implements AlertInboxRepository {
   RemoteAlertInboxRepository(SyncEngine e, this.api)
-      : super(e, SyncValues.alertInbox, AlertInboxDto.fromJson, const AlertInboxState());
+    : super(e, SyncValues.alertInbox, AlertInboxDto.fromJson, const AlertInboxState());
 
   final ApiClient api;
 
@@ -236,11 +239,10 @@ class RemoteAlertInboxRepository extends RemoteValue<AlertInboxState> implements
     final previous = engine.value(SyncValues.alertInbox);
     engine.setValue(SyncValues.alertInbox, AlertInboxDto.toJson(value));
     try {
-      final data = await api.put('/alerts/inbox', body: {
-        'read': read.toList(),
-        'dismissed': dismissed.toList(),
-        'restore': restore.toList(),
-      });
+      final data = await api.put(
+        '/alerts/inbox',
+        body: {'read': read.toList(), 'dismissed': dismissed.toList(), 'restore': restore.toList()},
+      );
       if (data is Map) engine.setValue(SyncValues.alertInbox, Map<String, Object?>.from(data));
     } catch (_) {
       engine.setValue(SyncValues.alertInbox, previous ?? AlertInboxDto.toJson(before));
@@ -318,29 +320,29 @@ class RemoteUserDirectory implements UserDirectory {
   }
 
   static FinnUser _userFrom(JsonMap j) => FinnUser(
-        id: j['id'] as String,
-        name: (j['name'] as String?) ?? '',
-        handle: (j['handle'] as String?) ?? '',
-        phoneHint: j['phoneHint'] as String?,
-      );
+    id: j['id'] as String,
+    name: (j['name'] as String?) ?? '',
+    handle: (j['handle'] as String?) ?? '',
+    phoneHint: j['phoneHint'] as String?,
+  );
 }
 
 /// Builds the repository bundle over [engine].
 FinanceRepositories buildRemoteRepositories(SyncEngine engine, ApiClient api) => FinanceRepositories(
-      transactions: RemoteTransactionRepository(engine),
-      categories: RemoteCategoryRepository(engine),
-      budgets: RemoteBudgetRepository(engine),
-      goals: RemoteGoalRepository(engine),
-      savingsMovements: RemoteSavingsMovementRepository(engine),
-      loans: RemoteLoanRepository(engine),
-      loanPayments: RemoteLoanPaymentRepository(engine),
-      subscriptions: RemoteSubscriptionRepository(engine),
-      pending: RemotePendingRepository(engine),
-      settlements: RemoteSettlementRepository(engine),
-      assets: RemoteAssetRepository(engine),
-      profile: RemoteProfileRepository(engine, api),
-      emergencyPlan: RemoteEmergencyPlanRepository(engine),
-      alertInbox: RemoteAlertInboxRepository(engine, api),
-      users: RemoteUserDirectory(engine, api),
-      sharedLedger: RemoteSharedLedgerRepository(),
-    );
+  transactions: RemoteTransactionRepository(engine),
+  categories: RemoteCategoryRepository(engine),
+  budgets: RemoteBudgetRepository(engine),
+  goals: RemoteGoalRepository(engine),
+  savingsMovements: RemoteSavingsMovementRepository(engine),
+  loans: RemoteLoanRepository(engine),
+  loanPayments: RemoteLoanPaymentRepository(engine),
+  subscriptions: RemoteSubscriptionRepository(engine),
+  pending: RemotePendingRepository(engine),
+  settlements: RemoteSettlementRepository(engine),
+  assets: RemoteAssetRepository(engine),
+  profile: RemoteProfileRepository(engine, api),
+  emergencyPlan: RemoteEmergencyPlanRepository(engine),
+  alertInbox: RemoteAlertInboxRepository(engine, api),
+  users: RemoteUserDirectory(engine, api),
+  sharedLedger: RemoteSharedLedgerRepository(),
+);
