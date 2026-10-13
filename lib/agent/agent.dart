@@ -15,7 +15,7 @@ library;
 
 export 'agent_config.dart' show AgentConfig;
 export 'application/agent_controller.dart'
-    show AgentController, AgentViewState, AgentStatus, ChatEntry, UserChatEntry, AgentChatEntry;
+    show AgentController, AgentViewState, AgentStatus, ChatEntry, UserChatEntry, AgentChatEntry, ActionDeck, DeckSlot, DeckAttempt, CardDecision;
 export 'application/agent_providers.dart';
 export 'llm/llm_provider.dart' show LlmProvider, CancellationToken;
 export 'application/agent_mode.dart' show agentModeProvider, AgentModeController;

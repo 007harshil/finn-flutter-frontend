@@ -560,4 +560,56 @@ void main() {
       expect(result.actions.single.proposal.input.toJson()['date'], '2026-10-10');
     });
   });
+
+  group('redo of a declined change', () {
+    test('re-reads only that part with the declined op in context and saves the new reading', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch'},
+        ]),
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Groceries', 'note': 'lunch'},
+        ]),
+      ]);
+      final first = await r.turn('Spent 450 on lunch', approve: r.declineAll);
+      final declined = first.actions.single;
+      expect(declined.status, ActionResultStatus.declined);
+      expect(declined.proposal.opJson, containsPair('category', 'Food & Dining'));
+      expect(first.message, isEmpty, reason: 'the recap is all the turn had to say');
+      expect(first.request, 'Spent 450 on lunch');
+
+      final redo = await r.runner.runTurn(
+        '',
+        approve: r.approveAll,
+        redo: RedoRequest(request: first.request!, previous: declined),
+      );
+      final req = r.provider.requests.last;
+      expect(req.messages.last.content, 'Spent 450 on lunch');
+      expect(req.messages.first.content, contains('Redo: the user declined'));
+      expect(req.messages.first.content, contains('"category":"Food & Dining"'));
+      expect(redo.actions.single.status, ActionResultStatus.completed);
+      expect(redo.actions.single.proposal.input.toJson()['categoryId'], 'cat_groceries');
+      expect(r.history.entries.first.request, startsWith('Redo: '));
+    });
+
+    test('the same change again is never proposed; the user is asked what differs', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch'},
+        ]),
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch'},
+        ]),
+      ]);
+      final first = await r.turn('Spent 450 on lunch', approve: r.declineAll);
+      final redo = await r.runner.runTurn(
+        '',
+        approve: r.approveAll,
+        redo: RedoRequest(request: first.request!, previous: first.actions.single),
+      );
+      expect(r.approvals, hasLength(1), reason: 'nothing new to review');
+      expect(redo.actions, isEmpty);
+      expect(redo.message, contains('same change again'));
+    });
+  });
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:finn/agent/agent.dart';
 import 'package:finn/agent/llm/llm_provider.dart';
 import 'package:finn/agent/orchestration/agent_runner.dart';
@@ -131,12 +133,125 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('₹450 on Food & Dining added as an expense.'), findsOneWidget);
+      // The card stays with its outcome; no second summary card repeats it.
       expect(find.text('Change saved'), findsOneWidget);
+      expect(find.text('TRANSACTIONS · NEW'), findsOneWidget);
+      expect(find.text('₹450 on Food & Dining added as an expense.'), findsNothing);
       expect(find.text('SAVED'), findsOneWidget);
       // The saved record links to its detail screen.
       expect(find.text('View'), findsOneWidget);
       expect(find.byTooltip('Send'), findsOneWidget);
+    });
+
+    testWidgets('a declined card stays stamped; Retry regenerates it in place in its own colours', (tester) async {
+      final env = await TestEnv.create();
+      final provider = ScriptedProvider([
+        plan([lunch()]),
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Groceries', 'note': 'lunch'},
+        ]),
+      ]);
+      await pumpAgent(tester, env, provider);
+      await tester.enterText(find.byType(TextField), 'Spent 450 on lunch');
+      await tester.tap(find.byTooltip('Send'));
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.text('Decline'));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('DECLINED'), findsOneWidget, reason: 'the card stays, stamped');
+      expect(find.text('TRANSACTIONS · NEW'), findsOneWidget);
+      expect(find.text('No changes made'), findsNothing, reason: 'no separate outcome card');
+      expect(find.text('Retry'), findsOneWidget);
+
+      await tester.tap(find.text('Retry'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('REGENERATED · TRY 2'), findsOneWidget);
+      expect(find.text('Review this change'), findsOneWidget);
+      expect(provider.requests.last.messages.first.content, contains('Redo: the user declined'));
+
+      await tester.tap(find.text('Approve'));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Change saved'), findsOneWidget);
+      expect(find.text('SAVED'), findsOneWidget);
+      expect(find.text('REGENERATED · TRY 2'), findsOneWidget, reason: 'still marked as regenerated');
+      final saved = (await env.snapshot()).transactions.where((t) => t.note == 'lunch').single;
+      expect(saved.categoryId, 'cat_groceries');
+    });
+
+    testWidgets('several changes: a carousel with per-card decisions and Approve rest', (tester) async {
+      final env = await TestEnv.create();
+      final provider = ScriptedProvider([
+        plan([
+          lunch(),
+          {'op': 'expense', 'amount': 60, 'category': 'Food & Dining', 'note': 'chai'},
+          {'op': 'expense', 'amount': 120, 'category': 'Transport', 'note': 'auto'},
+        ]),
+      ]);
+      final container = await pumpAgent(tester, env, provider);
+      final before = (await env.snapshot()).transactions.length;
+      await tester.enterText(find.byType(TextField), 'lunch 450, chai 60 and auto 120');
+      await tester.tap(find.byTooltip('Send'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Review 3 changes'), findsOneWidget);
+      expect(find.byType(PageView), findsOneWidget);
+      expect(find.text('1 / 3'), findsOneWidget);
+      expect(find.text('Approve all'), findsOneWidget);
+
+      // Decline the first: the deck moves on to the next one.
+      await tester.tap(find.text('Decline').first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('2 / 3'), findsOneWidget);
+      expect(find.text('Approve rest (2)'), findsOneWidget);
+
+      await tester.tap(find.text('Approve rest (2)'));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('2 of 3 changes saved'), findsOneWidget);
+      final deck = container.read(agentControllerProvider).decks.values.single;
+      expect([for (final s in deck.slots) s.current.record!.status],
+          [ActionResultStatus.declined, ActionResultStatus.completed, ActionResultStatus.completed]);
+      expect((await env.snapshot()).transactions.length, before + 2);
+    });
+
+    testWidgets('while the agent works, the animated FiNN canvas says what is happening (full motion)', (tester) async {
+      final env = await TestEnv.create();
+      final reply = Completer<LlmResponse>();
+      final provider = ScriptedProvider(const []);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [...env.overrides, llmProviderProvider.overrideWithValue(_DelayedProvider(provider, reply.future))],
+          child: MaterialApp(theme: FinnTheme.light(), home: const MotionScope(reduceMotion: false, child: AgentScreen())),
+        ),
+      );
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), 'Spent 450 on lunch');
+      await tester.tap(find.byTooltip('Send'));
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(find.text('Understanding your request…'), findsOneWidget);
+
+      reply.complete(plan([lunch()]));
+      for (var i = 0; i < 40; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(find.text('Understanding your request…'), findsNothing);
+      await tester.tap(find.text('Approve'));
+      for (var i = 0; i < 60; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(find.text('Change saved'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('history lists what was asked and what was saved, filters it and clears it', (tester) async {
@@ -185,4 +300,36 @@ void main() {
       expect(provider.requests, hasLength(1));
     });
   });
+}
+
+Future<ProviderContainer> pumpAgent(WidgetTester tester, TestEnv env, ScriptedProvider provider) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)],
+      child: MaterialApp(
+        theme: FinnTheme.light(),
+        home: const MotionScope(reduceMotion: true, child: AgentScreen()),
+      ),
+    ),
+  );
+  await tester.pump();
+  return ProviderScope.containerOf(tester.element(find.byType(AgentScreen)));
+}
+
+/// Answers the first request only once [gate] completes (later ones at once).
+class _DelayedProvider implements LlmProvider {
+  _DelayedProvider(this.inner, this.gate);
+  final ScriptedProvider inner;
+  final Future<LlmResponse> gate;
+  bool _first = true;
+
+  @override
+  String get name => 'delayed';
+
+  @override
+  Future<LlmResponse> complete(LlmRequest request, {CancellationToken? cancel}) {
+    if (!_first) return inner.complete(request, cancel: cancel);
+    _first = false;
+    return gate;
+  }
 }

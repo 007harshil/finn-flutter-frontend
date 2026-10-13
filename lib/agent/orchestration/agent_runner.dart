@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
@@ -39,21 +40,45 @@ enum AgentTurnEnd {
   failed,
 }
 
+/// One change the user wants redone: [previous] was declined (or not
+/// saved) and the model reads the part of [request] it came from again.
+@immutable
+class RedoRequest {
+  const RedoRequest({required this.request, required this.previous});
+
+  /// The message the change came from (as the turn understood it).
+  final String request;
+  final ActionRecord previous;
+
+  /// Declined by the user: the same change must not come back.
+  bool get rejected => previous.status == ActionResultStatus.declined;
+}
+
 /// Outcome of one user turn.
 @immutable
 class AgentTurnResult {
   const AgentTurnResult({
     required this.end,
     required this.reply,
+    String? message,
     this.actions = const [],
     this.error,
     this.usage = const LlmUsage(),
-  });
+    this.request,
+  }) : message = message ?? reply;
 
   final AgentTurnEnd end;
 
   /// Text to show the user, built by the app from real outcomes.
   final String reply;
+
+  /// [reply] without the recap of [actions] (for UIs that show each action
+  /// on its own); empty when the recap was all there was to say.
+  final String message;
+
+  /// The request the turn acted on (the message, or a clarified request
+  /// with its answer), for redoing one of its changes later.
+  final String? request;
 
   /// Every change proposed in this turn and its confirmed outcome.
   final List<ActionRecord> actions;
@@ -131,14 +156,18 @@ class AgentRunner {
 
   static const waitingLabel = 'Still working on it…';
 
+  /// Runs one turn for [userText]. With [redo], the turn instead reads the
+  /// part of [RedoRequest.request] that produced one earlier change again
+  /// (and, when that change was declined, never proposes it unchanged).
   Future<AgentTurnResult> runTurn(
     String userText, {
     required ApprovalHandler approve,
     void Function(AgentEvent event)? onEvent,
     CancellationToken? cancel,
+    RedoRequest? redo,
   }) async {
     final token = cancel ?? CancellationToken();
-    final text = userText.trim();
+    final text = (redo?.request ?? userText).trim();
     if (text.isEmpty) return const AgentTurnResult(end: AgentTurnEnd.failed, reply: 'Type what you would like to do.');
     if (text.length > config.maxUserMessageChars) {
       return AgentTurnResult(
@@ -165,7 +194,7 @@ class AgentRunner {
     var grounding = '';
     var request = text;
     var usage = const LlmUsage();
-    switch (LocalIntents.match(text, memory)) {
+    switch (redo == null ? LocalIntents.match(text, memory) : null) {
       case HistoryIntent(:final period):
         return AgentTurnResult(end: AgentTurnEnd.completed, reply: await _historyAnswer(period, onEvent));
       case BalanceIntent():
@@ -181,15 +210,16 @@ class AgentRunner {
 
     // 2. One model request for the plan.
     if (ops == null) {
-      final open = memory.pending;
+      final open = redo == null ? memory.pending : null;
       if (open != null) {
         grounding = open.originalText;
         request = '${open.originalText} → $text';
       }
+      final extra = [?memory.contextText(withPending: redo == null), if (redo != null) _redoContext(redo)].join('\n');
       final llmRequest = LlmRequest(
         instructions: agentInstructions,
         messages: [
-          LlmMessage.user(agentContext(snapshot, today: today, extra: memory.contextText())),
+          LlmMessage.user(agentContext(snapshot, today: today, extra: extra)),
           LlmMessage.user(text),
         ],
         output: LlmOutputFormat.json,
@@ -209,7 +239,7 @@ class AgentRunner {
         );
       }
       // The model saw the open question; its new plan replaces it.
-      memory.pending = null;
+      if (redo == null) memory.pending = null;
       ops = plan.ops;
       ask = plan.ask;
       modelReply = plan.reply;
@@ -260,6 +290,7 @@ class AgentRunner {
 
     // 4. Review and execute, one wave per round of dependencies.
     final runId = ids.next('run');
+    final avoid = {if (redo != null && redo.rejected) _fingerprintOfStep(redo.previous.proposal.stepId)};
     final records = <ActionRecord>[];
     final created = Map<String, String>.of(existing);
     final notSaved = <String>{};
@@ -295,9 +326,10 @@ class AgentRunner {
       final round = await _round(
         ready,
         created: created,
-        request: request,
+        request: redo == null ? request : 'Redo: $request',
         runId: runId,
         historyNotes: historyNotes,
+        avoid: avoid,
         approve: approve,
         onEvent: onEvent,
         token: token,
@@ -337,18 +369,23 @@ class AgentRunner {
       );
     }
 
-    final reply = [
+    String join(List<String?> parts) => parts.whereType<String>().where((s) => s.trim().isNotEmpty).join('\n');
+    final lead = [
       if (records.isEmpty && answers.isEmpty && modelReply != null) modelReply,
       ...answers,
-      if (records.isNotEmpty) _outcomeSummary(records, lead: cancelled ? 'Stopped.' : ''),
+    ];
+    final tail = [
       if (rejected.isNotEmpty) rejected.toSet().join(' '),
       ?question,
-    ].where((s) => s.trim().isNotEmpty).join('\n');
+    ];
+    final reply = join([...lead, if (records.isNotEmpty) _outcomeSummary(records, lead: cancelled ? 'Stopped.' : ''), ...tail]);
     return AgentTurnResult(
       end: cancelled ? AgentTurnEnd.cancelled : AgentTurnEnd.completed,
       reply: reply.isEmpty ? 'Nothing was changed.' : reply,
+      message: records.isEmpty && reply.isEmpty ? 'Nothing was changed.' : join([...lead, ...tail]),
       actions: records,
       usage: usage,
+      request: request,
     );
   }
 
@@ -359,6 +396,7 @@ class AgentRunner {
     required String request,
     required String runId,
     required List<String> historyNotes,
+    required Set<String> avoid,
     required ApprovalHandler approve,
     required void Function(AgentEvent event)? onEvent,
     required CancellationToken token,
@@ -367,6 +405,7 @@ class AgentRunner {
     final steps = <PlanStep>[];
     final refsOf = <String, String>{}; // step id → op ref
     final notesOf = <String, List<String>>{};
+    final opsOf = <String, Map<String, Object?>>{};
     final seen = <String, int>{};
     for (final w in ready) {
       final input = {...w.action.input, for (final e in w.action.refs.entries) e.key: created[e.value]};
@@ -383,11 +422,16 @@ class AgentRunner {
         continue;
       }
       final fp = fingerprintOf(action.descriptor.id, decoded);
+      if (avoid.contains(fp)) {
+        problems.add('I came up with the same change again. Tell me what is different, such as the amount, category, person or date.');
+        continue;
+      }
       final inPlan = seen[fp] = (seen[fp] ?? 0) + 1;
       final occurrence = (_completed[fp] ?? 0) + inPlan - 1;
       final stepId = '$fp-$occurrence';
       steps.add(PlanStep(stepId: stepId, action: action, input: decoded));
       refsOf[stepId] = w.op.ref;
+      opsOf[stepId] = w.op.toJson()..remove('id');
       notesOf[stepId] = [
         ...w.notes,
         ...w.action.notes,
@@ -420,6 +464,7 @@ class AgentRunner {
         stepId: s.stepId,
         idempotencyKey: '$planId:${s.stepId}',
         notes: notesOf[s.stepId] ?? const [],
+        opJson: opsOf[s.stepId] ?? const {},
       ));
     }
     if (proposals.isEmpty) return (records: const <ActionRecord>[], problems: problems);
@@ -457,7 +502,7 @@ class AgentRunner {
           ? ActionResultStatus.failed
           : (r.status == ActionResultStatus.declined && token.isCancelled ? ActionResultStatus.cancelled : r.status);
       if (status == ActionResultStatus.completed) {
-        final fp = p.stepId.substring(0, p.stepId.lastIndexOf('-'));
+        final fp = _fingerprintOfStep(p.stepId);
         _completed[fp] = (_completed[fp] ?? 0) + 1;
       }
       records.add(ActionRecord(
@@ -577,6 +622,19 @@ class AgentRunner {
     if (local.isEmpty) return null;
     return {for (final q in local) q.question}.join(' ');
   }
+
+  /// What the model is told about the change to redo.
+  static String _redoContext(RedoRequest redo) {
+    final p = redo.previous;
+    final op = _clip(jsonEncode(p.proposal.opJson), 400);
+    final summary = _clip(p.summary, 160);
+    return redo.rejected
+        ? 'Redo: the user declined $op ("$summary"). Read the part of the message it came from again.'
+        : 'Redo: $op ("$summary") was not saved${p.message == null ? '' : ': ${_clip(p.message!, 200)}'}. Return that part of the message again, fixed.';
+  }
+
+  /// Step ids are `<fingerprint>-<occurrence>`.
+  static String _fingerprintOfStep(String stepId) => stepId.substring(0, stepId.lastIndexOf('-'));
 
   static String _clip(String s, int max) => s.length <= max ? s : '${s.substring(0, max - 1)}…';
 

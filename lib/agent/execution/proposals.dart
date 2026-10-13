@@ -15,6 +15,7 @@ class ProposedAction {
     required this.stepId,
     required this.idempotencyKey,
     this.notes = const [],
+    this.opJson = const {},
   });
 
   /// Unique within the conversation, e.g. `p3`.
@@ -37,6 +38,10 @@ class ProposedAction {
 
   /// Agent-side notes for the user, e.g. a possible duplicate.
   final List<String> notes;
+
+  /// The plan op as the model sent it (shown to the model again when the
+  /// user asks for this change to be redone).
+  final Map<String, Object?> opJson;
 
   ActionDescriptor get descriptor => action.descriptor;
 }

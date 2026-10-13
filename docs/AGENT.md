@@ -37,12 +37,14 @@ Code: `lib/agent/`. Tests: `test/agent/`. Backend: `finn-backend` `POST /api/v1/
   - `AgentVisualizer`: liquid aurora rings, orbiting light particles, voice ripples, thinking comets and an action arc around the unchanged `AgentOrb`. It eases between `AgentPresence` states (idle, listening, transcribing, thinking, reviewing, executing) and reacts to the live mic level; a reply sends out a ripple burst. One ticker drives two painters, so nothing rebuilds per frame; reduced motion paints a still frame. Tapping it starts or finishes voice capture.
   - The visualizer is large on the welcome screen (greeting, suggestions, trust line) and morphs to a compact size once a conversation starts. The conversation is a transcript, not chat bubbles: the user's words as a spoken line, the agent's replies as glass cards that reveal word by word.
   - A glass command dock holds the text field and a mic / send / stop button; while listening it becomes a mirrored live voice ribbon with cancel and done.
-- **Review before changes.** `ChangeReviewPanel` (`widgets/change_review.dart`) replaces the old text card:
-  - Header impact tiles: number of changes, how many move money, and how many are permanent or how many areas they touch.
-  - One card per change: a module icon and colour, a "MODULE · VERB" eyebrow, the app's own summary, the amount in large type, and detail chips.
-  - Before → after strips for preview lines such as `Available to spend ₹10,000 → ₹9,550`, plus *Moves money* / *Cannot be undone* pills and warnings.
-  - Each card can be excluded on its own. Nothing is written until **Approve**.
-- **Final summary.** `OutcomeSummary` (`widgets/outcome_summary.dart`) shows "All N changes saved", "X of N saved" or "No changes made", with a segmented status bar (one segment per change) and a row per change with the status the backend confirmed.
+- **Review before changes: the action deck.** `ActionDeckView` (`widgets/action_deck_view.dart`) shows a message's proposed changes right under it. State lives in `AgentViewState.decks` (`application/action_deck.dart`: `ActionDeck` → `DeckSlot` → `DeckAttempt`):
+  - Several changes form a swipeable carousel (`PageView` whose height follows the current card), with status-coloured dots, previous / next buttons and "2 / 3". One change shows a single card.
+  - Header impact tiles while reviewing: number of changes, how many move money, and how many are permanent or how many areas they touch.
+  - Each card (`ChangeDetails` in `widgets/change_review.dart`): a module icon and colour, a "MODULE · VERB" eyebrow, the app's own summary, the amount in large type, detail chips, before → after strips, *Moves money* / *Cannot be undone* pills and warnings.
+  - Every card has its own **Approve** / **Decline** (with Undo while reviewing); **Approve all** / **Decline all** (or "Approve rest (n)") decide the remaining ones. The review is submitted once every card has a decision (`AgentController.decide` / `decideRest`), still one `/plans/execute` call per wave. Nothing is written before that.
+  - Cards never disappear: approved cards show a saving loader and then their outcome (*Saved* with a View link, *Failed*, *Not confirmed*…); declined cards are greyed out with a DECLINED stamp. The header sums it up ("2 of 3 changes saved"), so no separate outcome card is shown; the agent's reply card appears only for what the deck does not say (`AgentChatEntry.message`: answers, questions, refusals).
+- **Retry a declined change.** **Retry** on a declined (or failed, outcome known) card calls `AgentController.retry`: the runner re-reads the original request with a `Redo:` context line holding the declined op (`RedoRequest`, prompt rule 6), skips local intents and never proposes the same fingerprint again (it asks what differs instead). Only that card shows a loader ("Finding another way…"); the new proposal lands in the same slot, drawn in magenta/amber with a "REGENERATED · TRY n" ribbon and the replaced summary struck through, and is reviewed like any other. A question or refusal from the retry is shown on the card. The history entry's request starts with `Redo:`.
+- **Working states.** While the agent works and nothing waits on the user, `FinnWorkingIndicator` (`widgets/agent_working.dart`) ends the transcript: the FiNN wordmark riding a canvas aurora (ribbons plus flowing particles) whose colours and pace follow `AgentWork`: understanding, preparing, saving, wrapping up (nothing approved). Single-card loaders use `OrbitLoader`. Both run one ticker into a painter and hold a still frame under reduced motion.
 
 - **History.** The clock button in the top bar opens `AgentHistorySheet` (`widgets/history_sheet.dart`): what the user asked, when, and what was saved, newest first, 20 per page ("Show older"), filtered by All / Saved / Partly saved / Not saved / Declined. Tapping an entry shows each operation's status and failure reason. "Clear history" deletes the list (records are untouched).
 
@@ -72,7 +74,7 @@ AgentScreen ─send─▶ AgentController ─▶ AgentRunner
                                           │    categories, pending items, goals, loans, transactions)
                                           │ 4. PlanGateway.preview (one POST /plans/preview)
                                           ▼
-                                     ChangeReviewPanel (one card, all changes)
+                                     ActionDeckView (a card per change, decided one by one or all)
                                           │ approved
                                           ▼
                                      PlanGateway.execute (one POST /plans/execute + history entry)

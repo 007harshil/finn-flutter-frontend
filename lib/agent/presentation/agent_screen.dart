@@ -13,11 +13,11 @@ import '../application/agent_mode.dart';
 import '../application/agent_providers.dart';
 import '../orchestration/agent_runner.dart';
 import '../voice/voice_input_controller.dart';
+import 'widgets/action_deck_view.dart';
 import 'widgets/agent_logo.dart';
 import 'widgets/agent_visualizer.dart';
-import 'widgets/change_review.dart';
+import 'widgets/agent_working.dart';
 import 'widgets/history_sheet.dart';
-import 'widgets/outcome_summary.dart';
 
 /// Full-screen assistant (route `AppRoutes.assistant`, e.g. deep links).
 /// The main entry point is agent mode from the navigation bar
@@ -839,10 +839,33 @@ class _Transcript extends ConsumerWidget {
   /// Opens a saved record's screen.
   final ValueChanged<String> onOpen;
 
+  /// The kind of work to animate at the end of the transcript, or null
+  /// while the user is up (reviewing) or a single card shows its own loader.
+  static (AgentWork, String)? _work(AgentViewState state) {
+    if (state.redoing != null) return null;
+    final progress = state.progress;
+    return switch (state.status) {
+      AgentStatus.idle || AgentStatus.awaitingApproval => null,
+      AgentStatus.thinking when progress == null => (AgentWork.understanding, 'Understanding your request…'),
+      AgentStatus.thinking when progress == AgentRunner.waitingLabel => (AgentWork.understanding, progress!),
+      AgentStatus.thinking => (AgentWork.preparing, '$progress…'),
+      AgentStatus.executing when progress == 'Wrapping up' => (AgentWork.wrappingUp, 'Noting what you declined…'),
+      AgentStatus.executing => (AgentWork.saving, 'Saving what you approved…'),
+    };
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(agentControllerProvider.notifier);
     final header = _StageHeaderScope.of(context);
+    final work = _work(state);
+    // The deck the running turn works on.
+    final redoing = state.redoing;
+    final activeTurn = !state.busy
+        ? null
+        : redoing != null
+        ? state.decks.values.where((d) => d.slots.any((s) => s.key == redoing)).firstOrNull?.turnId
+        : state.entries.whereType<UserChatEntry>().lastOrNull?.id;
     return ShaderMask(
       blendMode: BlendMode.dstIn,
       // Older lines dissolve into the stage at the top.
@@ -857,27 +880,47 @@ class _Transcript extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(Space.gutter, 0, Space.gutter, Space.x4),
         children: [
           if (header != null) ...[header, const SizedBox(height: Space.x4)],
-          for (final e in state.entries) ...[
-            switch (e) {
-              UserChatEntry() => _UserLine(key: ValueKey(e.id), text: e.text),
-              AgentChatEntry() => _AgentCard(
-                key: ValueKey(e.id),
-                entry: e,
-                reveal: seen.add(e.id),
-                onOpen: onOpen,
-                onRetry: e.retryText != null && !state.busy && e == state.entries.last
-                    ? () => onRetry(e.retryText!)
-                    : null,
-              ),
+          for (final e in state.entries)
+            ...switch (e) {
+              UserChatEntry() => <Widget>[
+                _UserLine(key: ValueKey(e.id), text: e.text),
+                const SizedBox(height: Space.x4),
+                if (state.decks[e.id] case final deck?) ...[
+                  ActionDeckView(
+                    key: ValueKey('deck-${e.id}'),
+                    deck: deck,
+                    reviewing: state.reviewing,
+                    active: activeTurn == e.id,
+                    executing: state.status == AgentStatus.executing,
+                    busy: state.busy,
+                    onDecide: notifier.decide,
+                    onDecideRest: notifier.decideRest,
+                    onRetry: (slot) => notifier.retry(e.id, slot),
+                    onOpen: onOpen,
+                  ),
+                  const SizedBox(height: Space.x4),
+                ],
+              ],
+              // With a deck, the reply only adds what the cards do not say.
+              AgentChatEntry(:final turn) when state.decks.containsKey(turn) && e.message.trim().isEmpty => const <Widget>[],
+              AgentChatEntry(:final turn) => <Widget>[
+                _AgentCard(
+                  key: ValueKey(e.id),
+                  entry: e,
+                  text: state.decks.containsKey(turn) ? e.message : e.text,
+                  reveal: seen.add(e.id),
+                  onRetry: e.retryText != null && !state.busy && e == state.entries.last
+                      ? () => onRetry(e.retryText!)
+                      : null,
+                ),
+                const SizedBox(height: Space.x4),
+              ],
             },
-            const SizedBox(height: Space.x4),
-          ],
           if (state.plan != null && state.status != AgentStatus.idle) ...[
             _GlassNote(eyebrow: 'Plan', text: state.plan!),
             const SizedBox(height: Space.x3),
           ],
-          if (state.status == AgentStatus.awaitingApproval && state.proposals.isNotEmpty)
-            ChangeReviewPanel(proposals: state.proposals, onApprove: notifier.approve, onDecline: notifier.decline),
+          if (work case (final kind, final label)) FinnWorkingIndicator(work: kind, label: label),
         ],
       ),
     );
@@ -918,11 +961,13 @@ class _UserLine extends StatelessWidget {
 
 /// The agent's answer: a luminous glass card with what it did.
 class _AgentCard extends StatelessWidget {
-  const _AgentCard({super.key, required this.entry, required this.reveal, required this.onOpen, this.onRetry});
+  const _AgentCard({super.key, required this.entry, required this.text, required this.reveal, this.onRetry});
 
   final AgentChatEntry entry;
+
+  /// What to say (the reply, or only what the turn's deck does not show).
+  final String text;
   final bool reveal;
-  final ValueChanged<String> onOpen;
   final VoidCallback? onRetry;
 
   @override
@@ -990,14 +1035,10 @@ class _AgentCard extends StatelessWidget {
               ),
               const SizedBox(height: Space.x2),
               _RevealText(
-                text: entry.text,
+                text: text,
                 animate: reveal,
                 style: t.body.copyWith(color: Colors.white.withValues(alpha: 0.92), height: 1.5),
               ),
-              if (entry.actions.isNotEmpty) ...[
-                const SizedBox(height: Space.x3),
-                OutcomeSummary(actions: entry.actions, onOpen: onOpen),
-              ],
               if (onRetry != null) ...[
                 const SizedBox(height: Space.x3),
                 FinnButton(

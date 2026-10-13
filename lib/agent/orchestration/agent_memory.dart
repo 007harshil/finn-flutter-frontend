@@ -90,12 +90,13 @@ class AgentMemory {
 
   static String _clip(String s, int max) => s.length <= max ? s : '${s.substring(0, max - 1)}…';
 
-  /// Follow-up context for the model, or null when there is none.
-  String? contextText() {
+  /// Follow-up context for the model, or null when there is none. The open
+  /// question is left out when [withPending] is false (a redo of one change).
+  String? contextText({bool withPending = true}) {
     final lines = <String>[
       if (_recent.isNotEmpty)
         'Recent (already saved; refer by #n): ${[for (var i = 0; i < _recent.length; i++) '#${i + 1} ${_clip(_recent[i].summary, 80)}'].join(' | ')}',
-      if (pending case final p?) ...[
+      if (pending case final p? when withPending) ...[
         'Pending question you asked: "${_clip(p.question, 200)}"',
         'Unfinished ops: ${_clip(jsonEncode([for (final o in p.ops) o.toJson()]), 600)}',
         'Original message: "${_clip(p.originalText, 300)}"',
