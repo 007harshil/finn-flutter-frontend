@@ -311,8 +311,9 @@ class ArchiveCategoryAction extends FinancialAction<CategoryIdInput, Transaction
     if (archiving) {
       final budgets = s.budgets.where((b) => b.categoryId == c.id).length;
       final subs = s.subscriptions.where((x) => x.categoryId == c.id && x.isActive).length;
-      if (budgets > 0)
+      if (budgets > 0) {
         warnings.add('$budgets budget${budgets == 1 ? '' : 's'} still track${budgets == 1 ? 's' : ''} this category.');
+      }
       if (subs > 0) warnings.add('$subs active subscription${subs == 1 ? '' : 's'} still use this category.');
     }
     return Result.ok(

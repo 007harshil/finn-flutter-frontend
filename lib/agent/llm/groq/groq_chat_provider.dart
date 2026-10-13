@@ -1,9 +1,9 @@
 import '../llm_provider.dart';
 import '../llm_transport.dart';
 
-/// Groq through its OpenAI-compatible Chat Completions API
-/// (`POST /openai/v1/chat/completions`), the stable endpoint Groq documents
-/// for tool use (its Responses API is beta).
+/// OpenAI-compatible Chat Completions wire format, sent through the FiNN API
+/// relay (currently OpenAI `gpt-6-luna`; the class name dates from Groq,
+/// which speaks the same format).
 ///
 /// Requests are stateless: the instructions become the system message and
 /// the whole windowed conversation is sent every time. Model, reasoning

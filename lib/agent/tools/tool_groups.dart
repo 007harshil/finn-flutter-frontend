@@ -2,8 +2,8 @@ import 'agent_tool.dart';
 import 'json_schema.dart';
 
 /// Tools are offered to the model in groups so each request stays small
-/// (fewer tokens, better tool choice; Groq advises roughly 10–15 tools at
-/// most). The core group is always offered; other groups are switched on by
+/// (fewer tokens, better tool choice; providers advise roughly 10–15 tools
+/// at most). The core group is always offered; other groups are switched on by
 /// keywords in the user's message or by the model through `load_tools`, and
 /// stay on for the rest of the conversation.
 enum ToolGroup {

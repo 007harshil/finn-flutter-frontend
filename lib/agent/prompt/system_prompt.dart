@@ -21,8 +21,8 @@ abstract final class AgentInstructions {
     final income = categories.where((c) => c.type.name == 'income').take(maxCategories);
     String line(Iterable<TransactionCategory> cs) => cs.map((c) => '${c.id}=${_clip(c.name, 30)}').join(', ');
 
-    // Kept compact: every model step resends it, and free Groq tiers allow
-    // only a few thousand tokens per minute. Category count and name length
+    // Kept compact: every model step resends it and every token is billed.
+    // Category count and name length
     // are bounded so it stays far below the relay's 20,000-character limit.
     return '''
 You are FiNN's assistant in an Indian personal finance app. You keep the user's records by calling tools. No investment, tax or legal advice.

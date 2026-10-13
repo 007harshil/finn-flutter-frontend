@@ -112,16 +112,19 @@ const _calc = LoanCalculator();
 Map<String, String> validateLoan(LoanInput i, FinanceSnapshot s) {
   final e = <String, String>{};
   if (i.name.trim().isEmpty) e['name'] = 'Give this loan a name.';
-  if (i.counterparty.trim().isEmpty)
+  if (i.counterparty.trim().isEmpty) {
     e['counterparty'] = i.direction == LoanDirection.borrowed ? 'Who lent you the money?' : 'Who did you lend to?';
+  }
   if (!i.principal.isPositive) e['principal'] = 'Enter the loan amount.';
   if (i.principal > maxTransactionAmount) e['principal'] = 'That amount looks too large. Please check it.';
   if (i.rate.bps < 0 || i.rate.bps > 6000) e['rate'] = 'Enter an annual rate between 0% and 60%.';
   if (i.frequency == Frequency.weekly) e['frequency'] = 'Weekly repayment is not supported.';
-  if (i.firstDueDate.dateOnly.isBefore(i.startDate.dateOnly))
+  if (i.firstDueDate.dateOnly.isBefore(i.startDate.dateOnly)) {
     e['firstDueDate'] = 'The first due date must be after the start date.';
-  if (i.recordDisbursement && i.startDate.dateOnly.isAfter(s.today))
+  }
+  if (i.recordDisbursement && i.startDate.dateOnly.isAfter(s.today)) {
     e['startDate'] = 'A future disbursement cannot be recorded as cash yet.';
+  }
   if (i.structure == LoanStructure.amortizing) {
     final n = i.tenureInstallments;
     if (n == null || n < 1 || n > 480) {

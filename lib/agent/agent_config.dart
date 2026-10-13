@@ -2,28 +2,29 @@ import 'package:flutter/foundation.dart';
 
 /// Runtime limits for the agent. Model choice, reasoning effort and token
 /// caps on the provider side are configured on the FiNN API relay (see
-/// `finn-backend` env `GROQ_*` / `AGENT_*`), so a model change never needs an
+/// `finn-backend` env `OPENAI_*` / `AGENT_*`), so a model change never needs an
 /// app release.
 @immutable
 class AgentConfig {
   const AgentConfig({
-    // Models without parallel tool calls (e.g. gpt-oss) batch actions
-    // through queue_actions; lookups still take a step each.
+    // gpt-6-luna makes parallel tool calls; models without them batch
+    // actions through queue_actions.
     this.maxModelCallsPerTurn = 10,
     this.maxToolCallsPerStep = 8,
     this.maxToolCallsPerTurn = 24,
     this.maxOutputTokens = 1536,
-    // Small on purpose: free Groq tiers allow only a few thousand tokens
-    // per minute, and every step resends the window.
-    this.maxHistoryTurns = 6,
-    this.maxHistoryChars = 12000,
+    // Paid OpenAI key (2M tokens per minute), so the window is sized for
+    // context, not rate limits. Every step resends it, so it still costs
+    // per token.
+    this.maxHistoryTurns = 12,
+    this.maxHistoryChars = 32000,
     this.maxUserMessageChars = 2000,
     this.requestTimeout = const Duration(seconds: 75),
     this.transientRetries = 1,
     this.defaultRateLimitWait = const Duration(seconds: 5),
-    // Free Groq tiers measure tokens per minute, so a wait can approach a
-    // minute. Waits are routine pacing, not failures: the turn keeps going
-    // until the budget is spent.
+    // Rare on the paid tier; kept so a burst still finishes quietly. Waits
+    // are routine pacing, not failures: the turn keeps going until the
+    // budget is spent.
     this.maxRateLimitWait = const Duration(seconds: 60),
     this.rateLimitWaitBudget = const Duration(seconds: 150),
   });

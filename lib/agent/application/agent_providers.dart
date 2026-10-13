@@ -15,7 +15,8 @@ final agentConfigProvider = Provider<AgentConfig>((ref) => const AgentConfig());
 
 /// The language model behind the agent, or null when none is available.
 ///
-/// Groq is reached through the FiNN API relay, which holds the API key, so
+/// The model (OpenAI) is reached through the FiNN API relay, which holds the
+/// API key, so
 /// the agent needs remote mode (`--dart-define=FINN_API_URL`). Replace this
 /// provider to use another [LlmProvider]; nothing else changes.
 final llmProviderProvider = Provider<LlmProvider?>((ref) {

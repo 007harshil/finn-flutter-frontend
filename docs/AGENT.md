@@ -10,14 +10,15 @@ Code: `lib/agent/`. Tests: `test/agent/`. Backend relay: `finn-backend` `POST /a
 
    | Variable | Default | Purpose |
    |---|---|---|
-   | `GROQ_API_KEY` | (unset = "not configured") | Groq key. **Server only**: keep it in `.env.local` (git-ignored) locally and in the host's secret settings in production. Never put it in the app or in git. |
-   | `GROQ_MODEL` | `openai/gpt-oss-20b` | Model for every request |
-   | `GROQ_FALLBACK_MODELS` | `openai/gpt-oss-120b` | Comma-separated models tried in order when the model before them is rate limited (429/498). Groq meters each model separately, so each fallback adds its own per-minute budget. They get the same request, including `reasoning_effort`. `none` disables fallback. |
-   | `GROQ_REASONING_EFFORT` | `low` | `off` (param not sent) \| `none` \| `default` \| `low` \| `medium` \| `high` |
-   | `GROQ_BASE_URL` | `https://api.groq.com/openai/v1` | Chat Completions at `/chat/completions` |
-   | `GROQ_TIMEOUT_MS` | `60000` | Upstream timeout (the route's `maxDuration` is 75 s) |
+   | `OPENAI_API_KEY` | (unset = "not configured") | OpenAI key (paid). **Server only**: keep it in `.env.local` (git-ignored) locally and in the host's secret settings in production. Never put it in the app or in git. |
+   | `OPENAI_MODEL` | `gpt-6-luna` | Model for every request |
+   | `OPENAI_FALLBACK_MODELS` | (none) | Comma-separated models tried in order when the model before them is rate limited (429). They get the same request, including `reasoning_effort`. |
+   | `OPENAI_REASONING_EFFORT` | `none` | `off` (param not sent) \| `none` \| `minimal` \| `low` \| `medium` \| `high` \| `xhigh`. gpt-6-luna accepts function tools on Chat Completions only with `none` (it reasons by default, so `off` fails too). |
+   | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Chat Completions at `/chat/completions` |
+   | `OPENAI_TIMEOUT_MS` | `60000` | Upstream timeout (the route's `maxDuration` is 75 s) |
    | `AGENT_MAX_OUTPUT_TOKENS` | `2048` | Cap on `max_completion_tokens` |
    | `AGENT_RATE_LIMIT_PER_MINUTE` / `AGENT_DAILY_REQUEST_LIMIT` | `20` / `300` | Per-user limits, kept in memory on each server instance |
+   | `GROQ_API_KEY` / `GROQ_BASE_URL` | (unset = voice disabled) / `https://api.groq.com/openai/v1` | Groq key for speech-to-text only. **Server only.** |
    | `GROQ_STT_MODEL` | `whisper-large-v3` | Speech-to-text model (voice input) |
    | `GROQ_STT_LANGUAGE` | (unset = auto-detect) | Default ISO-639-1 language for voice input |
    | `GROQ_STT_PROMPT` | finance vocabulary hint | Whisper `prompt` for spelling of rupee/UPI/EMI/merchant terms |
@@ -44,7 +45,9 @@ Code: `lib/agent/`. Tests: `test/agent/`. Backend relay: `finn-backend` `POST /a
 
 ### Model choice
 
-`openai/gpt-oss-20b` is the default. It is a production model on Groq, available on the free tier, lightweight and built for tool use, and it is the cheapest Groq model that supports tool calling. For better accuracy on complex requests, set `GROQ_MODEL=openai/gpt-oss-120b`; it has the same limits and API. Both make one tool call per step (no parallel calls). Several actions therefore go into one `queue_actions` call (see below) instead of one step each.
+**Current (2026-10-13): OpenAI `gpt-6-luna` on a paid key** (account limits about 5,000 requests and 2M tokens per minute). It makes parallel tool calls, so free-tier rate limits no longer shape the design. The app window is 12 turns / 32,000 characters. The token-saving design below (tool groups, `queue_actions`, one card per turn) stays because every token is billed. The history below describes the earlier Groq setup.
+
+Earlier (Groq free tier): `openai/gpt-oss-20b` is the default. It is a production model on Groq, available on the free tier, lightweight and built for tool use, and it is the cheapest Groq model that supports tool calling. For better accuracy on complex requests, set `GROQ_MODEL=openai/gpt-oss-120b`; it has the same limits and API. Both make one tool call per step (no parallel calls). Several actions therefore go into one `queue_actions` call (see below) instead of one step each.
 
 Groq's free tier allows about **8,000 tokens per minute** per model, and every step resends the whole request (about 2.5k tokens). The module is designed around that limit:
 - **One call for many actions.** `queue_actions` carries every action of a message. With `done: true` the runner opens the review card straight away, without a closing model call.

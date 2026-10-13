@@ -186,12 +186,13 @@ final subscriptionDetailProvider = Provider.family<AsyncValue<SubscriptionDetail
         : (label: 'Cancelled', color: c.textSecondary, icon: LucideIcons.circleX);
   }
   final days = daysBetween(today, s.nextDueDate);
-  if (days < 0)
+  if (days < 0) {
     return (
       label: 'Overdue · ${-days} ${-days == 1 ? 'day' : 'days'}',
       color: c.negative,
       icon: LucideIcons.triangleAlert,
     );
+  }
   if (days == 0) return (label: 'Due today', color: c.attention, icon: LucideIcons.bell);
   if (days == 1) return (label: 'Tomorrow', color: c.warning, icon: LucideIcons.clock);
   if (days <= 7) return (label: 'in $days days', color: c.warning, icon: LucideIcons.clock);
