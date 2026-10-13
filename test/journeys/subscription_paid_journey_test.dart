@@ -23,7 +23,7 @@ void main() {
     await openMenu(tester);
     await scrollAndTap(tester, inDrawer(find.text('Subscriptions')));
     await scrollAndTap(tester, find.descendant(of: find.byKey(ValueKey(sub.id)), matching: find.text(sub.name)));
-    expect(find.textContaining(DateFormats.dayMonthYear.format(sub.nextDueDate)), findsWidgets);
+    expect(find.textContaining('Renews ${DateFormats.dayMonth.format(sub.nextDueDate)} ·'), findsOneWidget);
 
     await tapButton(tester, 'Mark paid');
     await confirmReview(tester);
@@ -40,8 +40,9 @@ void main() {
     expect(after.balance.available, before.balance.available - sub.amount);
 
     // Detail: next renewal moved forward; payment history lists the new expense.
-    await scrollTo(tester, find.text('Next renewal'), up: true);
-    expect(find.textContaining('${DateFormats.dayMonthYear.format(expectedNext)} ·'), findsOneWidget);
+    final renews = find.textContaining('Renews ${DateFormats.dayMonth.format(expectedNext)} ·');
+    await scrollTo(tester, renews, up: true);
+    expect(renews, findsOneWidget);
     final row = find.byKey(ValueKey(newTx.single.id));
     await scrollTo(tester, row);
     expect(row, findsOneWidget);

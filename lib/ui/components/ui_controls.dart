@@ -199,26 +199,33 @@ class UiSectionTitle extends StatelessWidget {
 }
 
 /// A row inside a [UiPanel]: optional leading mark, title (+ optional quiet
-/// subtitle), trailing value, chevron. At least 60 dp tall.
+/// subtitle), trailing value, chevron. At least 60 dp tall. Without
+/// [onTap] it is a plain read-only row (no chevron, no ink).
 class UiListRow extends StatelessWidget {
   const UiListRow({
     super.key,
     required this.title,
     required this.onTap,
+    this.onLongPress,
     this.leading,
     this.subtitle,
     this.subtitleColor,
     this.trailing,
     this.semanticLabel,
+    this.chevron = true,
   });
 
   final String title;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final Widget? leading;
   final String? subtitle;
   final Color? subtitleColor;
   final Widget? trailing;
   final String? semanticLabel;
+
+  /// Shows the trailing chevron on tappable rows.
+  final bool chevron;
 
   @override
   Widget build(BuildContext context) {
@@ -227,44 +234,46 @@ class UiListRow extends StatelessWidget {
     final lead = leading;
     final sub = subtitle;
     final end = trailing;
+    final tappable = onTap != null;
+    final content = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 60),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: UiSpace.lg, vertical: 10),
+        child: Row(
+          children: [
+            if (lead != null) ...[lead, const SizedBox(width: UiSpace.md)],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(title, style: t.body, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  if (sub != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      sub,
+                      style: t.small.copyWith(color: subtitleColor),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (end != null) ...[const SizedBox(width: UiSpace.md), end],
+            if (tappable && chevron) ...[
+              const SizedBox(width: 6),
+              ExcludeSemantics(child: Icon(LucideIcons.chevronRight, size: 16, color: c.inkFaint)),
+            ],
+          ],
+        ),
+      ),
+    );
+    if (!tappable) return MergeSemantics(child: Semantics(label: semanticLabel, child: content));
     return Semantics(
       button: true,
       label: semanticLabel,
-      child: InkWell(
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 60),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: UiSpace.lg, vertical: 10),
-            child: Row(
-              children: [
-                if (lead != null) ...[lead, const SizedBox(width: UiSpace.md)],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(title, style: t.body, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      if (sub != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          sub,
-                          style: t.small.copyWith(color: subtitleColor),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (end != null) ...[const SizedBox(width: UiSpace.md), end],
-                const SizedBox(width: 6),
-                ExcludeSemantics(child: Icon(LucideIcons.chevronRight, size: 16, color: c.inkFaint)),
-              ],
-            ),
-          ),
-        ),
-      ),
+      child: InkWell(onTap: onTap, onLongPress: onLongPress, child: content),
     );
   }
 }

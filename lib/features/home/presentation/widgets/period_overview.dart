@@ -54,12 +54,12 @@ class _PeriodOverviewState extends ConsumerState<PeriodOverview> {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _Step(
+          UiStepButton(
             icon: LucideIcons.chevronLeft,
             tooltip: 'Previous month',
             onPressed: month > min ? () => go(month.previous) : null,
           ),
-          _Step(
+          UiStepButton(
             icon: LucideIcons.chevronRight,
             tooltip: 'Next month',
             onPressed: isCurrent ? null : () => go(month.next),
@@ -85,33 +85,6 @@ class _PeriodOverviewState extends ConsumerState<PeriodOverview> {
         ),
       ),
     );
-  }
-}
-
-class _Step extends StatelessWidget {
-  const _Step({required this.icon, required this.tooltip, required this.onPressed});
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = UiColors.of(context);
-    final tap = onPressed;
-    if (tap == null) {
-      return Semantics(
-        button: true,
-        enabled: false,
-        label: tooltip,
-        excludeSemantics: true,
-        child: SizedBox.square(
-          dimension: UiSpace.touch,
-          child: Icon(icon, size: 18, color: c.hairline),
-        ),
-      );
-    }
-    return UiIconButton(icon: icon, tooltip: tooltip, size: 18, color: c.inkSoft, onPressed: tap);
   }
 }
 

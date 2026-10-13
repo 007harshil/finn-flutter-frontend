@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../actions/action.dart';
 import '../../../app/di/data_providers.dart';
@@ -10,6 +9,7 @@ import '../../../design_system/design_system.dart';
 import '../../../finance/finance_snapshot.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/category_icons.dart';
+import '../../../ui/ui.dart';
 import '../../categories/domain/category.dart';
 import '../../transactions/domain/transaction.dart';
 import '../application/subscription_actions.dart';
@@ -108,18 +108,11 @@ enum IncomeImpact {
     return IncomeImpact.healthy;
   }
 
-  Color color(FinnColors c) => switch (this) {
-    IncomeImpact.healthy => c.positive,
-    IncomeImpact.moderate => c.warning,
-    IncomeImpact.high => c.attention,
+  /// Colour only when it needs attention.
+  Color? color(UiColors c) => switch (this) {
+    IncomeImpact.healthy => null,
+    IncomeImpact.moderate || IncomeImpact.high => c.warning,
     IncomeImpact.critical => c.negative,
-  };
-
-  IconData get icon => switch (this) {
-    IncomeImpact.healthy => LucideIcons.circleCheck,
-    IncomeImpact.moderate => LucideIcons.gauge,
-    IncomeImpact.high => LucideIcons.triangleAlert,
-    IncomeImpact.critical => LucideIcons.triangleAlert,
   };
 }
 
@@ -173,43 +166,16 @@ final subscriptionDetailProvider = Provider.family<AsyncValue<SubscriptionDetail
   });
 });
 
-/// "Overdue · 2 days", "Due today", "in 5 days".
-({String label, Color color, IconData icon}) subscriptionDueLabel(
-  BuildContext context,
-  Subscription s,
-  DateTime today,
-) {
-  final c = context.colors;
-  if (!s.isActive) {
-    return s.status == SubscriptionStatus.paused
-        ? (label: 'Paused', color: c.textSecondary, icon: LucideIcons.pause)
-        : (label: 'Cancelled', color: c.textSecondary, icon: LucideIcons.circleX);
-  }
+/// "3 days late", "Due today", "In 5 days", "Paused"; a colour only when
+/// it needs attention.
+({String label, Color? color}) subscriptionDue(UiColors c, Subscription s, DateTime today) {
+  if (!s.isActive) return (label: s.status.label, color: null);
   final days = daysBetween(today, s.nextDueDate);
-  if (days < 0) {
-    return (
-      label: 'Overdue · ${-days} ${-days == 1 ? 'day' : 'days'}',
-      color: c.negative,
-      icon: LucideIcons.triangleAlert,
-    );
-  }
-  if (days == 0) return (label: 'Due today', color: c.attention, icon: LucideIcons.bell);
-  if (days == 1) return (label: 'Tomorrow', color: c.warning, icon: LucideIcons.clock);
-  if (days <= 7) return (label: 'in $days days', color: c.warning, icon: LucideIcons.clock);
-  return (label: 'in $days days', color: c.textSecondary, icon: LucideIcons.calendar);
-}
-
-class SubscriptionDueChip extends StatelessWidget {
-  const SubscriptionDueChip({super.key, required this.subscription, required this.today});
-
-  final Subscription subscription;
-  final DateTime today;
-
-  @override
-  Widget build(BuildContext context) {
-    final d = subscriptionDueLabel(context, subscription, today);
-    return StatusPill(label: d.label, color: d.color, icon: d.icon);
-  }
+  if (days < 0) return (label: '${-days} ${-days == 1 ? 'day' : 'days'} late', color: c.negative);
+  if (days == 0) return (label: 'Due today', color: c.warning);
+  if (days == 1) return (label: 'Tomorrow', color: null);
+  if (days <= 30) return (label: 'In $days days', color: null);
+  return (label: DateFormats.dayMonth.format(s.nextDueDate), color: null);
 }
 
 /// Records the current renewal as paid (review sheet confirms details).
@@ -225,121 +191,15 @@ Future<Transaction?> markSubscriptionPaid(BuildContext context, WidgetRef ref, S
   successSubtitle: 'Next renewal ${DateFormats.dayMonthYear.format(SubscriptionSchedule.nextCycleAfterCurrent(s))}',
 );
 
-/// Category avatar for a subscription (watches only its category).
-class SubscriptionAvatar extends ConsumerWidget {
-  const SubscriptionAvatar({super.key, required this.categoryId, this.size = 40});
+/// Category mark for a subscription (watches only its category).
+class SubscriptionMark extends ConsumerWidget {
+  const SubscriptionMark({super.key, required this.categoryId});
 
   final String categoryId;
-  final double size;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) =>
-      CategoryAvatar(category: ref.watch(categoryProvider(categoryId)), size: size);
-}
-
-/// One subscription row.
-class SubscriptionTile extends StatelessWidget {
-  const SubscriptionTile({
-    super.key,
-    required this.subscription,
-    required this.today,
-    required this.onTap,
-    this.onMarkPaid,
-  });
-
-  final Subscription subscription;
-  final DateTime today;
-  final VoidCallback onTap;
-  final VoidCallback? onMarkPaid;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final s = subscription;
-    final inactive = !s.isActive;
-    final due = subscriptionDueLabel(context, s, today);
-    return FinnCard(
-      padding: const EdgeInsets.all(Space.x3),
-      onTap: onTap,
-      semanticLabel: '${s.name}, ${AmountText.spokenLabel(s.amount)} ${s.frequency.label}, ${due.label}',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Opacity(
-                opacity: inactive ? 0.5 : 1,
-                child: SubscriptionAvatar(categoryId: s.categoryId),
-              ),
-              const SizedBox(width: Space.x3),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      s.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: t.bodyStrong.copyWith(color: inactive ? c.textSecondary : null),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Icon(LucideIcons.repeat, size: 11, color: c.textTertiary),
-                        const SizedBox(width: Space.x1),
-                        Flexible(
-                          child: Text(
-                            s.isActive
-                                ? '${s.frequency.label} · next ${DateFormats.dayMonth.format(s.nextDueDate)}'
-                                : s.frequency.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: t.caption,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: Space.x2),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  AmountText(s.amount, style: t.amountMedium.copyWith(color: inactive ? c.textSecondary : null)),
-                  const SizedBox(height: Space.x1),
-                  StatusPill(label: due.label, color: due.color, icon: due.icon),
-                ],
-              ),
-            ],
-          ),
-          if (onMarkPaid != null) ...[
-            const SizedBox(height: Space.x2_5),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Renewal due ${DateFormats.relativeDay(s.nextDueDate, today).toLowerCase()} — not yet paid',
-                    style: t.micro,
-                    maxLines: 2,
-                  ),
-                ),
-                const SizedBox(width: Space.x2),
-                FinnButton(
-                  label: 'Mark paid',
-                  icon: LucideIcons.circleCheck,
-                  size: FinnButtonSize.sm,
-                  variant: FinnButtonVariant.attention,
-                  onPressed: onMarkPaid,
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
+      UiMark(icon: CategoryIcons.of(ref.watch(categoryProvider(categoryId))?.iconKey));
 }
 
 /// Label above a non-text form control.

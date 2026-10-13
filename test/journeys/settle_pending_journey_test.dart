@@ -24,7 +24,7 @@ void main() {
     await scrollTo(tester, item);
     expect(item, findsOneWidget, reason: 'listed under Active before settling');
     await scrollAndTap(tester, find.descendant(of: item, matching: find.text('Priya Nair')));
-    await tapButton(tester, 'Settle · Priya Nair paid me');
+    await tapButton(tester, 'Settle up');
     await tester.pumpAndSettle();
     expect(find.text('OUTSTANDING'), findsOneWidget);
     await tapButton(tester, 'Record money from Priya Nair'); // "Full" is pre-selected

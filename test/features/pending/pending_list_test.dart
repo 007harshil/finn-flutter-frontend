@@ -112,7 +112,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Ananya Iyer'), findsOneWidget);
       expect(find.text('Priya Nair'), findsNothing, reason: 'open 20 days');
-      expect(find.text('3 ITEMS'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('pending-attn:long')));
       await tester.pumpAndSettle();
@@ -148,7 +147,7 @@ void main() {
       await tester.enterText(find.byType(TextField), 'cab');
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
-      expect(find.text('Cab to airport'), findsOneWidget);
+      expect(find.textContaining('Cab to airport'), findsOneWidget);
       expect(find.text('Priya Nair'), findsNothing);
 
       await tester.tap(find.byTooltip('Close search'));

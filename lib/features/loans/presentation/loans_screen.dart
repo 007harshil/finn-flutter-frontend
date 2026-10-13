@@ -4,22 +4,17 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
-import '../../../design_system/design_system.dart';
+import '../../../core/money/money_format.dart';
+import '../../../design_system/design_system.dart' show AmountText, AnimatedAmount, BottomClearanceX;
 import '../../../shared/presentation/async_view.dart';
+import '../../../ui/ui.dart';
 import '../domain/loan_calculator.dart';
 import 'loan_ui.dart';
 
-enum _Tab {
-  active('Active'),
-  closed('Closed');
+enum _Tab { active, closed }
 
-  const _Tab(this.label);
-  final String label;
-}
-
-/// Loans the user has borrowed or lent, with their repayment progress.
-/// Outstanding amounts are obligations; cash moves only when a payment is
-/// recorded.
+/// Loans the user has borrowed or lent. One headline figure, then the
+/// loans soonest-due first. Cash moves only when a payment is recorded.
 class LoansScreen extends ConsumerStatefulWidget {
   const LoansScreen({super.key});
 
@@ -32,76 +27,76 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final overview = ref.watch(loansOverviewProvider);
-    return Scaffold(
-      appBar: AppBar(
-        actions: [
-          FinnIconButton(
-            icon: LucideIcons.plus,
-            tooltip: 'Add a loan',
-            variant: FinnIconButtonVariant.filled,
-            onPressed: () => context.push(AppRoutes.newLoan),
-          ),
-          const SizedBox(width: Space.x3),
-        ],
-      ),
+    return UiPage(
+      title: 'Loans',
+      actions: [
+        UiIconButton(icon: LucideIcons.plus, tooltip: 'Add a loan', onPressed: () => context.push(AppRoutes.newLoan)),
+      ],
       body: AsyncView<LoansOverview>(
-        value: overview,
-        loading: const _LoansSkeleton(),
+        value: ref.watch(loansOverviewProvider),
+        loading: const _Placeholder(),
         builder: (context, o) {
-          final items = _tab == _Tab.active ? o.active : o.closed;
+          if (o.isEmpty) {
+            return Center(
+              child: SingleChildScrollView(
+                child: UiEmpty(
+                  icon: LucideIcons.landmark,
+                  title: 'No loans yet',
+                  message: 'Track a bank loan, or money borrowed from or lent to someone.',
+                  action: 'Add a loan',
+                  onAction: () => context.push(AppRoutes.newLoan),
+                ),
+              ),
+            );
+          }
+          final tab = o.closed.isEmpty ? _Tab.active : _tab;
+          final items = tab == _Tab.active ? o.active : o.closed;
           return CustomScrollView(
             key: const PageStorageKey('loans-list'),
             slivers: [
-              _boxed(const StaggeredEntrance(child: _Header())),
-              if (!o.isEmpty) ...[
-                _boxed(StaggeredEntrance(index: 1, child: _SummaryRow(overview: o))),
-                if (o.overdueCount > 0)
-                  _boxed(Padding(
-                    padding: const EdgeInsets.only(top: Space.x3),
-                    child: InfoBanner(
-                      tone: FinnTone.warning,
-                      icon: LucideIcons.triangleAlert,
-                      message: o.overdueCount == 1
-                          ? 'One loan has a payment past its due date. Record it once it is paid.'
-                          : '${o.overdueCount} loans have payments past their due date. Record them once they are paid.',
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(UiSpace.gutter, UiSpace.sm, UiSpace.gutter, 0),
+                sliver: SliverToBoxAdapter(
+                  child: UiColumnWidth(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        UiReveal(index: 0, child: _Summary(overview: o)),
+                        const SizedBox(height: UiSpace.section),
+                        if (o.closed.isNotEmpty) ...[
+                          UiSegmented<_Tab>(
+                            segments: [
+                              UiSegment(_Tab.active, 'Active', count: o.active.length),
+                              UiSegment(_Tab.closed, 'Closed', count: o.closed.length),
+                            ],
+                            selected: tab,
+                            onChanged: (t) => setState(() => _tab = t),
+                          ),
+                          const SizedBox(height: UiSpace.md),
+                        ],
+                      ],
                     ),
-                  )),
-                _boxed(Padding(
-                  padding: const EdgeInsets.only(top: Space.x5, bottom: Space.x1),
-                  child: SegmentedTabs<_Tab>(
-                    items: [
-                      SegmentItem(_Tab.active, _Tab.active.label, count: o.active.length),
-                      SegmentItem(_Tab.closed, _Tab.closed.label, count: o.closed.length),
-                    ],
-                    selected: _tab,
-                    onChanged: (t) => setState(() => _tab = t),
                   ),
-                )),
-              ],
+                ),
+              ),
               if (items.isEmpty)
-                _boxed(Padding(
-                  padding: const EdgeInsets.only(top: Space.x6),
-                  child: o.isEmpty || _tab == _Tab.active
-                      ? EmptyState(
-                          icon: LucideIcons.landmark,
-                          title: o.isEmpty ? 'No loans yet' : 'No active loans',
-                          message: 'Add a bank loan with EMIs, or money borrowed from or lent to family and friends. '
-                              'FiNN tracks what is left and what is due next.',
-                          actionLabel: 'Add a loan',
-                          actionIcon: LucideIcons.plus,
-                          onAction: () => context.push(AppRoutes.newLoan),
-                        )
-                      : const EmptyState(
-                          icon: LucideIcons.circleCheck,
-                          title: 'No closed loans',
-                          message: 'Loans you repay in full appear here with their history.',
-                        ),
-                ))
+                const SliverToBoxAdapter(
+                  child: UiEmpty(icon: LucideIcons.circleCheck, title: 'No active loans', message: 'Everything is repaid.'),
+                )
               else
-                SliverList.builder(
-                  itemCount: items.length,
-                  itemBuilder: (context, i) => _LoanRow(state: items[i]),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: UiSpace.gutter),
+                  sliver: SliverList.builder(
+                    itemCount: items.length,
+                    itemBuilder: (context, i) => UiColumnWidth(
+                      key: ValueKey(items[i].loan.id),
+                      child: UiPanelSlice(
+                        first: i == 0,
+                        last: i == items.length - 1,
+                        child: _LoanRow(state: items[i]),
+                      ),
+                    ),
+                  ),
                 ),
               SliverPadding(padding: EdgeInsets.only(bottom: context.bottomClearance)),
             ],
@@ -112,81 +107,55 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
   }
 }
 
-Widget _boxed(Widget child) => SliverToBoxAdapter(
-      child: ResponsiveCenter(padding: const EdgeInsets.symmetric(horizontal: Space.gutter), child: child),
-    );
-
-class _Header extends StatelessWidget {
-  const _Header();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.text;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Space.x4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Semantics(header: true, child: Text('Loans', style: t.pageTitle)),
-          const SizedBox(height: Space.x1),
-          Text('What you have borrowed and lent. Your balance changes only when you record a payment.',
-              style: t.caption),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.overview});
+/// What the user owes (or, with only lent loans, what is owed to them),
+/// the other side and what falls due within 30 days.
+class _Summary extends StatelessWidget {
+  const _Summary({required this.overview});
 
   final LoansOverview overview;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = UiColors.of(context);
+    final t = UiType.of(context);
     final o = overview;
-    final borrowed = o.active.where((l) => l.loan.isBorrowed).length;
-    final lent = o.active.length - borrowed;
-    String count(int n) => n == 0 ? 'None active' : '$n active';
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: StatTile(
-              label: 'I owe',
-              icon: LucideIcons.landmark,
-              accent: c.negative,
-              value: AmountText(o.borrowedOutstanding, style: t.amountMedium.copyWith(color: c.negative), fit: true),
-              caption: count(borrowed),
-            ),
-          ),
-          const SizedBox(width: Space.x2),
-          Expanded(
-            child: StatTile(
-              label: 'Owed to me',
-              icon: LucideIcons.handCoins,
-              accent: c.positive,
-              value: AmountText(o.lentOutstanding, style: t.amountMedium.copyWith(color: c.positive), fit: true),
-              caption: count(lent),
-            ),
-          ),
-          const SizedBox(width: Space.x2),
-          Expanded(
-            child: StatTile(
-              label: 'Due in 30 days',
-              icon: LucideIcons.calendarClock,
-              accent: o.overdueCount > 0 ? c.attention : c.info,
-              value: AmountText(o.dueIn30Days, style: t.amountMedium, fit: true),
-              caption: o.dueIn30DaysCount == 0
-                  ? 'Nothing due'
-                  : 'Projected · ${o.dueIn30DaysCount} ${o.dueIn30DaysCount == 1 ? 'payment' : 'payments'}',
-            ),
-          ),
-        ],
+    final owes = o.borrowedOutstanding.isPositive || !o.lentOutstanding.isPositive;
+    final stats = <Widget>[
+      if (owes && o.lentOutstanding.isPositive)
+        UiStat(
+          label: 'Owed to you',
+          value: AmountText(o.lentOutstanding, style: t.figureSmall, decimals: DecimalDisplay.none),
+        ),
+      if (!owes && o.borrowedOutstanding.isPositive)
+        UiStat(
+          label: 'You owe',
+          value: AmountText(o.borrowedOutstanding, style: t.figureSmall, decimals: DecimalDisplay.none),
+        ),
+      if (o.borrowedOutstanding.isPositive)
+        UiStat(
+          label: 'Due in 30 days',
+          value: AmountText(o.dueIn30Days, style: t.figureSmall, decimals: DecimalDisplay.none),
+        ),
+    ];
+    final overdue = o.overdueCount;
+    return UiHero(
+      label: owes ? 'You owe' : 'Owed to you',
+      value: AnimatedAmount(
+        owes ? o.borrowedOutstanding : o.lentOutstanding,
+        style: t.amount,
+        decimals: DecimalDisplay.none,
+        fit: true,
+        animateOnMount: true,
       ),
+      caption: overdue == 0 ? null : (overdue == 1 ? '1 loan has a late payment' : '$overdue loans have late payments'),
+      captionColor: c.negative,
+      footer: stats.isEmpty
+          ? null
+          : Row(
+              children: [
+                for (var i = 0; i < stats.length; i++) ...[if (i > 0) const SizedBox(width: UiSpace.lg), Expanded(child: stats[i])],
+              ],
+            ),
     );
   }
 }
@@ -198,48 +167,61 @@ class _LoanRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final id = state.loan.id;
-    final days = state.daysUntilNextDue;
-    final showPay = !state.isClosed && days != null && days <= 7;
-    return ResponsiveCenter(
-      key: ValueKey(id),
-      padding: const EdgeInsets.fromLTRB(Space.gutter, Space.x2, Space.gutter, 0),
-      child: LoanCard(
-        state: state,
-        onTap: () => context.push(AppRoutes.loan(id)),
-        onPay: showPay ? () => context.push(AppRoutes.payLoan(id)) : null,
-      ),
+    final c = UiColors.of(context);
+    final t = UiType.of(context);
+    final s = state;
+    final l = s.loan;
+    final due = loanDueStatus(c, s);
+    final next = s.nextDue;
+    final days = s.daysUntilNextDue;
+    final subtitle = s.isClosed || next == null
+        ? '${due.label} · ${l.counterparty}'
+        : '${loanDueName(l, next)} ${maskedAmount(context, next.payment)} · ${due.label}';
+    final record = !s.isClosed && days != null && days <= 0;
+    return UiListRow(
+      leading: UiMark(icon: l.direction.icon),
+      title: l.name,
+      subtitle: subtitle,
+      subtitleColor: due.color,
+      semanticLabel:
+          '${l.name}, ${l.direction.sentence(l.counterparty)}, '
+          'outstanding ${AmountText.spokenLabel(s.outstanding)}, ${due.label}',
+      chevron: !record,
+      trailing: record
+          ? UiChipButton(
+              label: 'Record',
+              semanticLabel: l.isBorrowed ? 'Record payment' : 'Record money received',
+              onTap: () => context.push(AppRoutes.payLoan(l.id)),
+            )
+          : AmountText(
+              s.outstanding,
+              decimals: DecimalDisplay.none,
+              style: t.figureSmall.copyWith(color: s.isClosed ? c.inkSoft : null),
+            ),
+      onTap: () => context.push(AppRoutes.loan(l.id)),
     );
   }
 }
 
-class _LoansSkeleton extends StatelessWidget {
-  const _LoansSkeleton();
+class _Placeholder extends StatelessWidget {
+  const _Placeholder();
 
   @override
-  Widget build(BuildContext context) => const SkeletonPulse(
-        child: Padding(
-          padding: EdgeInsets.all(Space.gutter),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SkeletonBox(width: 120, height: 28),
-              SizedBox(height: Space.x5),
-              Row(children: [
-                Expanded(child: CardSkeleton(height: 104)),
-                SizedBox(width: Space.x2),
-                Expanded(child: CardSkeleton(height: 104)),
-                SizedBox(width: Space.x2),
-                Expanded(child: CardSkeleton(height: 104)),
-              ]),
-              SizedBox(height: Space.x5),
-              SkeletonBox(height: 44, radius: Radii.full),
-              SizedBox(height: Space.x4),
-              CardSkeleton(height: 132),
-              SizedBox(height: Space.x2),
-              CardSkeleton(height: 132),
-            ],
-          ),
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(UiSpace.gutter, UiSpace.lg, UiSpace.gutter, 0),
+      child: UiColumnWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            UiPlaceholder(width: 80, height: 12),
+            SizedBox(height: UiSpace.md),
+            UiPlaceholder(width: 200, height: 40),
+            SizedBox(height: UiSpace.section + UiSpace.lg),
+            UiPlaceholder(height: 220, radius: UiRadius.panel),
+          ],
         ),
-      );
+      ),
+    );
+  }
 }

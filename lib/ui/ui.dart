@@ -3,6 +3,7 @@
 /// until they are rebuilt.
 library;
 
+export 'components/ui_blocks.dart';
 export 'components/ui_controls.dart';
 export 'components/ui_surfaces.dart';
 export 'foundation/ui_colors.dart';

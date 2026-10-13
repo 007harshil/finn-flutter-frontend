@@ -38,12 +38,15 @@ void main() {
 
       final s = (await env.snapshot()).emergency;
       expect(s.level, EmergencyFundLevel.building);
-      expect(find.text('BUILDING'), findsOneWidget);
-      expect(find.text('Your plan'), findsOneWidget);
-      expect(find.text('ESSENTIALS PER MONTH'), findsOneWidget);
+      expect(find.text('Building'), findsOneWidget);
+      expect(find.text('Plan'), findsOneWidget);
+      expect(find.text('Essentials per month'), findsOneWidget);
       expect(find.text('Add money'), findsOneWidget);
       expect(find.text('Withdraw'), findsOneWidget);
-      expect(find.textContaining('covers about 2.5 months'), findsOneWidget);
+      expect(find.textContaining('Covers about 2.5 months'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('All'), 300);
+      await tester.tap(find.text('All'));
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.textContaining('Initial buffer'), 300);
       expect(find.textContaining(RegExp('history', caseSensitive: false)), findsOneWidget);
       expect(find.textContaining('7 movements'), findsOneWidget);
@@ -56,10 +59,10 @@ void main() {
       await env.pumpWidget(tester, const EmergencyFundScreen());
       await tester.pumpAndSettle();
 
-      expect(find.text('NOT SET UP'), findsOneWidget);
-      expect(find.text('PLAN YOUR SAFETY NET'), findsOneWidget);
+      expect(find.text('Not set up'), findsOneWidget);
+      expect(find.text('Plan your safety net'), findsOneWidget);
       expect(find.text('Set up plan'), findsOneWidget);
-      expect(find.text('Your plan'), findsNothing);
+      expect(find.text('Plan'), findsNothing);
       expect(find.textContaining('Nothing set aside yet'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
