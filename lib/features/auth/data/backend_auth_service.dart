@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/result/result.dart';
 import '../../../core/time/clock.dart';
 import '../../../data/remote/api_client.dart';
 import '../../../data/remote/api_config.dart';
@@ -243,12 +244,17 @@ class BackendApiAuth implements ProactiveApiAuth {
 }
 
 /// Passwordless email sign-in with the FiNN API's email OTP
-/// (`/auth/otp`, `/auth/verify`, `/auth/logout`).
+/// (`/auth/otp`, `/auth/verify`, `/auth/logout`), and account deletion
+/// (`/me/delete/code`, `/me/delete`).
 class BackendAuthService implements AuthService {
-  BackendAuthService({required this.auth, required this.clock});
+  BackendAuthService({required this.auth, required this.clock, ApiClient? api})
+      : _api = api ?? ApiClient(config: auth.config, auth: auth);
 
   final BackendApiAuth auth;
   final Clock clock;
+
+  /// Authenticated calls (account deletion).
+  final ApiClient _api;
 
   @override
   String? get demoHint => null;
@@ -297,6 +303,41 @@ class BackendAuthService implements AuthService {
     } finally {
       await auth.clear();
     }
+  }
+
+  @override
+  Future<void> sendAccountDeletionCode() async {
+    try {
+      await _api.post('/me/delete/code');
+    } on AppFailure catch (e) {
+      throw AuthFailure(_appMessage(e));
+    } catch (e) {
+      debugPrint('Sending the account deletion code failed: $e');
+      throw const AuthFailure(_offline);
+    }
+  }
+
+  @override
+  Future<void> deleteAccount(String code) async {
+    if (!isWellFormedOtp(code)) throw const AuthFailure('Please enter the 6-digit code.');
+    try {
+      await _api.post('/me/delete', body: {'code': code});
+    } on AppFailure catch (e) {
+      throw AuthFailure(_appMessage(e));
+    } catch (e) {
+      debugPrint('Deleting the account failed: $e');
+      throw const AuthFailure(_offline);
+    }
+    // The server ended every session of the account.
+    await auth.clear();
+  }
+
+  /// Messages for authenticated calls. A wrong code is a field error.
+  static String _appMessage(AppFailure e) {
+    final field = e.fieldErrors['code'];
+    if (field != null && field.isNotEmpty) return field;
+    if (e.message.isNotEmpty) return e.message;
+    return e.code == FailureCode.unavailable ? _offline : 'Something went wrong. Please try again.';
   }
 
   static const _offline = 'Could not reach FiNN. Check your connection and try again.';

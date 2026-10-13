@@ -1,3 +1,4 @@
+import 'package:finn/app/di/core_providers.dart';
 import 'package:finn/app/router/routes.dart';
 import 'package:finn/design_system/design_system.dart';
 import 'package:finn/features/auth/application/auth_controller.dart';
@@ -189,6 +190,72 @@ void main() {
 
       expect(container.read(authControllerProvider), isNull);
       await _drainTimers(tester);
+    });
+
+    Future<void> openDeleteSheet(WidgetTester tester) async {
+      final delete = find.byKey(const ValueKey('delete-account'));
+      await tester.scrollUntilVisible(delete, 200);
+      await tester.ensureVisible(delete);
+      await tester.pumpAndSettle();
+      await tester.tap(delete);
+      await tester.pumpAndSettle();
+      expect(find.text('Delete your account?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FinnButton, 'Continue'));
+      await tester.pumpAndSettle();
+      expect(find.text('Confirm account deletion'), findsOneWidget);
+    }
+
+    testWidgets('delete account erases the account and everything on this device', (tester) async {
+      final env = await TestEnv.create();
+      final container = await _pumpRouted(tester, env, AppRoutes.account);
+      await container.read(settingsProvider.notifier).update((s) => s.copyWith(onboardingComplete: true));
+      expect(env.store.transactions.current, isNotEmpty);
+
+      await openDeleteSheet(tester);
+      expect(find.textContaining('We sent a 6-digit code to'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('otp-field')), '424242');
+      await tester.pumpAndSettle();
+
+      expect(container.read(authControllerProvider), isNull);
+      expect(env.store.transactions.current, isEmpty);
+      expect(env.store.profile.current, isNull);
+      expect(env.prefs.getKeys().where((k) => k.startsWith('finn.')), isEmpty);
+      expect(container.read(settingsProvider).onboardingComplete, isFalse);
+      expect(find.text('Account deleted'), findsOneWidget);
+      expect(find.text('Confirm account deletion'), findsNothing);
+      await _drainTimers(tester);
+    });
+
+    testWidgets('a wrong deletion code keeps the account and its data', (tester) async {
+      final env = await TestEnv.create();
+      final container = await _pumpRouted(tester, env, AppRoutes.account);
+
+      await openDeleteSheet(tester);
+      await tester.enterText(find.byKey(const ValueKey('otp-field')), MockAuthService.rejectedCode);
+      await tester.pumpAndSettle();
+
+      expect(find.text('The code was invalid or has expired.'), findsOneWidget);
+      expect(find.text('Confirm account deletion'), findsOneWidget);
+      expect(container.read(authControllerProvider), isNotNull);
+      expect(env.store.transactions.current, isNotEmpty);
+      await _drainTimers(tester);
+      await _drainTimers(tester);
+    });
+
+    testWidgets('cancelling the warning deletes nothing', (tester) async {
+      final env = await TestEnv.create();
+      final container = await _pumpRouted(tester, env, AppRoutes.account);
+      final delete = find.byKey(const ValueKey('delete-account'));
+      await tester.scrollUntilVisible(delete, 200);
+      await tester.ensureVisible(delete);
+      await tester.pumpAndSettle();
+      await tester.tap(delete);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FinnButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Confirm account deletion'), findsNothing);
+      expect(container.read(authControllerProvider), isNotNull);
     });
 
     testWidgets('edit profile opens the profile sheet', (tester) async {

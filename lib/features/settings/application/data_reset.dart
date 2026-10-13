@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/di/action_providers.dart';
 import '../../../app/di/core_providers.dart';
 import '../../../core/result/result.dart';
 import '../../../core/time/clock.dart';
@@ -25,6 +26,21 @@ class DataResetService {
     final today = _ref.read(clockProvider).today();
     await _ref.read(localDataStoreProvider).reseed(DataScenario.empty, today);
     await _ref.read(settingsProvider.notifier).update((s) => s.copyWith(onboardingComplete: false));
+  }
+
+  /// Forgets everything FiNN keeps on this device (records, settings,
+  /// sessions, sync caches) and returns the app to first-run setup. Runs
+  /// after the account is deleted, in both modes.
+  Future<void> wipeDevice() async {
+    final prefs = _ref.read(sharedPreferencesProvider);
+    for (final key in prefs.getKeys().where((k) => k.startsWith('finn.')).toList()) {
+      await prefs.remove(key);
+    }
+    // Empty records, persisted, so a restart does not seed the sample data.
+    final today = _ref.read(clockProvider).today();
+    await _ref.read(localDataStoreProvider).reseed(DataScenario.empty, today);
+    _ref.invalidate(settingsProvider);
+    _ref.invalidate(auditLogProvider);
   }
 
   /// Whole-dataset resets apply to the local mock only; a connected account

@@ -64,6 +64,15 @@ abstract interface class AuthService {
   /// Ends the session on the server.
   Future<void> signOut();
 
+  /// Emails the signed-in account a code that confirms account deletion.
+  /// Throws [AuthFailure] on a provider error.
+  Future<void> sendAccountDeletionCode();
+
+  /// Permanently deletes the signed-in account and all of its data on the
+  /// server, then forgets the session. Throws [AuthFailure] if [code] is
+  /// wrong or expired; the account is unchanged then.
+  Future<void> deleteAccount(String code);
+
   /// Guidance shown on the code screen in demo builds; null for a real
   /// backend.
   String? get demoHint;

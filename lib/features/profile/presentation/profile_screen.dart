@@ -13,10 +13,11 @@ import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/auth_session.dart';
 import '../../settings/domain/financial_profile.dart';
 import '../../settings/presentation/settings_widgets.dart';
+import 'delete_account_sheet.dart';
 import 'profile_avatar.dart';
 
-/// The signed-in person: identity, financial starting point, account and
-/// sign-out.
+/// The signed-in person: identity, financial starting point, account,
+/// sign-out and account deletion.
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -346,33 +347,60 @@ class _SignOutGroupState extends ConsumerState<_SignOutGroup> {
       icon: LucideIcons.shield,
       color: c.textSecondary,
       children: [
-        Semantics(
-          button: true,
-          child: InkWell(
-            key: const ValueKey('sign-out'),
-            onTap: _busy ? null : _signOut,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 56),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Space.x4, vertical: Space.x2_5),
-                child: Row(
-                  children: [
-                    SettingsIcon(icon: LucideIcons.logOut, color: c.negative),
-                    const SizedBox(width: Space.x3),
-                    Expanded(child: Text('Sign out', style: context.text.bodyStrong.copyWith(color: c.negative))),
-                    if (_busy)
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: c.negative),
-                      ),
-                  ],
-                ),
-              ),
+        _DangerRow(
+          key: const ValueKey('sign-out'),
+          icon: LucideIcons.logOut,
+          label: 'Sign out',
+          busy: _busy,
+          onTap: _busy ? null : _signOut,
+        ),
+        _DangerRow(
+          key: const ValueKey('delete-account'),
+          icon: LucideIcons.userX,
+          label: 'Delete account',
+          onTap: _busy ? null : () => startAccountDeletion(context),
+        ),
+      ],
+    );
+  }
+}
+
+/// A red, full-width action row in the Security group.
+class _DangerRow extends StatelessWidget {
+  const _DangerRow({super.key, required this.icon, required this.label, required this.onTap, this.busy = false});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Semantics(
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Space.x4, vertical: Space.x2_5),
+            child: Row(
+              children: [
+                SettingsIcon(icon: icon, color: c.negative),
+                const SizedBox(width: Space.x3),
+                Expanded(child: Text(label, style: context.text.bodyStrong.copyWith(color: c.negative))),
+                if (busy)
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: c.negative),
+                  ),
+              ],
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }

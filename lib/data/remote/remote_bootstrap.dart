@@ -51,7 +51,7 @@ Future<Widget> bootstrapRemoteApp({
     config: config,
     prefs: prefs,
     auth: apiAuth,
-    authService: BackendAuthService(auth: apiAuth, clock: const SystemClock()),
+    authService: BackendAuthService(auth: apiAuth, clock: const SystemClock(), api: api),
     api: api,
     engine: engine,
     repositories: buildRemoteRepositories(engine, api),

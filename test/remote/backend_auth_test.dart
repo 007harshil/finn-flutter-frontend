@@ -39,7 +39,11 @@ http.Response unavailable(String message, {int? retryAfter}) => http.Response(
 class AuthHarness {
   AuthHarness(this.prefs, this.handler) {
     auth = BackendApiAuth(config: testConfig, prefs: prefs, httpClient: MockClient(_handle), clock: clock);
-    service = BackendAuthService(auth: auth, clock: clock);
+    service = BackendAuthService(
+      auth: auth,
+      clock: clock,
+      api: ApiClient(config: testConfig, auth: auth, httpClient: MockClient(_handle)),
+    );
   }
 
   final SharedPreferences prefs;
@@ -329,6 +333,53 @@ void main() {
       final h = await harness((_) async => ok(null), stored: {BackendApiAuth.storageKey: '{"broken": true}'});
       expect(h.auth.session, isNull);
       expect(h.prefs.getString(BackendApiAuth.storageKey), isNull);
+    });
+  });
+
+  group('account deletion', () {
+    test('sendAccountDeletionCode posts to /me/delete/code with the bearer token', () async {
+      final h = await harness((_) async => ok({'sent': true, 'expiresInSeconds': 600, 'resendAfterSeconds': 60}), stored: storedSession('1'));
+      await h.service.sendAccountDeletionCode();
+      expect(h.requests.single.method, 'POST');
+      expect(h.requests.single.url.toString(), 'https://api.test/api/v1/me/delete/code');
+      expect(h.requests.single.headers['authorization'], 'Bearer access-1');
+    });
+
+    test('deleteAccount posts the code and forgets the session', () async {
+      final h = await harness((_) async => ok({'deleted': true}), stored: storedSession('1'));
+      await h.service.deleteAccount('123456');
+      expect(h.paths, ['/api/v1/me/delete']);
+      expect(h.bodyOf(0), {'code': '123456'});
+      expect(h.auth.session, isNull);
+      expect(h.prefs.getString(BackendApiAuth.storageKey), isNull);
+    });
+
+    test('a wrong code shows the field message and keeps the session', () async {
+      final h = await harness(
+        (_) async => http.Response(
+          jsonEncode({
+            'error': {
+              'code': 'validation',
+              'message': 'The code was invalid or has expired.',
+              'fieldErrors': {'code': 'The code was invalid or has expired.'},
+              'retryable': false,
+            },
+          }),
+          422,
+          headers: {'content-type': 'application/json'},
+        ),
+        stored: storedSession('1'),
+      );
+      expect(await failureMessage(h.service.deleteAccount('123456')), 'The code was invalid or has expired.');
+      expect(h.auth.session, isNotNull);
+    });
+
+    test('a malformed code is rejected before calling the API; network errors read as offline', () async {
+      final h = await harness((_) async => throw http.ClientException('offline'), stored: storedSession('1'));
+      expect(await failureMessage(h.service.deleteAccount('12')), 'Please enter the 6-digit code.');
+      expect(h.requests, isEmpty);
+      expect(await failureMessage(h.service.sendAccountDeletionCode()), isNotEmpty);
+      expect(h.auth.session, isNotNull);
     });
   });
 }

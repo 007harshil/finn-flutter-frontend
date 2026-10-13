@@ -32,4 +32,14 @@ class MockAuthService implements AuthService {
 
   @override
   Future<void> signOut() => _wait();
+
+  @override
+  Future<void> sendAccountDeletionCode() => _wait();
+
+  @override
+  Future<void> deleteAccount(String code) async {
+    await _wait();
+    if (!isWellFormedOtp(code)) throw const AuthFailure('Please enter the 6-digit code.');
+    if (code == rejectedCode) throw const AuthFailure('The code was invalid or has expired.');
+  }
 }
