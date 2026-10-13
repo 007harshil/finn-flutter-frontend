@@ -16,6 +16,7 @@ import '../voice/voice_input_controller.dart';
 import 'widgets/agent_logo.dart';
 import 'widgets/agent_visualizer.dart';
 import 'widgets/change_review.dart';
+import 'widgets/history_sheet.dart';
 import 'widgets/outcome_summary.dart';
 
 /// Full-screen assistant (route `AppRoutes.assistant`, e.g. deep links).
@@ -251,6 +252,7 @@ class _AgentExperienceState extends ConsumerState<AgentExperience> {
                         onClose: widget.onClose,
                         onNewChat: state.entries.isEmpty ? null : () => confirmAgentStartOver(context, ref),
                         newChatEnabled: !state.busy,
+                        onHistory: state.available ? () => showAgentHistory(context) : null,
                       ),
                       Expanded(
                         child: _Stage(
@@ -350,6 +352,7 @@ class _TopBar extends StatelessWidget {
     required this.onClose,
     required this.onNewChat,
     required this.newChatEnabled,
+    required this.onHistory,
   });
 
   final AgentPresence presence;
@@ -358,6 +361,9 @@ class _TopBar extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback? onNewChat;
   final bool newChatEnabled;
+
+  /// Opens the agent history (null when the agent is unavailable).
+  final VoidCallback? onHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -408,6 +414,10 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          if (onHistory != null) ...[
+            _GlassIconButton(icon: LucideIcons.history, tooltip: 'History', onPressed: onHistory),
+            const SizedBox(width: Space.x2),
+          ],
           AnimatedSwitcher(
             duration: context.motion.fast,
             child: onNewChat == null

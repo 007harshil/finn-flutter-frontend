@@ -1,0 +1,487 @@
+{
+  "model": "gpt-6-luna",
+  "reasoningEffort": "none",
+  "date": "2026-10-13",
+  "scenarios": [
+    {
+      "scenario": "three_ops",
+      "pass": true,
+      "llmCalls": 1,
+      "input": 1858,
+      "cached": 0,
+      "output": 133,
+      "reasoning": 0,
+      "llmMs": 2805,
+      "wallMs": 2853,
+      "backendRequests": 9,
+      "costUsd": 0.00029867500000000004,
+      "reply": "Salary of ₹5,000 added as income. Noted ₹300 · Money given, pending to collect. ₹5,000 on Fitness added as an expense.",
+      "saved": [
+        "transactions.create {type: income, amount: 5000.00, categoryId: cat_salary, date: 2026-10-09, paymentMethod: null, counterparty: null, note: null}",
+        "pending.create {counterparty: Utsav, direction: owedToMe, kind: other, amount: 300.00, purpose: Money given, pending, createdDate: 2026-10-10, notes: null, linkedUserId: null}",
+        "transactions.create {type: expense, amount: 5000.00, categoryId: cat_fitness, date: 2026-10-10, paymentMethod: null, counterparty: null, note: Protein powder}"
+      ],
+      "calls": [
+        {
+          "model": "gpt-6-luna",
+          "ms": 2805,
+          "input": 1858,
+          "cached": 0,
+          "cacheWrite": 1855,
+          "output": 133,
+          "reasoning": 0
+        }
+      ]
+    },
+    {
+      "scenario": "single_expense",
+      "pass": true,
+      "llmCalls": 1,
+      "input": 1832,
+      "cached": 1820,
+      "output": 55,
+      "reasoning": 0,
+      "llmMs": 2181,
+      "wallMs": 2188,
+      "backendRequests": 3,
+      "costUsd": 0.000047125,
+      "reply": "₹450 on Food & Dining added as an expense.",
+      "saved": [
+        "transactions.create {type: expense, amount: 450.00, categoryId: cat_food, date: 2026-10-10, paymentMethod: null, counterparty: null, note: Lunch}"
+      ],
+      "calls": [
+        {
+          "model": "gpt-6-luna",
+          "ms": 2181,
+          "input": 1832,
+          "cached": 1820,
+          "cacheWrite": 9,
+          "output": 55,
+          "reasoning": 0
+        }
+      ]
+    },
+    {
+      "scenario": "same_op_x3",
+      "pass": true,
+      "llmCalls": 1,
+      "input": 1847,
+      "cached": 1820,
+      "output": 131,
+      "reasoning": 0,
+      "llmMs": 3131,
+      "wallMs": 3145,
+      "backendRequests": 9,
+      "costUsd": 0.000087,
+      "reply": "₹70 on Groceries added as an expense. ₹150 on Groceries added as an expense. ₹400 on Transport added as an expense.",
+      "saved": [
+        "transactions.create {type: expense, amount: 70.00, categoryId: cat_groceries, date: 2026-10-10, paymentMethod: null, counterparty: null, note: Vegetables}",
+        "transactions.create {type: expense, amount: 150.00, categoryId: cat_groceries, date: 2026-10-10, paymentMethod: null, counterparty: null, note: Milk}",
+        "transactions.create {type: expense, amount: 400.00, categoryId: cat_transport, date: 2026-10-09, paymentMethod: null, counterparty: null, note: Petrol}"
+      ],
+      "calls": [
+        {
+          "model": "gpt-6-luna",
+          "ms": 3131,
+          "input": 1847,
+          "cached": 1820,
+          "cacheWrite": 24,
+          "output": 131,
+          "reasoning": 0
+        }
+      ]
+    },
+    {
+      "scenario": "settle_lookup",
+      "pass": true,
+      "llmCalls": 2,
+      "input": 3806,
+      "cached": 3656,
+      "output": 90,
+      "reasoning": 0,
+      "llmMs": 3822,
+      "wallMs": 3844,
+      "backendRequests": 3,
+      "costUsd": 0.00010015999999999999,
+      "reply": "Received ₹850 from Neha Kapoor.",
+      "saved": [
+        "pending.settle {pendingId: pend_seed_297, amount: 850.00, date: 2026-10-10, method: null, recordCashMovement: true, note: Office lunch}"
+      ],
+      "calls": [
+        {
+          "model": "gpt-6-luna",
+          "ms": 1996,
+          "input": 1839,
+          "cached": 1820,
+          "cacheWrite": 16,
+          "output": 28,
+          "reasoning": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "ms": 1826,
+          "input": 1967,
+          "cached": 1836,
+          "cacheWrite": 128,
+          "output": 62,
+          "reasoning": 0
+        }
+      ]
+    },
+    {
+      "scenario": "mixed_settle_expense",
+      "pass": true,
+      "llmCalls": 3,
+      "input": 6593,
+      "cached": 4121,
+      "output": 144,
+      "reasoning": 0,
+      "llmMs": 7117,
+      "wallMs": 7144,
+      "backendRequests": 6,
+      "costUsd": 0.000421985,
+      "reply": "₹250 on Transport added as an expense. Received ₹1,200 from Karan Mehta.",
+      "saved": [
+        "transactions.create {type: expense, amount: 250.00, categoryId: cat_transport, date: 2026-10-10, paymentMethod: null, counterparty: null, note: Auto}",
+        "pending.settle {pendingId: pend_seed_305, amount: 1200.00, date: 2026-10-10, method: null, recordCashMovement: true, note: null}"
+      ],
+      "calls": [
+        {
+          "model": "gpt-6-luna",
+          "ms": 1996,
+          "input": 1846,
+          "cached": 1820,
+          "cacheWrite": 23,
+          "output": 18,
+          "reasoning": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "ms": 2561,
+          "input": 2304,
+          "cached": 0,
+          "cacheWrite": 2301,
+          "output": 33,
+          "reasoning": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "ms": 2560,
+          "input": 2443,
+          "cached": 2301,
+          "cacheWrite": 139,
+          "output": 93,
+          "reasoning": 0
+        }
+      ]
+    },
+    {
+      "scenario": "ambiguous_person",
+      "pass": true,
+      "llmCalls": 2,
+      "input": 3871,
+      "cached": 3648,
+      "output": 56,
+      "reasoning": 0,
+      "llmMs": 3865,
+      "wallMs": 3875,
+      "backendRequests": 0,
+      "costUsd": 0.000092205,
+      "reply": "Which Rahul payment did you settle: Concert tickets (₹2,000 outstanding) or Cab to airport (₹780 outstanding)?",
+      "saved": [],
+      "calls": [
+        {
+          "model": "gpt-6-luna",
+          "ms": 2082,
+          "input": 1831,
+          "cached": 1820,
+          "cacheWrite": 8,
+          "output": 28,
+          "reasoning": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "ms": 1783,
+          "input": 2040,
+          "cached": 1828,
+          "cacheWrite": 209,
+          "output": 28,
+          "reasoning": 0
+        }
+      ]
+    },
+    {
+      "scenario": "missing_amount",
+      "pass": true,
+      "llmCalls": 2,
+      "input": 3774,
+      "cached": 3648,
+      "output": 49,
+      "reasoning": 0,
+      "llmMs": 3566,
+      "wallMs": 3572,
+      "backendRequests": 0,
+      "costUsd": 0.00007658,
+      "reply": "What was the amount?",
+      "saved": [],
+      "calls": [
+        {
+          "model": "gpt-6-luna",
+          "ms": 2137,
+          "input": 1831,
+          "cached": 1820,
+          "cacheWrite": 8,
+          "output": 41,
+          "reasoning": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "ms": 1429,
+          "input": 1943,
+          "cached": 1828,
+          "cacheWrite": 112,
+          "output": 8,
+          "reasoning": 0
+        }
+      ]
+    },
+    {
+      "scenario": "dependent_category",
+      "pass": true,
+      "llmCalls": 4,
+      "input": 9489,
+      "cached": 6907,
+      "output": 188,
+      "reasoning": 0,
+      "llmMs": 7301,
+      "wallMs": 7323,
+      "backendRequests": 7,
+      "costUsd": 0.00048552,
+      "reply": "Category \"Pets\" created. ₹500 on Pets added as an expense.",
+      "saved": [
+        "categories.create {name: Pets, type: expense, iconKey: paw, colorIndex: 0, description: , isEssential: false}",
+        "transactions.create {type: expense, amount: 500.00, categoryId: cat_1, date: 2026-10-10, paymentMethod: null, counterparty: null, note: dog food}"
+      ],
+      "calls": [
+        {
+          "model": "gpt-6-luna",
+          "ms": 2201,
+          "input": 2133,
+          "cached": 0,
+          "cacheWrite": 2130,
+          "output": 85,
+          "reasoning": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "ms": 1430,
+          "input": 2356,
+          "cached": 2130,
+          "cacheWrite": 223,
+          "output": 20,
+          "reasoning": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "ms": 1627,
+          "input": 2427,
+          "cached": 2353,
+          "cacheWrite": 71,
+          "output": 26,
+          "reasoning": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "ms": 2043,
+          "input": 2573,
+          "cached": 2424,
+          "cacheWrite": 146,
+          "output": 57,
+          "reasoning": 0
+        }
+      ]
+    },
+    {
+      "scenario": "goal_contribution",
+      "pass": false,
+      "llmCalls": 2,
+      "input": 4170,
+      "cached": 2059,
+      "output": 45,
+      "reasoning": 0,
+      "llmMs": 3971,
+      "wallMs": 3982,
+      "backendRequests": 0,
+      "costUsd": 0.000306815,
+      "reply": "I couldn’t find a goal named “Japan trip.” Is it listed under a different name?",
+      "saved": [],
+      "calls": [
+        {
+          "model": "gpt-6-luna",
+          "ms": 2323,
+          "input": 2062,
+          "cached": 0,
+          "cacheWrite": 2059,
+          "output": 23,
+          "reasoning": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "ms": 1648,
+          "input": 2108,
+          "cached": 2059,
+          "cacheWrite": 46,
+          "output": 22,
+          "reasoning": 0
+        }
+      ]
+    },
+    {
+      "scenario": "relative_date",
+      "pass": true,
+      "llmCalls": 1,
+      "input": 1838,
+      "cached": 1820,
+      "output": 59,
+      "reasoning": 0,
+      "llmMs": 1778,
+      "wallMs": 1787,
+      "backendRequests": 3,
+      "costUsd": 0.000049875,
+      "reply": "₹1,200 on Bills & Utilities added as an expense.",
+      "saved": [
+        "transactions.create {type: expense, amount: 1200.00, categoryId: cat_utilities, date: 2026-10-08, paymentMethod: null, counterparty: null, note: Electricity bill}"
+      ],
+      "calls": [
+        {
+          "model": "gpt-6-luna",
+          "ms": 1778,
+          "input": 1838,
+          "cached": 1820,
+          "cacheWrite": 15,
+          "output": 59,
+          "reasoning": 0
+        }
+      ]
+    },
+    {
+      "scenario": "income_party",
+      "pass": true,
+      "llmCalls": 1,
+      "input": 1837,
+      "cached": 1820,
+      "output": 61,
+      "reasoning": 0,
+      "llmMs": 2418,
+      "wallMs": 2430,
+      "backendRequests": 3,
+      "costUsd": 0.00005075,
+      "reply": "Freelance of ₹15,000 from Acme added as income.",
+      "saved": [
+        "transactions.create {type: income, amount: 15000.00, categoryId: cat_freelance, date: 2026-10-10, paymentMethod: null, counterparty: Acme, note: null}"
+      ],
+      "calls": [
+        {
+          "model": "gpt-6-luna",
+          "ms": 2418,
+          "input": 1837,
+          "cached": 1820,
+          "cacheWrite": 14,
+          "output": 61,
+          "reasoning": 0
+        }
+      ]
+    },
+    {
+      "scenario": "question_spend",
+      "pass": true,
+      "llmCalls": 2,
+      "input": 3932,
+      "cached": 3654,
+      "output": 66,
+      "reasoning": 0,
+      "llmMs": 3817,
+      "wallMs": 3831,
+      "backendRequests": 0,
+      "costUsd": 0.00010414000000000002,
+      "reply": "You’ve spent ₹2,685 on food this month (October 1–10).",
+      "saved": [],
+      "calls": [
+        {
+          "model": "gpt-6-luna",
+          "ms": 1890,
+          "input": 1837,
+          "cached": 1820,
+          "cacheWrite": 14,
+          "output": 45,
+          "reasoning": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "ms": 1927,
+          "input": 2095,
+          "cached": 1834,
+          "cacheWrite": 258,
+          "output": 21,
+          "reasoning": 0
+        }
+      ]
+    },
+    {
+      "scenario": "follow_up_edit",
+      "pass": true,
+      "llmCalls": 4,
+      "input": 8881,
+      "cached": 8191,
+      "output": 167,
+      "reasoning": 0,
+      "llmMs": 6082,
+      "wallMs": 6111,
+      "backendRequests": 6,
+      "costUsd": 0.00025136,
+      "reply": "₹450 expense updated to ₹400.",
+      "saved": [
+        "transactions.create {type: expense, amount: 450.00, categoryId: cat_food, date: 2026-10-10, paymentMethod: null, counterparty: null, note: Lunch}",
+        "transactions.update {id: tx_1, expectedVersion: 1, type: expense, amount: 400.00, categoryId: cat_food, date: 2026-10-10, paymentMethod: null, counterparty: null, note: Lunch}"
+      ],
+      "calls": [
+        {
+          "model": "gpt-6-luna",
+          "ms": 1886,
+          "input": 1832,
+          "cached": 1829,
+          "cacheWrite": 0,
+          "output": 55,
+          "reasoning": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "ms": 1329,
+          "input": 2082,
+          "cached": 1829,
+          "cacheWrite": 250,
+          "output": 19,
+          "reasoning": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "ms": 1334,
+          "input": 2424,
+          "cached": 2112,
+          "cacheWrite": 309,
+          "output": 25,
+          "reasoning": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "ms": 1533,
+          "input": 2543,
+          "cached": 2421,
+          "cacheWrite": 119,
+          "output": 68,
+          "reasoning": 0
+        }
+      ]
+    }
+  ]
+}

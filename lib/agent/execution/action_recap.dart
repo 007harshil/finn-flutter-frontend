@@ -1,4 +1,6 @@
 import '../../core/money/money_format.dart';
+import '../../features/pending/application/pending_actions.dart' show PendingInput;
+import '../../features/pending/domain/pending_payment.dart' show PendingDirection;
 import '../../features/transactions/application/transaction_actions.dart' show TransactionInput;
 import 'proposals.dart';
 
@@ -26,6 +28,12 @@ String actionRecap(ActionRecord record) {
     }
     final to = party == null || party.isEmpty ? '' : ' at $party';
     return category == null ? '$amount$to added as an expense.' : '$amount on $category$to added as an expense.';
+  }
+  if (p.descriptor.id == 'pending.create' && input is PendingInput) {
+    final amount = input.amount.format();
+    return input.direction == PendingDirection.owedToMe
+        ? '${input.counterparty} owes you $amount (${input.purpose}).'
+        : 'You owe ${input.counterparty} $amount (${input.purpose}).';
   }
   return '${_pastTense(preview.summary)}.';
 }

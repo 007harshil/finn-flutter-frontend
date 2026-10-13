@@ -11,13 +11,7 @@ import '../helpers/test_app.dart';
 import 'agent_fakes.dart';
 
 void main() {
-  Map<String, Object?> lunch() => {
-    'type': 'expense',
-    'amount': '450',
-    'categoryId': 'cat_food',
-    'date': '2026-10-10',
-    'paymentMethod': 'upi',
-  };
+  Map<String, Object?> lunch() => {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch'};
 
   group('AgentController', () {
     test('is unavailable without a provider (local mode)', () async {
@@ -31,10 +25,7 @@ void main() {
 
     test('ignores a second submission while a turn is running and returns to idle', () async {
       final env = await TestEnv.create();
-      final provider = ScriptedProvider([
-        callsTools([toolCall('record_transaction', lunch())]),
-        says('I will record ₹450 for lunch.'),
-      ]);
+      final provider = ScriptedProvider([plan([lunch()])]);
       final container = ProviderContainer(
         overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)],
       );
@@ -60,15 +51,12 @@ void main() {
       expect(reply.text, '₹450 on Food & Dining added as an expense.');
       expect(reply.actions.single.status, ActionResultStatus.completed);
       expect((await env.snapshot()).transactions.length, before + 1);
-      expect(provider.requests, hasLength(2));
+      expect(provider.requests, hasLength(1));
     });
 
     test('stop while waiting for approval writes nothing and ends idle', () async {
       final env = await TestEnv.create();
-      final provider = ScriptedProvider([
-        callsTools([toolCall('record_transaction', lunch())]),
-        says('I will record ₹450 for lunch.'),
-      ]);
+      final provider = ScriptedProvider([plan([lunch()])]);
       final container = ProviderContainer(
         overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)],
       );
@@ -115,10 +103,7 @@ void main() {
 
     testWidgets('send → review card → approve → saved outcome', (tester) async {
       final env = await TestEnv.create();
-      final provider = ScriptedProvider([
-        callsTools([toolCall('record_transaction', lunch())]),
-        says('I will record ₹450 for lunch.'),
-      ]);
+      final provider = ScriptedProvider([plan([lunch()])]);
       await tester.pumpWidget(
         ProviderScope(
           overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)],
@@ -138,8 +123,6 @@ void main() {
 
       expect(find.text('Review this change'), findsOneWidget);
       expect(find.text('TRANSACTIONS · NEW'), findsOneWidget);
-      // The plan sits above the review card, which is scrolled into view.
-      expect(find.text('I will record ₹450 for lunch.', skipOffstage: false), findsOneWidget);
       expect(find.textContaining('450'), findsWidgets);
       expect(find.byTooltip('Stop'), findsOneWidget);
 
@@ -154,6 +137,52 @@ void main() {
       // The saved record links to its detail screen.
       expect(find.text('View'), findsOneWidget);
       expect(find.byTooltip('Send'), findsOneWidget);
+    });
+
+    testWidgets('history lists what was asked and what was saved, filters it and clears it', (tester) async {
+      final env = await TestEnv.create();
+      final provider = ScriptedProvider([plan([lunch()])]);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)],
+          child: MaterialApp(
+            theme: FinnTheme.light(),
+            home: const MotionScope(reduceMotion: true, child: AgentScreen()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), 'Spent 450 on lunch');
+      await tester.tap(find.byTooltip('Send'));
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('Approve'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      await tester.tap(find.byTooltip('History'));
+      await tester.pumpAndSettle();
+      expect(find.text('Agent history'), findsOneWidget);
+      expect(find.text('"Spent 450 on lunch"'), findsOneWidget);
+      expect(find.textContaining('1 change saved'), findsOneWidget);
+
+      await tester.tap(find.text('"Spent 450 on lunch"'));
+      await tester.pumpAndSettle();
+      expect(find.text('SAVED'), findsWidgets);
+
+      await tester.tap(find.text('Declined'));
+      await tester.pumpAndSettle();
+      expect(find.text('NO DECLINED REQUESTS'), findsOneWidget);
+      await tester.tap(find.text('All'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Clear history'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clear history').last);
+      await tester.pumpAndSettle();
+      expect(find.text('NOTHING HERE YET'), findsOneWidget);
+      // One model call for the request; history needed none.
+      expect(provider.requests, hasLength(1));
     });
   });
 }

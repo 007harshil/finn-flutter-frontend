@@ -1,36 +1,44 @@
 import 'package:flutter/foundation.dart';
 
 import '../../actions/action.dart';
-import '../tools/agent_tool.dart';
 
-/// An action the model asked for, validated and previewed by the app, that
-/// waits for the user's approval. Nothing has been written yet.
+/// An operation from the model's plan, resolved and previewed by the app,
+/// that waits for the user's approval. Nothing has been written yet.
 @immutable
 class ProposedAction {
   const ProposedAction({
     required this.id,
-    required this.toolCallId,
-    required this.tool,
+    required this.opRef,
+    required this.action,
     required this.input,
     required this.preview,
+    required this.stepId,
     required this.idempotencyKey,
     this.notes = const [],
   });
 
   /// Unique within the conversation, e.g. `p3`.
   final String id;
-  final String toolCallId;
-  final ActionTool tool;
+
+  /// The op of the plan it came from (`o1`, `o2`…).
+  final String opRef;
+  final FinancialAction<ActionInput, Object?> action;
   final ActionInput input;
 
-  /// The dispatcher's preview (title, summary, lines, warnings, fingerprint).
+  /// The preview (title, summary, lines, warnings, fingerprint), from the
+  /// FiNN API in remote mode.
   final ActionPreview preview;
+
+  /// Plan step id, derived from the request itself (see `PlanExecution`).
+  final String stepId;
+
+  /// What the server stores the write under (`<planId>:<stepId>`).
   final String idempotencyKey;
 
   /// Agent-side notes for the user, e.g. a possible duplicate.
   final List<String> notes;
 
-  ActionDescriptor get descriptor => tool.descriptor;
+  ActionDescriptor get descriptor => action.descriptor;
 }
 
 enum ActionResultStatus {
@@ -49,11 +57,14 @@ enum ActionResultStatus {
   /// The record changed after the user reviewed it; needs a new review.
   needsReapproval,
 
+  /// Not run because a change it depends on was not saved.
+  skipped,
+
   /// The run was stopped before this action ran.
   cancelled,
 }
 
-/// Ground truth about one proposed action, taken from the dispatcher's
+/// Ground truth about one proposed action, taken from the backend's
 /// outcome (never from the model's words). Shown to the user next to the
 /// agent's reply.
 @immutable

@@ -1,480 +1,563 @@
-import 'dart:convert';
-
 import 'package:finn/agent/agent_config.dart';
 import 'package:finn/agent/execution/proposals.dart';
+import 'package:finn/agent/history/agent_history.dart';
 import 'package:finn/agent/llm/llm_provider.dart';
-import 'package:finn/agent/orchestration/agent_events.dart';
 import 'package:finn/agent/orchestration/agent_runner.dart';
-import 'package:finn/agent/prompt/system_prompt.dart';
+import 'package:finn/agent/prompt/agent_prompt.dart';
 import 'package:finn/core/money/money.dart';
-import 'package:finn/features/categories/domain/category.dart';
+import 'package:finn/core/result/result.dart';
+import 'package:finn/features/pending/domain/pending_payment.dart';
 import 'package:finn/features/transactions/domain/transaction.dart';
-import 'package:finn/finance/finance_snapshot.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../actions/action_harness.dart';
 import 'agent_fakes.dart';
 
+Future<AgentRig> rig(List<Object> script, {AgentConfig config = const AgentConfig()}) async =>
+    AgentRig(await ActionHarness.create(), ScriptedProvider(script), config: config);
+
 void main() {
-  late ActionHarness h;
+  group('one model request per clear message', () {
+    test('three operations: one plan call, one review, one backend round, a local summary', () async {
+      final r = await rig([
+        plan([
+          {'op': 'income', 'amount': 5000, 'category': 'Salary', 'date': -1},
+          {'op': 'pending', 'dir': 'collect', 'person': 'Utsav', 'amount': 300, 'kind': 'lent'},
+          {'op': 'expense', 'amount': 5000, 'category': 'Fitness', 'note': 'protein powder'},
+        ]),
+      ]);
+      const text = 'I received ₹5,000 as salary yesterday, gave ₹300 to Utsav which is still pending, and bought '
+          'protein powder for ₹5,000';
+      final result = await r.turn(text);
 
-  setUp(() async => h = await ActionHarness.create());
+      // One model request, built from static instructions plus a small context.
+      expect(r.provider.requests, hasLength(1));
+      final req = r.provider.requests.single;
+      expect(req.instructions, agentInstructions);
+      expect(req.output, LlmOutputFormat.json);
+      expect(req.tools, isEmpty);
+      expect(req.messages, hasLength(2));
+      expect(req.messages.first.content, contains('Today: Sat 2026-10-10.'));
+      expect(req.messages.first.content, contains('Salary'));
+      expect(req.messages.last.content, text);
+      expect(result.usage.calls, 1);
 
-  Map<String, Object?> lunch({String amount = '450'}) => {
-        'type': 'expense',
-        'amount': amount,
-        'categoryId': 'cat_food',
-        'date': '2026-10-10',
-        'paymentMethod': 'upi',
-      };
+      // One review card with all three, one preview and one execution call.
+      expect(r.approvals, hasLength(1));
+      expect(r.approvals.single.map((p) => p.descriptor.id), ['transactions.create', 'pending.create', 'transactions.create']);
+      expect(r.gateway.previews, 1);
+      expect(r.gateway.executions, 1);
+      expect(result.actions.map((a) => a.status), everyElement(ActionResultStatus.completed));
 
-  /// The outcome message recorded in the conversation, if any.
-  String? lastAppMessageIn(AgentRig rig) => rig.runner.conversation.messages
-      .where((m) => m.role == LlmRole.user && m.content!.startsWith('[FiNN app message'))
-      .lastOrNull
-      ?.content;
+      final s = await r.harness.snapshot();
+      final salary = s.transactions.singleWhere((t) => t.type == TransactionType.income);
+      expect((salary.amount, salary.categoryId, salary.date), (const Money.rupees(5000), 'cat_salary', DateTime(2026, 10, 9)));
+      final protein = s.transactions.singleWhere((t) => t.note == 'protein powder');
+      expect((protein.amount, protein.date, protein.type), (const Money.rupees(5000), DateTime(2026, 10, 10), TransactionType.expense));
+      final debt = s.pending.single;
+      expect((debt.counterparty, debt.direction, debt.kind, debt.originalAmount),
+          ('Utsav', PendingDirection.owedToMe, PendingKind.lent, const Money.rupees(300)));
 
-  /// The app's outcome message the model received last, if any.
-  String? lastAppMessage(LlmRequest r) =>
-      r.messages.where((m) => m.role == LlmRole.user && m.content!.startsWith('[FiNN app message')).lastOrNull?.content;
+      // The reply is built from confirmed outcomes, not by the model.
+      expect(result.reply, 'Salary of ₹5,000 added as income. Utsav owes you ₹300 (Lent money). '
+          '₹5,000 on Fitness added as an expense.');
 
-  test('multi-action request with sequential calls: one review card, real outcomes reported', () async {
-    final rahul = await addPending(h, counterparty: 'Rahul', rupees: 2000);
-    final provider = ScriptedProvider([
-      // One call per step, as gpt-oss models do.
-      callsTools([toolCall('record_transaction', lunch(), id: 'c_tx')]),
-      callsTools([toolCall('find_records', {'kind': 'pending', 'query': 'Rahul'}, id: 'c_find')]),
-      (LlmRequest r) {
-        expect(toolResultsIn(r)['c_tx']!['status'], 'queuedForApproval');
-        final found = toolResultsIn(r)['c_find']!;
-        final id = ((found['items']! as List).single as Map)['id']! as String;
-        return callsTools([
-          toolCall('settle_pending_payment', {'pendingId': id, 'amount': '2000', 'date': '2026-10-10'}, id: 'c_settle'),
-        ]);
-      },
-      says('I will record the ₹450 lunch and settle Rahul\'s ₹2,000.'),
-    ]);
-    final rig = AgentRig(h, provider);
-    final events = <String>[];
-
-    final result = await rig.runner.runTurn(
-      'Spent 450 on lunch via UPI and Rahul paid back the 2000 he owed',
-      approve: rig.approveAll,
-      onEvent: (e) => events.add(e.runtimeType.toString()),
-    );
-
-    expect(result.end, AgentTurnEnd.completed);
-    // The report is built from confirmed outcomes, without another model call.
-    expect(result.reply, '₹450 on Food & Dining added as an expense. Received ₹2,000 from Rahul.');
-    expect(provider.requests, hasLength(4));
-    expect(lastAppMessageIn(rig), contains('"status":"completed"'));
-    expect(result.actions.map((a) => a.status), everyElement(ActionResultStatus.completed));
-    expect(rig.approvals, hasLength(1), reason: 'one review card for the whole plan');
-    expect(rig.approvals.single, hasLength(2));
-    expect(events, contains('AgentPlanReady'));
-    final s = await h.snapshot();
-    expect(s.pendingView(rahul.id)!.outstanding, Money.zero);
-    expect(s.transactions.where((t) => t.categoryId == 'cat_food').single.amount, const Money.rupees(450));
-    expect(provider.requests.first.instructions, contains('2026-10-10'));
-    expect(provider.requests.first.instructions, contains('cat_food'));
-  });
-
-  test('a batched plan goes straight to review: one model call for a four-task message', () async {
-    Map<String, Object?> item(String tool, Map<String, Object?> args) => {'tool': tool, 'arguments': args};
-    final provider = ScriptedProvider([
-      callsTools([
-        toolCall('queue_actions', {
-          'actions': [
-            item('record_transaction', {...lunch(amount: '70'), 'categoryId': 'cat_groceries', 'note': 'Vegetables'}),
-            item('record_transaction', {...lunch(amount: '150'), 'categoryId': 'cat_groceries', 'note': 'Milk'}),
-            item('record_transaction', {...lunch(amount: '400'), 'categoryId': 'cat_transport', 'note': 'Petrol'}),
-            item('add_subscription', {
-              'name': 'Netflix Premium',
-              'amount': '179',
-              'frequency': 'monthly',
-              'categoryId': 'cat_subscriptions',
-              'startDate': '2026-10-09',
-              'nextDueDate': '2026-11-09',
-              'autoRenews': true,
-            }),
-          ],
-          'done': true,
-        }),
-      ]),
-    ]);
-    final rig = AgentRig(h, provider);
-    final result = await rig.turn('Bought vegetables for 70, milk for 150, petrol for 400 and added Netflix premium '
-        '179 yesterday');
-
-    expect(provider.requests, hasLength(1), reason: 'no closing model call');
-    expect(rig.approvals, hasLength(1));
-    expect(rig.approvals.single, hasLength(4));
-    expect(result.end, AgentTurnEnd.completed);
-    expect(result.actions.map((a) => a.status), everyElement(ActionResultStatus.completed));
-    expect(result.reply, startsWith('₹70 on Groceries added as an expense. ₹150 on Groceries added as an expense. ₹400 on Transport added as an expense. '));
-    final s = await h.snapshot();
-    expect(s.transactions, hasLength(3));
-    expect(s.subscriptions.single.name, 'Netflix Premium');
-    // The conversation stays well formed for the next turn.
-    final roles = rig.runner.conversation.messages.map((m) => m.role).toList();
-    expect(roles, [LlmRole.user, LlmRole.assistant, LlmRole.tool, LlmRole.user, LlmRole.assistant]);
-    expect(lastAppMessageIn(rig), contains('"status":"completed"'));
-  });
-
-  test('a failed batch item is fixed in the next step and everything is reviewed on one card', () async {
-    Map<String, Object?> item(Map<String, Object?> args) => {'tool': 'record_transaction', 'arguments': args};
-    final provider = ScriptedProvider([
-      callsTools([
-        toolCall('queue_actions', {
-          'actions': [item(lunch(amount: '70')), item({...lunch(amount: '150'), 'date': '2026-12-01'})],
-          'done': true,
-        }, id: 'c_batch'),
-      ]),
-      (LlmRequest r) {
-        final items = (toolResultsIn(r)['c_batch']!['results']! as List).cast<Map>();
-        expect(items[1]['error'], containsPair('code', 'validation'));
-        return callsTools([
-          toolCall('queue_actions', {
-            'actions': [item(lunch(amount: '150'))],
-            'done': true,
-          }),
-        ]);
-      },
-    ]);
-    final rig = AgentRig(h, provider);
-    final result = await rig.turn('Spent 70 and 150 on food');
-    expect(provider.requests, hasLength(2));
-    expect(rig.approvals.single, hasLength(2));
-    expect(result.reply, '₹70 on Food & Dining added as an expense. ₹150 on Food & Dining added as an expense.');
-  });
-
-  test('a tool call written as JSON text is recovered and handled like a real call', () async {
-    final args = {
-      'actions': [
-        {'tool': 'record_transaction', 'arguments': lunch(amount: '70')},
-      ],
-      'done': true,
-    };
-    final provider = ScriptedProvider([says('```json\n${jsonEncode({'queue_actions': args})}\n```')]);
-    final rig = AgentRig(h, provider);
-    final result = await rig.turn('Spent 70 on food');
-    expect(provider.requests, hasLength(1));
-    expect(rig.approvals.single, hasLength(1));
-    expect(result.reply, '₹70 on Food & Dining added as an expense.');
-
-    const offered = {'queue_actions', 'record_transaction'};
-    final named = AgentRunner.recoverToolCallText(
-        says(jsonEncode({'name': 'record_transaction', 'arguments': lunch()})), offered, 3);
-    expect(named.toolCalls.single.name, 'record_transaction');
-    expect(named.toolCalls.single.id, 'recovered_3');
-    // Ordinary text, unknown tools and non-object arguments stay text.
-    for (final text in ['Done!', '{"delete_everything": {}}', '{"queue_actions": "x"}', '{"a": 1, "b": 2}', '{oops']) {
-      final r = AgentRunner.recoverToolCallText(says(text), offered, 0);
-      expect(r.toolCalls, isEmpty, reason: text);
-      expect(r.text, text);
-    }
-  });
-
-  test('nothing is written before the user approves', () async {
-    final provider = ScriptedProvider([
-      callsTools([toolCall('record_transaction', lunch())]),
-      says('Recording ₹450 for lunch.'),
-    ]);
-    final rig = AgentRig(h, provider);
-    await rig.turn('Spent 450 on lunch', approve: (p) async {
-      expect((await h.snapshot()).transactions, isEmpty);
-      return const {};
+      // The history entry records what happened.
+      final entry = r.history.entries.single;
+      expect(entry.request, text);
+      expect(entry.status, AgentRunStatus.completed);
+      expect(entry.summary, '3 of 3 saved');
+      expect(entry.operations.map((o) => o.status), ['saved', 'saved', 'saved']);
+      expect(entry.operations.every((o) => o.recordIds.length == 1), isTrue);
     });
-    expect((await h.snapshot()).transactions, isEmpty);
-  });
 
-  test('ambiguous person: the model asks instead of acting', () async {
-    await addPending(h, counterparty: 'Rahul', rupees: 500, purpose: 'Lunch');
-    await addPending(h, counterparty: 'Rahul', rupees: 900, purpose: 'Cab');
-    final provider = ScriptedProvider([
-      callsTools([toolCall('find_records', {'kind': 'pending', 'query': 'Rahul'}, id: 'f')]),
-      (LlmRequest r) {
-        expect(toolResultsIn(r)['f']!['match'], 'multiple');
-        return says('Rahul has two open items: Lunch (₹500) and Cab (₹900). Which one did he pay?');
-      },
-    ]);
-    final rig = AgentRig(h, provider);
-    final result = await rig.turn('Rahul paid me back');
-    expect(result.end, AgentTurnEnd.completed);
-    expect(result.actions, isEmpty);
-    expect(rig.approvals, isEmpty);
-  });
-
-  test('partial approval: each item reported with its real status', () async {
-    final provider = ScriptedProvider([
-      callsTools([toolCall('record_transaction', lunch(amount: '300'))]),
-      callsTools([toolCall('record_transaction', lunch(amount: '700'))]),
-      says('Two expenses to review.'),
-    ]);
-    final rig = AgentRig(h, provider);
-    final result = await rig.turn('Add 300 and 700 food expenses', approve: (p) async {
-      rig.approvals.add(p);
-      return {p.first.id};
+    test('several operations of the same type get their own steps', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 70, 'category': 'Groceries', 'note': 'vegetables'},
+          {'op': 'expense', 'amount': 150, 'category': 'Groceries', 'note': 'milk'},
+          {'op': 'expense', 'amount': 400, 'category': 'Transport', 'note': 'petrol', 'date': -1},
+        ]),
+      ]);
+      final result = await r.turn('vegetables 70, milk 150 today and petrol 400 yesterday');
+      expect(result.actions, hasLength(3));
+      expect({for (final a in result.actions) a.proposal.stepId}, hasLength(3));
+      expect(result.actions.every((a) => a.succeeded), isTrue);
+      final s = await r.harness.snapshot();
+      expect(s.transactions.firstWhere((t) => t.note == 'petrol').date, DateTime(2026, 10, 9));
+      expect(r.provider.requests, hasLength(1));
     });
-    expect(result.actions.map((a) => a.status), [ActionResultStatus.completed, ActionResultStatus.declined]);
-    expect(result.reply, '₹300 on Food & Dining added as an expense. Not done: Spent ₹700.');
-    expect((await h.snapshot()).transactions.single.amount, const Money.rupees(300));
-  });
 
-  test('a dependent follow-up gets its own review after the first outcome', () async {
-    final provider = ScriptedProvider([
-      callsTools([
-        toolCall('create_category', {
-          'name': 'Pets',
-          'type': 'expense',
-          'iconKey': 'tag',
-          'colorIndex': 3,
-          'isEssential': false,
-        }),
-      ]),
-      says('First I will create the Pets category. [continue]'),
-      (LlmRequest r) {
-        final outcome = lastAppMessage(r)!;
-        final id = RegExp(r'"recordId":"([^"]+)"').firstMatch(outcome)!.group(1)!;
-        return callsTools([toolCall('record_transaction', {...lunch(amount: '600'), 'categoryId': id})]);
-      },
-      says('Now the ₹600 expense.'),
-    ]);
-    final rig = AgentRig(h, provider);
-    final result = await rig.turn('Add a Pets category and record 600 for dog food in it');
-    expect(rig.approvals, hasLength(2));
-    expect(result.actions.every((a) => a.succeeded), isTrue);
-    expect((await h.snapshot()).transactions.single.amount, const Money.rupees(600));
-  });
-
-  test('an item that needed a record from the same plan is finished after approval, without [continue]', () async {
-    final pets = {'name': 'Pets', 'type': 'expense', 'iconKey': 'tag', 'colorIndex': 3, 'isEssential': false};
-    final provider = ScriptedProvider([
-      // The model guesses a placeholder id for the category it is creating.
-      callsTools([
-        toolCall('queue_actions', {
-          'actions': [
-            {'tool': 'create_category', 'arguments': pets},
-            {
-              'tool': 'record_transaction',
-              'arguments': {...lunch(amount: '500'), 'categoryId': '<catId>'},
-            },
-          ],
-          'done': true,
-        }),
-      ]),
-      // ...and then forgets [continue].
-      says('I queued the category. What is the new category id?'),
-      (LlmRequest r) {
-        final outcome = lastAppMessage(r)!;
-        expect(outcome, contains('still missing'));
-        final id = RegExp(r'"recordId":"([^"]+)"').firstMatch(outcome)!.group(1)!;
-        return callsTools([
-          toolCall('queue_actions', {
-            'actions': [
-              {
-                'tool': 'record_transaction',
-                'arguments': {...lunch(amount: '500'), 'categoryId': id},
-              },
-            ],
-            'done': true,
-          }),
-        ]);
-      },
-    ]);
-    final rig = AgentRig(h, provider);
-    final result = await rig.turn('Create a Pets category and record 500 for dog food in it');
-    expect(provider.requests, hasLength(3));
-    expect(rig.approvals.map((a) => a.length), [1, 1]);
-    expect(result.end, AgentTurnEnd.completed);
-    expect(result.actions.every((a) => a.succeeded), isTrue);
-    expect((await h.snapshot()).transactions.single.amount, const Money.rupees(500));
-  });
-
-  test('auto-continue happens at most once per turn', () async {
-    final provider = ScriptedProvider([
-      callsTools([
-        toolCall('queue_actions', {
-          'actions': [
-            {'tool': 'record_transaction', 'arguments': lunch(amount: '70')},
-            {'tool': 'record_transaction', 'arguments': {...lunch(), 'date': '2026-12-01'}},
-          ],
-          'done': true,
-        }),
-      ]),
-      says('When was the second one?'),
-      callsTools([toolCall('record_transaction', lunch(amount: '90'))]),
-      says('Queued the ₹90 too. I still need the date of the ₹450 one.'),
-    ]);
-    final rig = AgentRig(h, provider);
-    final result = await rig.turn('Spent 70 and 450 on food');
-    expect(provider.requests, hasLength(4));
-    expect(rig.approvals, hasLength(2));
-    expect(result.end, AgentTurnEnd.completed);
-  });
-
-  test('an invalid action is fed back so the model can correct itself', () async {
-    final rahul = await addPending(h, counterparty: 'Rahul', rupees: 500);
-    final provider = ScriptedProvider([
-      callsTools([
-        toolCall('settle_pending_payment', {'pendingId': rahul.id, 'amount': '5000', 'date': '2026-10-10'}, id: 's'),
-      ]),
-      (LlmRequest r) {
-        final error = toolResultsIn(r)['s']!['error']! as Map;
-        expect(error['message'], contains('outstanding'));
-        return says('Only ₹500 is outstanding from Rahul. Should I settle ₹500?');
-      },
-    ]);
-    final rig = AgentRig(h, provider);
-    final result = await rig.turn('Rahul paid 5000');
-    expect(result.actions, isEmpty);
-    expect(rig.approvals, isEmpty);
-  });
-
-  test('the model cannot run deletes even if it invents the tool', () async {
-    final provider = ScriptedProvider([
-      callsTools([toolCall('delete_transaction', {'id': 'tx_1'}, id: 'd')]),
-      (LlmRequest r) {
-        expect((toolResultsIn(r)['d']!['error']! as Map)['code'], 'unknownTool');
-        return says('I cannot delete records. You can delete it from the transaction screen.');
-      },
-    ]);
-    expect((await AgentRig(h, provider).turn('Delete my last transaction')).end, AgentTurnEnd.completed);
-  });
-
-  test('requests offer only relevant tool groups, and load_tools adds more', () async {
-    final provider = ScriptedProvider([
-      callsTools([toolCall('load_tools', {'groups': ['subscriptions']})]),
-      says('Done looking.'),
-    ]);
-    final rig = AgentRig(h, provider);
-    await rig.turn('Spent 450 on lunch');
-    final first = provider.requests.first.tools.map((t) => t.name).toSet();
-    final second = provider.requests.last.tools.map((t) => t.name).toSet();
-    expect(first, isNot(contains('mark_subscription_paid')));
-    expect(second, contains('mark_subscription_paid'));
-  });
-
-  test('transient provider failure is retried once; a second failure fails the turn and rolls back', () async {
-    const outage = LlmException(LlmErrorKind.unavailable, 'The assistant is unavailable right now.', retryable: true);
-    final provider = ScriptedProvider([outage, outage]);
-    final rig = AgentRig(h, provider);
-    final result = await rig.turn('Spent 100 on tea');
-    expect(provider.requests, hasLength(2));
-    expect(result.end, AgentTurnEnd.failed);
-    expect(rig.runner.conversation.isEmpty, isTrue);
-  });
-
-  test('rate limits are waited out quietly within the turn budget; a long one is reported', () async {
-    const limited =
-        LlmException(LlmErrorKind.rateLimited, 'Busy.', retryable: true, retryAfter: Duration(milliseconds: 10));
-    final provider = ScriptedProvider([limited, limited, limited, limited, says('Hello!')]);
-    final rig = AgentRig(h, provider);
-    final labels = <String>[];
-    final ok = await rig.runner.runTurn('hi', approve: rig.approveAll, onEvent: (e) {
-      if (e is AgentWaiting) labels.add(e.label);
+    test('a settlement is matched to the pending item locally, without a lookup call', () async {
+      final r = await rig([
+        plan([
+          {'op': 'settle', 'person': 'Neha', 'amount': 850, 'note': 'office lunch'},
+        ]),
+      ]);
+      final neha = await addPending(r.harness, counterparty: 'Neha Kapoor', rupees: 850, purpose: 'Office lunch');
+      await addPending(r.harness, counterparty: 'Karan', rupees: 1200);
+      final result = await r.turn('Neha paid me back the 850 for the office lunch');
+      expect(r.provider.requests, hasLength(1));
+      expect(result.actions.single.proposal.input.toJson()['pendingId'], neha.id);
+      expect(result.reply, 'Received ₹850 from Neha Kapoor.');
+      final s = await r.harness.snapshot();
+      expect(s.pendingViews.firstWhere((v) => v.payment.id == neha.id).status, PendingStatus.settled);
     });
-    expect(ok.reply, 'Hello!');
-    expect(labels, List.filled(4, AgentRunner.waitingLabel));
-    expect(labels.join(), isNot(contains(RegExp('busy|retry', caseSensitive: false))));
 
-    final spent = ScriptedProvider([limited, limited, limited, says('Never reached')]);
-    final tight = AgentRig(h, spent, config: const AgentConfig(rateLimitWaitBudget: Duration(milliseconds: 25)));
-    final out = await tight.turn('hi');
-    expect(out.error?.kind, LlmErrorKind.rateLimited, reason: 'budget spent after two waits');
-    expect(spent.requests, hasLength(3));
-
-    final slow = ScriptedProvider([
-      const LlmException(LlmErrorKind.rateLimited, 'Please wait a moment.', retryable: true, retryAfter: Duration(minutes: 2)),
-    ]);
-    final result = await AgentRig(h, slow).turn('hi');
-    expect(slow.requests, hasLength(1));
-    expect(result.error?.kind, LlmErrorKind.rateLimited);
-  });
-
-  test('failure after planning still lets the user review what was prepared', () async {
-    final provider = ScriptedProvider([
-      callsTools([toolCall('record_transaction', lunch())]),
-      const LlmException(LlmErrorKind.rejected, 'The assistant could not process this request.'),
-    ]);
-    final rig = AgentRig(h, provider);
-    final result = await rig.turn('Spent 450 on lunch');
-    expect(result.end, AgentTurnEnd.failed);
-    expect(rig.approvals, hasLength(1));
-    expect(result.actions.single.status, ActionResultStatus.completed);
-    expect(result.reply, contains('₹450 on Food & Dining added as an expense.'));
-  });
-
-  test('tool loop limit forces a final answer without tools', () async {
-    final provider = ScriptedProvider([
-      callsTools([toolCall('get_financial_overview', {})]),
-      callsTools([toolCall('get_financial_overview', {})]),
-      says('Your available balance is ₹1,00,000.'),
-    ]);
-    final rig = AgentRig(h, provider, config: const AgentConfig(maxModelCallsPerTurn: 3));
-    final result = await rig.turn('What is my balance?');
-    expect(result.end, AgentTurnEnd.completed);
-    expect(provider.requests.last.toolChoice, LlmToolChoice.none);
-  });
-
-  test('at the step limit, queued actions are still reviewed and summarised factually', () async {
-    final provider = ScriptedProvider([
-      callsTools([toolCall('record_transaction', lunch())]),
-      callsTools([toolCall('get_financial_overview', {})]),
-    ]);
-    final rig = AgentRig(h, provider, config: const AgentConfig(maxModelCallsPerTurn: 2));
-    final result = await rig.turn('Spent 450 on lunch');
-    expect(result.end, AgentTurnEnd.limitReached);
-    expect(rig.approvals, hasLength(1));
-    expect(result.reply, contains('added as an expense.'));
-  });
-
-  test('stopping during approval ends the turn without writing', () async {
-    final token = CancellationToken();
-    final provider = ScriptedProvider([
-      callsTools([toolCall('record_transaction', lunch())]),
-      says('Recording lunch.'),
-    ]);
-    final rig = AgentRig(h, provider);
-    final result = await rig.turn('Spent 450 on lunch', cancel: token, approve: (p) {
-      token.cancel();
-      return Future<Set<String>>.delayed(const Duration(seconds: 5), () => {p.single.id});
+    test('a dependent op runs in a second wave with the id it needs, still one model call', () async {
+      final r = await rig([
+        plan([
+          {'op': 'category', 'id': 'o1', 'name': 'Pets', 'type': 'expense'},
+          {'op': 'expense', 'amount': 500, 'category': '@o1', 'note': 'dog food'},
+        ]),
+      ]);
+      final result = await r.turn('create a category called Pets and add 500 for dog food in it');
+      expect(r.provider.requests, hasLength(1));
+      expect(r.approvals.map((a) => a.single.descriptor.id), ['categories.create', 'transactions.create']);
+      expect(r.gateway.executions, 2);
+      final s = await r.harness.snapshot();
+      final pets = s.categories.singleWhere((c) => c.name == 'Pets');
+      expect(s.transactions.single.categoryId, pets.id);
+      expect(result.reply, 'Category "Pets" created. ₹500 on Pets added as an expense.');
+      // Both waves belong to one history entry.
+      expect(r.history.entries.single.operations, hasLength(2));
+      expect(r.history.entries.single.status, AgentRunStatus.completed);
     });
-    expect(result.end, AgentTurnEnd.cancelled);
-    expect(result.actions.single.status, ActionResultStatus.cancelled);
-    expect((await h.snapshot()).transactions, isEmpty);
+
+    test('independent ops still run when a dependency is declined; the dependent one is skipped', () async {
+      final r = await rig([
+        plan([
+          {'op': 'category', 'id': 'o1', 'name': 'Pets', 'type': 'expense'},
+          {'op': 'expense', 'amount': 500, 'category': '@o1'},
+          {'op': 'expense', 'amount': 90, 'category': 'Food & Dining', 'note': 'chai'},
+        ]),
+      ]);
+      final result = await r.turn('new category Pets with 500 for dog food, and chai 90',
+          approve: (p) async {
+            r.approvals.add(p);
+            return {for (final x in p) if (x.descriptor.id != 'categories.create') x.id};
+          });
+      expect(r.approvals, hasLength(1));
+      expect(result.actions.map((a) => a.status),
+          [ActionResultStatus.declined, ActionResultStatus.completed]);
+      expect(result.reply, contains('Skipped: it needed a change that was not saved.'));
+      expect((await r.harness.snapshot()).transactions.single.note, 'chai');
+    });
+
+    test('an existing category is reused instead of created again', () async {
+      final r = await rig([
+        plan([
+          {'op': 'category', 'id': 'o1', 'name': 'groceries', 'type': 'expense'},
+          {'op': 'expense', 'amount': 300, 'category': '@o1'},
+        ]),
+      ]);
+      final result = await r.turn('make a groceries category and add 300 to it');
+      expect(r.gateway.executions, 1);
+      expect(result.actions.single.proposal.input.toJson()['categoryId'], 'cat_groceries');
+      expect(result.actions.single.proposal.notes, contains('You already have a "Groceries" category, so I used it.'));
+    });
   });
 
-  test('conversation context carries over between turns', () async {
-    final provider = ScriptedProvider([says('How much was it?'), says('Noted.')]);
-    final rig = AgentRig(h, provider);
-    await rig.turn('I bought groceries');
-    await rig.turn('800');
-    final users = provider.requests.last.messages.where((m) => m.role == LlmRole.user).map((m) => m.content);
-    expect(users, ['I bought groceries', '800']);
+  group('clarification instead of guessing', () {
+    test('several matching pending items: one question with options; the reply picks one without the model', () async {
+      final r = await rig([
+        plan([
+          {'op': 'settle', 'person': 'Rahul', 'dir': 'owe'},
+        ]),
+      ]);
+      final concert = await addPending(r.harness,
+          counterparty: 'Rahul Verma', rupees: 2000, direction: PendingDirection.iOwe, purpose: 'Concert tickets');
+      await addPending(r.harness,
+          counterparty: 'Rahul Verma', rupees: 780, direction: PendingDirection.iOwe, purpose: 'Cab to airport');
+
+      final first = await r.turn('I paid Rahul back');
+      expect(first.actions, isEmpty);
+      expect(r.approvals, isEmpty);
+      expect(first.reply,
+          'Which one with Rahul Verma: Concert tickets (₹2,000 you owe) or Cab to airport (₹780 you owe)?');
+
+      final second = await r.turn('the concert one');
+      expect(r.provider.requests, hasLength(1)); // resolved locally
+      expect(second.actions.single.proposal.input.toJson(), containsPair('pendingId', concert.id));
+      expect(second.actions.single.proposal.input.toJson(), containsPair('amount', '2000.00'));
+      expect(second.reply, 'Paid Rahul Verma ₹2,000.');
+      expect(r.history.entries.single.request, 'I paid Rahul back → the concert one');
+    });
+
+    test('a missing amount is asked for; a bare amount completes it locally', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'category': 'Groceries', 'note': 'groceries'},
+        ], ask: 'How much did you spend on groceries?'),
+      ]);
+      final first = await r.turn('I bought groceries today');
+      expect(first.reply, 'How much did you spend on groceries?');
+      expect(first.actions, isEmpty);
+
+      final second = await r.turn('₹350');
+      expect(r.provider.requests, hasLength(1));
+      expect(second.reply, '₹350 on Groceries added as an expense.');
+    });
+
+    test('clear ops proceed while the unclear one is asked about', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 300, 'category': 'Transport', 'note': 'uber'},
+          {'op': 'expense', 'category': 'Education', 'note': 'books'},
+        ], ask: 'How much were the books?'),
+      ]);
+      final result = await r.turn('spent 300 on uber and bought some books');
+      expect(result.actions.single.succeeded, isTrue);
+      expect(result.reply, '₹300 on Transport added as an expense.\nHow much were the books?');
+      final next = await r.turn('450');
+      expect(next.actions.single.proposal.input.toJson()['amount'], '450.00');
+      expect(next.actions.single.proposal.input.toJson()['note'], 'books');
+      expect(r.provider.requests, hasLength(1));
+      expect((await r.harness.snapshot()).transactions, hasLength(2));
+    });
+
+    test('an answer the app cannot resolve goes to the model with the open question as context', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'category': 'Gifts & Donations', 'note': 'gift'},
+        ], ask: 'How much was the gift?'),
+        plan([
+          {'op': 'expense', 'amount': 1200, 'category': 'Gifts & Donations', 'note': 'gift'},
+          {'op': 'expense', 'amount': 300, 'category': 'Shopping', 'note': 'wrapping'},
+        ]),
+      ]);
+      await r.turn('bought a gift');
+      final result = await r.turn('it was for my sister, 1200 for the gift and 300 for wrapping paper');
+      expect(r.provider.requests, hasLength(2));
+      final context = r.provider.requests.last.messages.first.content!;
+      expect(context, contains('Pending question you asked: "How much was the gift?"'));
+      expect(context, contains('"op":"expense"'));
+      expect(context, contains('Original message: "bought a gift"'));
+      expect(result.actions, hasLength(2));
+    });
+
+    test('an op that depends on an unanswered question waits with it instead of being skipped', () async {
+      final r = await rig([
+        plan([
+          {'op': 'category', 'id': 'o1', 'type': 'expense'},
+          {'op': 'expense', 'amount': 500, 'category': '@o1', 'note': 'dog food'},
+          {'op': 'expense', 'amount': 90, 'category': 'Food & Dining', 'note': 'chai'},
+        ]),
+        plan([
+          {'op': 'category', 'id': 'o1', 'name': 'Pets', 'type': 'expense'},
+          {'op': 'expense', 'amount': 500, 'category': '@o1', 'note': 'dog food'},
+        ]),
+      ]);
+      final first = await r.turn('new category for 500 of dog food, and chai 90');
+      expect(first.actions.single.proposal.input.toJson()['note'], 'chai');
+      expect(first.reply, '₹90 on Food & Dining added as an expense.\nWhat should the new category be called?');
+      expect(r.runner.memory.pending!.ops.map((o) => o.type), ['category', 'expense']);
+      final second = await r.turn('call it Pets');
+      expect(second.actions.map((a) => a.proposal.descriptor.id), ['categories.create', 'transactions.create']);
+      expect((await r.harness.snapshot()).transactions, hasLength(2));
+    });
+
+    test('a reused category note sits on the change that uses it', () async {
+      final r = await rig([
+        plan([
+          {'op': 'category', 'name': 'Groceries', 'type': 'expense'},
+        ]),
+      ]);
+      final result = await r.turn('create a groceries category');
+      expect(result.actions, isEmpty);
+      expect(result.reply, 'You already have a "Groceries" category, so I used it.');
+    });
+
+    test('a generic person is asked about instead of saved as "friend"', () async {
+      final r = await rig([
+        plan([
+          {'op': 'pending', 'dir': 'collect', 'person': 'friend', 'amount': 300},
+        ]),
+      ]);
+      final result = await r.turn('gave 300 to a friend, still pending');
+      expect(result.actions, isEmpty);
+      expect(result.reply, 'Who is this with?');
+    });
   });
 
-  test('instructions stay under the relay limit with many categories', () async {
-    final s = await h.snapshot();
-    final many = FinanceSnapshot(
-      today: s.today, monthStartDay: 1, profile: s.profile,
-      categories: [
-        for (var i = 0; i < 400; i++)
-          TransactionCategory(
-              id: 'cat_custom_$i', name: 'A rather long custom category name $i', type: TransactionType.expense,
-              iconKey: 'tag', colorIndex: 0),
-      ],
-      transactions: const [], budgets: const [], goals: const [], savingsMovements: const [], emergencyPlan: null,
-      loans: const [], loanPayments: const [], subscriptions: const [], pending: const [], settlements: const [],
-      assets: const [],
-    );
-    expect(AgentInstructions.build(many).length, lessThan(20000));
+  group('validation, failures and duplicates', () {
+    test('unusable model output is retried once, then reported without changing anything', () async {
+      final r = await rig([says('Sure! I will add that.'), says('{"ops": 5}')]);
+      final result = await r.turn('spent 450 on lunch');
+      expect(result.end, AgentTurnEnd.failed);
+      expect(result.reply, 'I couldn\'t work out what to do. Please rephrase.');
+      expect(r.provider.requests, hasLength(2));
+      expect(r.approvals, isEmpty);
+      expect(r.history.entries, isEmpty);
+    });
+
+    test('a retry after unusable output can still succeed', () async {
+      final r = await rig([
+        says('```json\n{"ops":[{"op":"expense"'),
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch'},
+        ]),
+      ]);
+      final result = await r.turn('spent 450 on lunch');
+      expect(result.actions.single.succeeded, isTrue);
+      expect(result.usage.calls, 2);
+    });
+
+    test('unknown op types are refused and the rest of the plan proceeds', () async {
+      final r = await rig([
+        plan([
+          {'op': 'transfer_money', 'amount': 500, 'to': 'Rahul'},
+          {'op': 'expense', 'amount': 90, 'category': 'Food & Dining', 'note': 'chai'},
+        ]),
+      ]);
+      final result = await r.turn('send 500 to Rahul and chai 90');
+      expect(result.actions.single.succeeded, isTrue);
+      expect(result.reply, contains('I can\'t do "transfer_money" yet.'));
+    });
+
+    test('a preview failure (validation by the backend) is reported, never shown for approval', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'date': 3},
+        ]),
+      ]);
+      final result = await r.turn('lunch 450 in 3 days');
+      expect(r.approvals, isEmpty);
+      expect(result.actions, isEmpty);
+      expect(result.reply, contains('Couldn\'t prepare "record a transaction"'));
+      expect(result.reply, contains('future'));
+    });
+
+    test('partial success: each outcome is reported truthfully and history says partial', () async {
+      final h = await ActionHarness.create();
+      final r = AgentRig(
+        h,
+        ScriptedProvider([
+          plan([
+            {'op': 'expense', 'amount': 250, 'category': 'Transport', 'note': 'auto'},
+            {'op': 'pending', 'dir': 'owe', 'person': 'Karan', 'amount': 1200, 'note': 'dinner'},
+          ]),
+        ]),
+        dispatcher: RefusingDispatcher(h.dispatcher, 'pending.create', const AppFailure.conflict('Karan\'s item was changed elsewhere.')),
+      );
+      final result = await r.turn('auto 250 and I owe Karan 1200 for dinner');
+      expect(result.actions.map((a) => a.status), [ActionResultStatus.completed, ActionResultStatus.failed]);
+      expect(result.reply, '₹250 on Transport added as an expense. Not done: Owe ₹1,200 · dinner '
+          '(Karan\'s item was changed elsewhere.).');
+      expect(r.history.entries.single.status, AgentRunStatus.partial);
+      expect(r.history.entries.single.summary, '1 of 2 saved, 1 not saved');
+    });
+
+    test('a lost reply is "not confirmed"; sending the same request again replays instead of writing twice', () async {
+      final h = await ActionHarness.create();
+      final flaky = FlakyDispatcher(h.dispatcher);
+      final lunch = {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch'};
+      final r = AgentRig(h, ScriptedProvider([plan([lunch]), plan([lunch])]), dispatcher: flaky);
+
+      final first = await r.turn('spent 450 on lunch');
+      expect(first.actions.single.status, ActionResultStatus.failed);
+      expect(first.actions.single.outcomeUnknown, isTrue);
+      final second = await r.turn('spent 450 on lunch');
+      expect(second.actions.single.status, ActionResultStatus.alreadyDone);
+      expect(second.actions.single.proposal.idempotencyKey, first.actions.single.proposal.idempotencyKey);
+      expect((await h.snapshot()).transactions, hasLength(1));
+      expect(flaky.attemptsByKey.values.single, 2);
+    });
+
+    test('a deliberate repeat in a later turn is a new write, flagged as a possible duplicate', () async {
+      final lunch = {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch'};
+      final r = await rig([plan([lunch]), plan([lunch])]);
+      final first = await r.turn('spent 450 on lunch');
+      final second = await r.turn('spent 450 on lunch again');
+      expect(second.actions.single.proposal.idempotencyKey, isNot(first.actions.single.proposal.idempotencyKey));
+      expect(second.actions.single.proposal.notes.single, contains('already recorded an identical entry'));
+      expect((await r.harness.snapshot()).transactions, hasLength(2));
+    });
+
+    test('two identical ops in one message are both offered, with a note to exclude one', () async {
+      final parking = {'op': 'expense', 'amount': 50, 'category': 'Transport', 'note': 'parking'};
+      final r = await rig([plan([parking, parking])]);
+      final result = await r.turn('paid 50 for parking twice');
+      expect(result.actions, hasLength(2));
+      expect(result.actions[0].proposal.stepId, isNot(result.actions[1].proposal.stepId));
+      expect(result.actions[1].proposal.notes.single, startsWith('Same as another change'));
+    });
+
+    test('declining writes nothing and records a declined history entry', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Food & Dining'},
+        ]),
+      ]);
+      final result = await r.turn('spent 450 on lunch', approve: r.declineAll);
+      expect(result.actions.single.status, ActionResultStatus.declined);
+      expect(result.reply, 'Not done: Spent ₹450.');
+      expect((await r.harness.snapshot()).transactions, isEmpty);
+      expect(r.history.entries.single.status, AgentRunStatus.declined);
+    });
+
+    test('stopping during review runs nothing', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Food & Dining'},
+        ]),
+      ]);
+      final token = CancellationToken();
+      final result = await r.turn('spent 450 on lunch', cancel: token, approve: (p) {
+        token.cancel();
+        return Future<Set<String>>.delayed(const Duration(seconds: 5), () => {p.single.id});
+      });
+      expect(result.end, AgentTurnEnd.cancelled);
+      expect(result.actions.single.status, ActionResultStatus.cancelled);
+      expect((await r.harness.snapshot()).transactions, isEmpty);
+    });
+
+    test('model outages are retried once, then reported', () async {
+      const outage = LlmException(LlmErrorKind.unavailable, 'The assistant is unavailable right now.', retryable: true);
+      final r = await rig([outage, outage]);
+      final result = await r.turn('spent 450 on lunch');
+      expect(result.end, AgentTurnEnd.failed);
+      expect(result.reply, 'The assistant is unavailable right now.');
+      expect(r.provider.requests, hasLength(2));
+    });
+
+    test('invented payment methods and shops are dropped', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 200, 'category': 'Food & Dining', 'note': 'coffee', 'method': 'cash', 'party': 'Starbucks'},
+        ]),
+      ]);
+      final result = await r.turn('spent 200 on coffee');
+      final input = result.actions.single.proposal.input.toJson();
+      expect(input['paymentMethod'], isNull);
+      expect(input['counterparty'], isNull);
+    });
+
+    test('a stated payment method and shop are kept', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 200, 'category': 'Food & Dining', 'method': 'upi', 'party': 'Starbucks'},
+        ]),
+      ]);
+      final result = await r.turn('paid 200 at Starbucks via gpay');
+      final input = result.actions.single.proposal.input.toJson();
+      expect(input['paymentMethod'], 'upi');
+      expect(input['counterparty'], 'Starbucks');
+    });
   });
 
-  test('over-long input is refused without calling the model', () async {
-    final provider = ScriptedProvider([]);
-    final result = await AgentRig(h, provider).turn('x' * 5000);
-    expect(result.end, AgentTurnEnd.failed);
-    expect(provider.requests, isEmpty);
+  group('answers without extra model calls', () {
+    test('a data question is answered by the app from the one plan call', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Food & Dining'},
+          {'op': 'expense', 'amount': 120, 'category': 'Food & Dining', 'date': -1},
+        ]),
+        plan([
+          {'op': 'q', 'metric': 'spent', 'category': 'Food & Dining', 'period': 'month'},
+        ]),
+      ]);
+      await r.turn('lunch 450 and dinner 120 yesterday');
+      final result = await r.turn('how much have I spent on food this month?');
+      expect(r.provider.requests, hasLength(2));
+      expect(result.reply, 'You spent ₹570 on Food & Dining this month (1 Oct–31 Oct), across 2 entries.');
+      expect(r.history.entries, hasLength(1)); // questions are not history
+    });
+
+    test('history and balance questions need no model call at all', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch'},
+        ]),
+      ]);
+      await r.turn('spent 450 on lunch');
+      final history = await r.turn('what did I ask you to do today?');
+      expect(history.reply, 'Here is what you asked me today:\n• today 09:00: "spent 450 on lunch" — 1 change saved.');
+      final balance = await r.turn("what's my balance?");
+      expect(balance.reply, startsWith('You have ₹99,550 available to spend'));
+      expect(r.provider.requests, hasLength(1));
+      expect(balance.usage.calls, 0);
+    });
+
+    test('the model sees neither records nor history', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'secret lunch'},
+        ]),
+        plan([
+          {'op': 'expense', 'amount': 90, 'category': 'Food & Dining'},
+        ]),
+      ]);
+      await addPending(r.harness, counterparty: 'Neha', rupees: 850);
+      await r.turn('spent 450 on lunch');
+      await r.turn('chai 90');
+      final sent = r.provider.requests.last.messages.map((m) => m.content).join('\n');
+      expect(sent, isNot(contains('Neha')));
+      expect(sent, isNot(contains('pend_')));
+      expect(sent, isNot(contains('tx_')));
+      // Only the bounded follow-up context names the last change.
+      expect(sent, contains('Recent (already saved; refer by #n): #1 ₹450 on Food & Dining added as an expense'));
+    });
+  });
+
+  group('follow-ups', () {
+    test('"make that 400" edits the change it refers to, keeping its other fields', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch'},
+        ]),
+        plan([
+          {
+            'op': 'edit',
+            'target': '#1',
+            'set': {'amount': 400},
+          },
+        ]),
+      ]);
+      await r.turn('spent 450 on lunch');
+      final result = await r.turn('actually make that 400');
+      expect(result.actions.single.proposal.descriptor.id, 'transactions.update');
+      final tx = (await r.harness.snapshot()).transactions.single;
+      expect((tx.amount, tx.categoryId, tx.note), (const Money.rupees(400), 'cat_food', 'lunch'));
+      expect(r.provider.requests, hasLength(2));
+    });
+
+    test('"undo that" is explained, never executed', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Food & Dining'},
+        ]),
+        plan([
+          {'op': 'undo', 'target': '#1'},
+        ]),
+      ]);
+      await r.turn('spent 450 on lunch');
+      final result = await r.turn('undo that');
+      expect(result.actions, isEmpty);
+      expect(result.reply, startsWith('I can\'t delete records.'));
+      expect((await r.harness.snapshot()).transactions, hasLength(1));
+    });
+
+    test('relative dates use the user\'s configured "today"', () async {
+      final h = await ActionHarness.create();
+      final r = AgentRig(h, ScriptedProvider([]));
+      final provider = ScriptedProvider([
+        plan([
+          {'op': 'expense', 'amount': 100, 'category': 'Transport', 'date': -1},
+        ]),
+      ]);
+      final runner = AgentRunner(
+        provider: provider,
+        gateway: r.gateway,
+        registry: r.runner.registry,
+        loadSnapshot: h.snapshot,
+        conversationId: 'c_tz',
+        // The server's zone is already on 11 Oct while the device says 10 Oct.
+        userToday: () => DateTime(2026, 10, 11),
+      );
+      final result = await runner.runTurn('auto 100 yesterday', approve: r.approveAll);
+      expect(provider.requests.single.messages.first.content, contains('Today: Sun 2026-10-11.'));
+      expect(result.actions.single.proposal.input.toJson()['date'], '2026-10-10');
+    });
   });
 }

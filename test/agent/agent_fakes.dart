@@ -4,15 +4,13 @@ import 'package:finn/actions/action.dart';
 import 'package:finn/actions/action_registry.dart';
 import 'package:finn/actions/dispatcher.dart';
 import 'package:finn/agent/agent_config.dart';
+import 'package:finn/agent/execution/plan_gateway.dart';
 import 'package:finn/agent/execution/proposals.dart';
-import 'package:finn/agent/execution/tool_executor.dart';
+import 'package:finn/agent/history/agent_history.dart';
 import 'package:finn/agent/llm/llm_provider.dart';
 import 'package:finn/agent/orchestration/agent_runner.dart';
-import 'package:finn/agent/orchestration/conversation.dart';
-import 'package:finn/agent/tools/agent_tool.dart';
-import 'package:finn/agent/tools/tool_catalog.dart';
-import 'package:finn/agent/tools/tool_groups.dart';
 import 'package:finn/app/di/action_catalog.dart';
+import 'package:finn/core/ids/id_generator.dart';
 import 'package:finn/core/money/money.dart';
 import 'package:finn/core/result/result.dart';
 import 'package:finn/features/pending/application/pending_actions.dart';
@@ -21,13 +19,12 @@ import 'package:finn/features/pending/domain/pending_payment.dart';
 import '../actions/action_harness.dart';
 
 /// A model that replies from a script and records every request, so tests
-/// drive the real agent loop without a network.
+/// drive the real agent without a network.
 class ScriptedProvider implements LlmProvider {
   ScriptedProvider(List<Object> script) : _script = List.of(script);
 
   /// Each entry is an [LlmResponse], an [LlmException] to throw, or a
-  /// function `LlmResponse Function(LlmRequest)` for replies that depend on
-  /// earlier tool results.
+  /// function `LlmResponse Function(LlmRequest)`.
   final List<Object> _script;
   final List<LlmRequest> requests = [];
 
@@ -50,52 +47,68 @@ class ScriptedProvider implements LlmProvider {
   }
 }
 
-int _callSeq = 0;
+/// The model's JSON plan reply.
+LlmResponse plan(List<Map<String, Object?>> ops, {String? ask, String? reply}) => LlmResponse(
+  text: jsonEncode({'ops': ops, 'ask': ?ask, 'reply': ?reply}),
+  usage: const LlmUsage(inputTokens: 1600, cachedInputTokens: 1460, outputTokens: 40, calls: 1),
+);
 
-LlmToolCall toolCall(String name, Map<String, Object?> args, {String? id}) =>
-    LlmToolCall(id: id ?? 'call_${_callSeq++}', name: name, arguments: jsonEncode(args));
+LlmResponse says(String text) => LlmResponse(text: text, usage: const LlmUsage(calls: 1));
 
-LlmResponse callsTools(List<LlmToolCall> calls) =>
-    LlmResponse(toolCalls: calls, finishReason: LlmFinishReason.toolCalls);
+/// Counts plan gateway calls (in remote mode, each is one FiNN API request).
+class CountingGateway implements PlanGateway {
+  CountingGateway(this.inner);
+  final PlanGateway inner;
+  int previews = 0;
+  int executions = 0;
+  final List<List<PlanStep>> previewed = [];
+  final List<HistoryWrite?> histories = [];
 
-LlmResponse says(String text) => LlmResponse(text: text);
+  @override
+  Future<List<StepPreview>> preview(String planId, List<PlanStep> steps) {
+    previews++;
+    previewed.add(steps);
+    return inner.preview(planId, steps);
+  }
 
-/// Decoded tool results the model received in [request], keyed by call id.
-Map<String, Map<String, Object?>> toolResultsIn(LlmRequest request) => {
-  for (final m in request.messages)
-    if (m.role == LlmRole.tool) m.toolCallId!: Map<String, Object?>.from(jsonDecode(m.content!) as Map),
-};
+  @override
+  Future<List<StepResult>> execute(
+    String planId,
+    List<PlanStep> steps, {
+    required Map<String, String> approved,
+    HistoryWrite? history,
+  }) {
+    executions++;
+    histories.add(history);
+    return inner.execute(planId, steps, approved: approved, history: history);
+  }
+}
 
-/// Wires the real toolbox, executor and runner onto an [ActionHarness]
-/// (local dispatcher, in-memory data).
+/// Wires the real runner onto an [ActionHarness] (local dispatcher,
+/// in-memory data and history).
 class AgentRig {
   AgentRig(this.harness, this.provider, {OperationDispatcher? dispatcher, AgentConfig config = const AgentConfig()}) {
-    final registry = ActionRegistry(allActions);
-    toolbox = AgentToolbox.standard(registry);
-    executor = ToolExecutor(
-      toolbox: toolbox,
-      dispatcher: dispatcher ?? harness.dispatcher,
-      context: ToolContext(loadSnapshot: harness.snapshot, selection: selection),
-      sessionId: 'c1',
-      maxCallsPerStep: config.maxToolCallsPerStep,
+    history = InMemoryAgentHistory();
+    gateway = CountingGateway(
+      DispatcherPlanGateway(dispatcher ?? harness.dispatcher, history: history, now: harness.clock.now),
     );
     runner = AgentRunner(
       provider: provider,
-      executor: executor,
-      toolbox: toolbox,
+      gateway: gateway,
+      registry: ActionRegistry(allActions),
       loadSnapshot: harness.snapshot,
-      conversation: Conversation(id: 'c1'),
-      selection: selection,
+      conversationId: 'c_test',
+      now: harness.clock.now,
+      history: history,
+      ids: SequentialIdGenerator(),
       config: config,
     );
   }
 
-  final ToolSelection selection = ToolSelection();
-
   final ActionHarness harness;
   final ScriptedProvider provider;
-  late final AgentToolbox toolbox;
-  late final ToolExecutor executor;
+  late final InMemoryAgentHistory history;
+  late final CountingGateway gateway;
   late final AgentRunner runner;
 
   /// Proposals shown to the "user" in order.
@@ -134,16 +147,27 @@ Future<PendingPayment> addPending(
   ),
 );
 
-/// A dispatcher whose writes fail like a dropped connection, while
-/// previews work normally. Counts write attempts per idempotency key.
+/// A dispatcher whose writes succeed but whose replies are lost (like a
+/// dropped connection), while previews work normally. Counts attempts per
+/// idempotency key.
 class FlakyDispatcher extends OperationDispatcher {
-  FlakyDispatcher(OperationDispatcher inner, {this.failures = 1})
+  FlakyDispatcher(OperationDispatcher inner, {this.failures = 1, this.failActionId})
     : _inner = inner,
       super(environment: inner.environment);
 
   final OperationDispatcher _inner;
   int failures;
+
+  /// Only writes of this action are affected (all when null).
+  final String? failActionId;
   final Map<String, int> attemptsByKey = {};
+
+  @override
+  Future<Result<ActionPreview>> preview<I extends ActionInput, O>(
+    FinancialAction<I, O> action,
+    I input, {
+    ActionChannel channel = ActionChannel.ui,
+  }) => _inner.preview(action, input, channel: channel);
 
   @override
   Future<ActionOutcome<O>> dispatch<I extends ActionInput, O>(
@@ -161,11 +185,41 @@ class FlakyDispatcher extends OperationDispatcher {
       confirmation: confirmation,
       channel: channel,
     );
-    if (failures > 0 && out is ActionCompleted<O>) {
-      // The write happened, but the reply was lost.
+    final affected = failActionId == null || failActionId == action.descriptor.id;
+    if (affected && failures > 0 && out is ActionCompleted<O>) {
       failures--;
       return const ActionRejected(AppFailure.unavailable('Could not reach FiNN. Check your connection and try again.'));
     }
     return out;
+  }
+}
+
+/// A dispatcher whose writes of [actionId] are refused by the "server".
+class RefusingDispatcher extends OperationDispatcher {
+  RefusingDispatcher(OperationDispatcher inner, this.actionId, this.failure)
+    : _inner = inner,
+      super(environment: inner.environment);
+
+  final OperationDispatcher _inner;
+  final String actionId;
+  final AppFailure failure;
+
+  @override
+  Future<Result<ActionPreview>> preview<I extends ActionInput, O>(
+    FinancialAction<I, O> action,
+    I input, {
+    ActionChannel channel = ActionChannel.ui,
+  }) => _inner.preview(action, input, channel: channel);
+
+  @override
+  Future<ActionOutcome<O>> dispatch<I extends ActionInput, O>(
+    FinancialAction<I, O> action,
+    I input, {
+    required String idempotencyKey,
+    ActionConfirmation? confirmation,
+    ActionChannel channel = ActionChannel.ui,
+  }) async {
+    if (action.descriptor.id == actionId) return ActionRejected(failure);
+    return _inner.dispatch(action, input, idempotencyKey: idempotencyKey, confirmation: confirmation, channel: channel);
   }
 }

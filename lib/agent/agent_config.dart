@@ -1,51 +1,27 @@
 import 'package:flutter/foundation.dart';
 
-/// Runtime limits for the agent. Model choice, reasoning effort and token
-/// caps on the provider side are configured on the FiNN API relay (see
-/// `finn-backend` env `OPENAI_*` / `AGENT_*`), so a model change never needs an
-/// app release.
+/// Runtime limits for the agent. Model choice, reasoning effort, prompt
+/// caching and the token ceiling on the provider side are configured on the
+/// FiNN API relay (see `finn-backend` env `OPENAI_*` / `AGENT_*`), so a
+/// model change never needs an app release.
 @immutable
 class AgentConfig {
   const AgentConfig({
-    // gpt-6-luna makes parallel tool calls; models without them batch
-    // actions through queue_actions.
-    this.maxModelCallsPerTurn = 10,
-    this.maxToolCallsPerStep = 8,
-    this.maxToolCallsPerTurn = 24,
-    this.maxOutputTokens = 1536,
-    // Paid OpenAI key (2M tokens per minute), so the window is sized for
-    // context, not rate limits. Every step resends it, so it still costs
-    // per token.
-    this.maxHistoryTurns = 12,
-    this.maxHistoryChars = 32000,
+    // A 12-op plan with notes is about 450 tokens; there are no reasoning
+    // tokens at effort "none".
+    this.maxOutputTokens = 700,
     this.maxUserMessageChars = 2000,
     this.requestTimeout = const Duration(seconds: 75),
     this.transientRetries = 1,
+    this.invalidPlanRetries = 1,
+    this.maxWaves = 3,
     this.defaultRateLimitWait = const Duration(seconds: 5),
-    // Rare on the paid tier; kept so a burst still finishes quietly. Waits
-    // are routine pacing, not failures: the turn keeps going until the
-    // budget is spent.
     this.maxRateLimitWait = const Duration(seconds: 60),
     this.rateLimitWaitBudget = const Duration(seconds: 150),
   });
 
-  /// Model round trips in one user turn (tool loop limit).
-  final int maxModelCallsPerTurn;
-
-  /// Tool calls handled from one model response.
-  final int maxToolCallsPerStep;
-
-  /// Tool calls handled in one user turn.
-  final int maxToolCallsPerTurn;
-
   /// Requested cap on output per model call (includes reasoning tokens).
   final int maxOutputTokens;
-
-  /// Earlier user turns kept as conversation context.
-  final int maxHistoryTurns;
-
-  /// Rough cap on the size of the conversation sent to the model.
-  final int maxHistoryChars;
 
   final int maxUserMessageChars;
 
@@ -53,8 +29,16 @@ class AgentConfig {
   final Duration requestTimeout;
 
   /// Automatic retries of a model call after a timeout or outage. Model
-  /// calls have no side effects; tool mutations are never retried.
+  /// calls have no side effects.
   final int transientRetries;
+
+  /// Extra model calls when the reply is not a usable JSON plan (the only
+  /// case where asking again can fix the answer).
+  final int invalidPlanRetries;
+
+  /// Rounds of dependent changes in one turn (e.g. a new category, then the
+  /// expense filed under it). Each round is one review and one backend call.
+  final int maxWaves;
 
   /// Wait before retrying after a rate limit without a hint.
   final Duration defaultRateLimitWait;
@@ -62,7 +46,6 @@ class AgentConfig {
   /// Longer requested waits are not retried; the user is told instead.
   final Duration maxRateLimitWait;
 
-  /// Total rate-limit waiting allowed in one user turn, across all its
-  /// model calls.
+  /// Total rate-limit waiting allowed in one user turn.
   final Duration rateLimitWaitBudget;
 }

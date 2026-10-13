@@ -208,16 +208,9 @@ void main() {
     final env = await TestEnv.create();
     final capture = FakeCapture();
     final provider = ScriptedProvider([
-      callsTools([
-        toolCall('record_transaction', {
-          'type': 'expense',
-          'amount': '450',
-          'categoryId': 'cat_food',
-          'date': '2026-10-10',
-          'paymentMethod': 'upi',
-        }),
+      plan([
+        {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch'},
       ]),
-      says('I will record ₹450 for lunch.'),
     ]);
     await tester.pumpWidget(
       ProviderScope(

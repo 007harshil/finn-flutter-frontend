@@ -3,18 +3,14 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../actions/action.dart';
 import '../../app/di/action_providers.dart';
+import '../../app/di/core_providers.dart';
 import '../../core/ids/id_generator.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../execution/proposals.dart';
-import '../execution/tool_executor.dart';
 import '../llm/llm_provider.dart';
 import '../orchestration/agent_events.dart';
 import '../orchestration/agent_runner.dart';
-import '../orchestration/conversation.dart';
-import '../tools/agent_tool.dart';
-import '../tools/tool_groups.dart';
 import 'agent_providers.dart';
 
 enum AgentStatus { idle, thinking, awaitingApproval, executing }
@@ -111,29 +107,17 @@ class AgentController extends Notifier<AgentViewState> {
     return AgentViewState(available: provider != null);
   }
 
-  AgentRunner _runnerFor(LlmProvider provider) => _runner ??= () {
-    final env = ref.read(actionEnvironmentProvider);
-    final config = ref.read(agentConfigProvider);
-    final toolbox = ref.read(agentToolboxProvider);
-    final conversationId = RandomIdGenerator().next('c');
-    final selection = ToolSelection();
-    return AgentRunner(
-      selection: selection,
-      provider: provider,
-      toolbox: toolbox,
-      loadSnapshot: env.loadSnapshot,
-      conversation: Conversation(id: conversationId),
-      config: config,
-      executor: ToolExecutor(
-        toolbox: toolbox,
-        dispatcher: ref.read(actionDispatcherProvider),
-        context: ToolContext(loadSnapshot: env.loadSnapshot, selection: selection),
-        sessionId: conversationId,
-        channel: ActionChannel.agent,
-        maxCallsPerStep: config.maxToolCallsPerStep,
-      ),
-    );
-  }();
+  AgentRunner _runnerFor(LlmProvider provider) => _runner ??= AgentRunner(
+    provider: provider,
+    gateway: ref.read(agentPlanGatewayProvider),
+    registry: ref.read(actionRegistryProvider),
+    loadSnapshot: ref.read(actionEnvironmentProvider).loadSnapshot,
+    conversationId: RandomIdGenerator().next('c'),
+    userToday: ref.read(agentTodayProvider),
+    now: () => ref.read(clockProvider).now(),
+    history: ref.read(agentHistoryProvider),
+    config: ref.read(agentConfigProvider),
+  );
 
   /// Sends a request. Ignored while a turn is running (no duplicate
   /// submissions).

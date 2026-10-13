@@ -15,8 +15,8 @@ class LlmToolCall {
   final String id;
   final String name;
 
-  /// Raw JSON text as produced by the model. Never trusted: the tool
-  /// executor parses and validates it.
+  /// Raw JSON text as produced by the model. Never trusted: the caller
+  /// parses and validates it.
   final String arguments;
 }
 
@@ -63,6 +63,16 @@ class LlmToolSpec {
 
 enum LlmToolChoice { auto, none, required }
 
+/// What the reply must contain.
+enum LlmOutputFormat {
+  /// Free text (and tool calls when tools are offered).
+  text,
+
+  /// A single JSON object. The instructions describe its shape; the caller
+  /// still validates it (providers guarantee syntax at most).
+  json,
+}
+
 @immutable
 class LlmRequest {
   const LlmRequest({
@@ -72,9 +82,12 @@ class LlmRequest {
     this.toolChoice = LlmToolChoice.auto,
     this.parallelToolCalls,
     this.maxOutputTokens,
+    this.output = LlmOutputFormat.text,
   });
 
-  /// System instructions for this request.
+  /// System instructions for this request. Keep them identical across
+  /// requests (no dates, names or user data): providers cache a stable
+  /// prefix, and per-request context belongs in [messages].
   final String instructions;
   final List<LlmMessage> messages;
   final List<LlmToolSpec> tools;
@@ -83,6 +96,7 @@ class LlmRequest {
   /// Null leaves the provider default (some models ignore or reject it).
   final bool? parallelToolCalls;
   final int? maxOutputTokens;
+  final LlmOutputFormat output;
 }
 
 enum LlmFinishReason {
@@ -99,14 +113,42 @@ enum LlmFinishReason {
   other,
 }
 
+/// Token counts of one or more model calls, as the provider reports them.
 @immutable
 class LlmUsage {
-  const LlmUsage({this.inputTokens = 0, this.outputTokens = 0});
+  const LlmUsage({
+    this.inputTokens = 0,
+    this.outputTokens = 0,
+    this.cachedInputTokens = 0,
+    this.cacheWriteTokens = 0,
+    this.reasoningTokens = 0,
+    this.calls = 0,
+  });
+
+  /// All input tokens, cached ones included.
   final int inputTokens;
+
+  /// All output tokens, reasoning included.
   final int outputTokens;
 
-  LlmUsage operator +(LlmUsage o) =>
-      LlmUsage(inputTokens: inputTokens + o.inputTokens, outputTokens: outputTokens + o.outputTokens);
+  /// Input tokens read from the provider's prompt cache (billed lower).
+  final int cachedInputTokens;
+
+  /// Input tokens written to the prompt cache.
+  final int cacheWriteTokens;
+  final int reasoningTokens;
+
+  /// Model requests these counts cover.
+  final int calls;
+
+  LlmUsage operator +(LlmUsage o) => LlmUsage(
+    inputTokens: inputTokens + o.inputTokens,
+    outputTokens: outputTokens + o.outputTokens,
+    cachedInputTokens: cachedInputTokens + o.cachedInputTokens,
+    cacheWriteTokens: cacheWriteTokens + o.cacheWriteTokens,
+    reasoningTokens: reasoningTokens + o.reasoningTokens,
+    calls: calls + o.calls,
+  );
 }
 
 @immutable
@@ -117,6 +159,7 @@ class LlmResponse {
     this.finishReason = LlmFinishReason.stop,
     this.usage = const LlmUsage(),
     this.providerState,
+    this.refusal,
   });
 
   final String? text;
@@ -126,6 +169,9 @@ class LlmResponse {
 
   /// Opaque replay data; copied into [LlmMessage.assistant].
   final Object? providerState;
+
+  /// The model declined to answer (a safety refusal); safe to show.
+  final String? refusal;
 
   /// The assistant message to append to the conversation.
   LlmMessage toMessage() => LlmMessage.assistant(text: text, toolCalls: toolCalls, providerState: providerState);

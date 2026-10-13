@@ -1,8 +1,8 @@
 # FiNN assistant (agent module)
 
-The assistant turns natural-language requests into real record-keeping operations. For example: "spent 450 on lunch and Rahul paid back the 2,000". It works through LLM tool calling. Every write goes through the existing action layer, and in remote mode through the FiNN API, only after the user approves the app's own preview of it.
+The assistant turns natural-language requests into real record-keeping operations. For example: "spent 450 on lunch and Rahul paid back the 2,000". One model request turns the whole message into a structured plan; ordinary code resolves, validates and executes it. Every write goes through the existing action layer, and in remote mode through the FiNN API, only after the user approves the app's own preview of it.
 
-Code: `lib/agent/`. Tests: `test/agent/`. Backend relay: `finn-backend` `POST /api/v1/agent/completions`.
+Code: `lib/agent/`. Tests: `test/agent/`. Backend: `finn-backend` `POST /api/v1/agent/completions` (LLM relay), `POST /api/v1/plans/preview|execute` (execution), `GET|DELETE /api/v1/agent/history`.
 
 ## Setup
 
@@ -15,8 +15,9 @@ Code: `lib/agent/`. Tests: `test/agent/`. Backend relay: `finn-backend` `POST /a
    | `OPENAI_FALLBACK_MODELS` | (none) | Comma-separated models tried in order when the model before them is rate limited (429). They get the same request, including `reasoning_effort`. |
    | `OPENAI_REASONING_EFFORT` | `none` | `off` (param not sent) \| `none` \| `minimal` \| `low` \| `medium` \| `high` \| `xhigh`. gpt-6-luna accepts function tools on Chat Completions only with `none` (it reasons by default, so `off` fails too). |
    | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Chat Completions at `/chat/completions` |
+   | `OPENAI_PROMPT_CACHE` | `explicit` | One cache breakpoint after the static system message (see Model choice); `implicit` = provider default |
    | `OPENAI_TIMEOUT_MS` | `60000` | Upstream timeout (the route's `maxDuration` is 75 s) |
-   | `AGENT_MAX_OUTPUT_TOKENS` | `2048` | Cap on `max_completion_tokens` |
+   | `AGENT_MAX_OUTPUT_TOKENS` | `2048` | Ceiling for `max_completion_tokens` (the app asks for 700) |
    | `AGENT_RATE_LIMIT_PER_MINUTE` / `AGENT_DAILY_REQUEST_LIMIT` | `20` / `300` | Per-user limits, kept in memory on each server instance |
    | `GROQ_API_KEY` / `GROQ_BASE_URL` | (unset = voice disabled) / `https://api.groq.com/openai/v1` | Groq key for speech-to-text only. **Server only.** |
    | `GROQ_STT_MODEL` | `whisper-large-v3` | Speech-to-text model (voice input) |
@@ -41,99 +42,131 @@ Code: `lib/agent/`. Tests: `test/agent/`. Backend relay: `finn-backend` `POST /a
   - One card per change: a module icon and colour, a "MODULE · VERB" eyebrow, the app's own summary, the amount in large type, and detail chips.
   - Before → after strips for preview lines such as `Available to spend ₹10,000 → ₹9,550`, plus *Moves money* / *Cannot be undone* pills and warnings.
   - Each card can be excluded on its own. Nothing is written until **Approve**.
-- **Final summary.** `OutcomeSummary` (`widgets/outcome_summary.dart`) shows "All N changes saved", "X of N saved" or "No changes made", with a segmented status bar (one segment per change) and a row per change with its real dispatcher status.
+- **Final summary.** `OutcomeSummary` (`widgets/outcome_summary.dart`) shows "All N changes saved", "X of N saved" or "No changes made", with a segmented status bar (one segment per change) and a row per change with the status the backend confirmed.
+
+- **History.** The clock button in the top bar opens `AgentHistorySheet` (`widgets/history_sheet.dart`): what the user asked, when, and what was saved, newest first, 20 per page ("Show older"), filtered by All / Saved / Partly saved / Not saved / Declined. Tapping an entry shows each operation's status and failure reason. "Clear history" deletes the list (records are untouched).
 
 ### Model choice
 
-**Current (2026-10-13): OpenAI `gpt-6-luna` on a paid key** (account limits about 5,000 requests and 2M tokens per minute). It makes parallel tool calls, so free-tier rate limits no longer shape the design. The app window is 12 turns / 32,000 characters. The token-saving design below (tool groups, `queue_actions`, one card per turn) stays because every token is billed. The history below describes the earlier Groq setup.
+**OpenAI `gpt-6-luna`, `reasoning_effort: none`, on a paid key.** Chosen by measurement (2026-10-13, the same 24 FiNN requests and single-plan prompt for each model, plans graded by hand):
 
-Earlier (Groq free tier): `openai/gpt-oss-20b` is the default. It is a production model on Groq, available on the free tier, lightweight and built for tool use, and it is the cheapest Groq model that supports tool calling. For better accuracy on complex requests, set `GROQ_MODEL=openai/gpt-oss-120b`; it has the same limits and API. Both make one tool call per step (no parallel calls). Several actions therefore go into one `queue_actions` call (see below) instead of one step each.
+| Model | Price per 1M (input / cached / output) | Correct plans | Notable errors |
+|---|---|---|---|
+| `gpt-6-luna` (`none`) | $0.10 / $0.01 / $0.50 | 24 / 24 | none |
+| `gpt-5-nano` (`minimal`) | $0.05 / $0.005 / $0.40 | 15 / 24 | "make that 400" became a new expense, 1.2L read as 12,00,000, invented a goal withdrawal, a future date |
+| `gpt-4.1-nano` | $0.10 / $0.025 / $0.40 | 18 / 24 | the ₹300 given to Utsav recorded as a debt the user owes, "petrol yesterday" dated today, an extra goal op, Netflix renewal as a plain expense |
 
-Groq's free tier allows about **8,000 tokens per minute** per model, and every step resends the whole request (about 2.5k tokens). The module is designed around that limit:
-- **One call for many actions.** `queue_actions` carries every action of a message. With `done: true` the runner opens the review card straight away, without a closing model call.
-- Tools load in groups (see below), and the instructions and schemas are compact.
-- One review card per turn. The final report is built from the confirmed outcomes without another model call.
-- **Fallback model.** When the main model is rate limited, the relay sends the same request to `GROQ_FALLBACK_MODELS` at once. A model that was just rate limited is skipped until its `retry-after` passes.
-- **Quiet pacing.** If every model is rate limited, the app waits for the requested time and carries on. It shows "Still working on it…", not an error. A single wait may last up to 60 s, and all waits in one turn together up to 150 s. Only a longer wait, such as a daily limit, ends the turn with a message.
+`gpt-6-luna` is the cheapest model that meets the accuracy bar, and `none` adds no reasoning tokens (billed as output). The relay's default is unchanged (`OPENAI_MODEL=gpt-6-luna`, `OPENAI_REASONING_EFFORT=none`).
 
-Live checks (2026-10-13, `gpt-oss-20b`):
-
-| Request | Before | Now |
-|---|---|---|
-| "bought vegetables of 70rs, milk of 150rs, petrol 400, added netflix premium 179 yesterday" | 10 calls, about 15.6k tokens, 4 rate-limit waits, 72 s | 1 call, about 2.9k tokens, no waits, 4 actions on one card (4 of 4 runs) |
-| "Rahul paid back the 2000 and I spent 300 on an auto" | 4 calls, about 6.6k tokens | 2 calls (lookup, then batch), about 4.4k tokens |
-| "Create a category called Pets and record 500 on dog food in it" | stopped after the category; the expense was dropped | 3 calls, 2 review cards, both saved |
-
-The free tier also has a **daily** cap per model (about 200k tokens and 1,000 requests for `gpt-oss-20b`). When it is reached, Groq asks for a wait of many minutes. The relay then serves from the fallback model, which has its own daily cap, until the main model is available again.
+**Prompt caching.** Cached input costs a tenth of normal input, and on GPT-5.6+ a cache *write* costs 1.25×. So the request is split: a static system message (`agentInstructions`, 1,474 tokens, identical for every user and day, just over the 1,024-token cache minimum) and a small per-request context after it. The relay sends `prompt_cache_options: {mode: "explicit"}` with one breakpoint at the end of the system message (`OPENAI_PROMPT_CACHE=explicit`), so only the shared prefix is ever written to the cache and the per-request part is billed at the plain rate. Verified live: 1,474 cached tokens and 0 cache-write tokens on every warm request.
 
 ## How a request flows
 
 ```
-AgentScreen ──send──▶ AgentController ──▶ AgentRunner
-                                              │  LlmRequest (provider-neutral)
-                                              ▼
-                                         LlmProvider ── GroqChatProvider ──▶ FinnRelayTransport (ApiClient, user's session)
-                                              │                                   ▼
-                                              │                    FiNN API relay (adds key, model) ──▶ Groq /chat/completions
-                                              │  tool calls
-                                              ▼
-                                         ToolExecutor
-                                           ├─ read tools ──▶ FinanceSnapshot (data the app already synced)
-                                           └─ action tools ──▶ validate + preview ──▶ queue
-                                                                                   │ (model finished)
-                                                       ApprovalCard (all queued) ◀─┘
-                                                              ▼ approved
-                                                       OperationDispatcher (channel: agent, fingerprint, idempotency key)
-                                                       → RemoteOperationDispatcher → POST /actions/{id}
+AgentScreen ─send─▶ AgentController ─▶ AgentRunner
+                                          │ 1. LocalIntents: history / balance question,
+                                          │    or an answer to an open question → no model call
+                                          │ 2. one LlmRequest (JSON output) ─▶ LlmProvider ─▶ ChatCompletionsProvider
+                                          │                                       ─▶ FinnRelayTransport ─▶ relay ─▶ OpenAI
+                                          │ 3. PlanParser + op_catalog: resolve every op locally (dates, amounts,
+                                          │    categories, pending items, goals, loans, transactions)
+                                          │ 4. PlanGateway.preview (one POST /plans/preview)
+                                          ▼
+                                     ChangeReviewPanel (one card, all changes)
+                                          │ approved
+                                          ▼
+                                     PlanGateway.execute (one POST /plans/execute + history entry)
+                                          │ dependent ops (e.g. a new category's id) → second wave, same turn
+                                          ▼
+                                     reply built from confirmed outcomes (no model call)
 ```
 
-1. **Plan.** The model calls tools. Lookups run immediately. Actions usually arrive together in one `queue_actions` call, though a direct action tool call works too. Each action is checked: unknown tools and malformed JSON are rejected, arguments are pruned to the tool's schema, the action's own `decode` runs, and the dispatcher previews it on fresh data. A valid action is *queued*. The model is told it is not done yet. In a batch, each item is checked on its own: valid items stay queued, and the model resends only the failed ones, fixed.
-2. **Review.** When the model marks its batch `done: true` and every item is valid, or when it replies with text, every queued action appears on **one** review card. The user can approve all, approve some or decline. Client and server policy require confirmation for every agent action and forbid deletes.
-3. **Execute.** Approved actions run through `dispatch` with the preview's fingerprint. If a record changed after review, the action is not written and is reported as `needsReapproval`.
-4. **Report.** Outcome rows (Saved, Not approved, Failed, Not confirmed) and the reply text come from the dispatcher's results, never from the model. The outcomes are also added to the conversation as an app message.
-5. **Dependent steps.** When a later action needs an earlier result (for example a new category's id), the model ends its plan with `[continue]`. After approval it receives the outcomes, including record ids, and can propose the rest. That goes through the review card again.
-   - gpt-oss often forgets the marker, or puts a placeholder id in the dependent item. If any action was refused in the turn and never fixed, the runner continues after the review anyway, once per turn. It then asks the model to queue what is still missing, using the new record ids. The model's text is not shown above the card in that case, because it usually asks the user for the id the app is about to supply.
-6. **Tool calls written as text.** gpt-oss sometimes writes a tool call as JSON in its reply instead of calling the tool. When the whole reply is such a call to an offered tool, for example `{"queue_actions": {...}}` or `{"name": ..., "arguments": {...}}`, the runner treats it as a real call. It then goes through the same validation and review.
+1. **Local first** (`orchestration/local_intents.dart`). "What did I ask you yesterday?" reads the history API and answers with `historyAnswer`. "What's my balance?" answers from the synced snapshot. When the agent asked a question, a short reply that picks an option ("the concert one", "2", "the 780 one") or gives a bare amount ("350") completes the open op without the model. Matching is narrow: a message with a number is never treated as a history or balance question.
+2. **One plan request.** The model gets the static instructions, a context message (today in the user's time zone, budget month start, category *names*, and bounded follow-up context) and the user's text. It returns one JSON object (`response_format: json_object`, `max_completion_tokens` 700). No tool schemas, no records, no history, no transcript.
+3. **Deterministic resolution** (`plan/op_catalog.dart`, `plan/resolvers.dart`). Each op becomes exact action input:
+   - amounts: numbers, "₹5,000", "2k", "1.5L", "1 crore"; dates: day offsets (`-1`) or `yyyy-mm-dd`, resolved against "today" in the server's time zone for the user (`agentTodayProvider`, from synced preferences);
+   - categories by name (`Other Expense`/`Other Income` with a note when nothing matches); a category created in the same plan is referenced as `"@o1"`;
+   - records by name the way a person would: exact name, then every word contained ("Japan trip" → "Japan cherry blossom trip"), then the best partial overlap; pending items are narrowed by direction, amount and purpose; several left → a question with options, none → "There is no open pending payment with Zed.";
+   - defaults from data: settle without an amount = the full outstanding; an EMI without an amount = the due instalment; a renewal without an amount = the subscription's amount; edits merge only the changed fields into the current record (with its version);
+   - grounding: a payment method is kept only if the user named one, a shop/person only if it appears in what they said; a generic person ("a friend") becomes "Who is this with?".
+   Missing essentials become one short question (the model's wording when it asked); clear ops in the same message still proceed.
+4. **Review and execute.** All ready ops are previewed in one call and shown on one card. Approved ones run in one call; the server runs them in order under the user's write lock (parallel requests would be serialised by that lock anyway), each committing on its own. Ops that need a record created in this plan run in a second wave (a second card, no model call); if their dependency was not saved they are skipped and reported.
+5. **Report.** The reply is the per-action recap of confirmed outcomes ("Salary of ₹5,000 added as income. Utsav owes you ₹300 (Lent money)."), plus answers, problems and the question, never model text about results.
 
-## Tools
+A second model call happens only when (a) the reply is not a usable JSON plan (one retry), or (b) the user's next message answers an open question in a way the app cannot resolve itself; that call sees the question, the unfinished ops and the original message.
 
-Offered in groups to keep requests small. Core is always offered. Other groups are switched on by keywords in the message ("EMI", "budget", "Netflix", "split"…) or by the model calling `load_tools`, and they stay on for the conversation.
+## Plan format and operations
 
-| Group | Tools | Maps to |
+```json
+{"ops":[{"op":"income","amount":5000,"category":"Salary","date":-1},
+        {"op":"pending","dir":"collect","person":"Utsav","amount":300,"kind":"lent"},
+        {"op":"expense","amount":5000,"category":"Fitness","note":"protein powder"}],
+ "ask":"optional clarification","reply":"optional text when no op fits"}
+```
+
+Every op has a type (`op`), its own fields and a stable ref (`id` `o1`, `o2`… when given, else its position); later ops refer to an earlier op's new record as `"@o1"`. `PlanParser` checks structure (one object, ≤ 12 ops, known shapes, unique ids, references only backwards) and drops fields starting with `_` (reserved for the app). Unknown op types are refused individually.
+
+| Op | Action(s) | Notes |
 |---|---|---|
-| core | `get_financial_overview`, `find_records`, `search_transactions`, `load_tools` | read-only lookups over the synced snapshot (`find_records` uses `PendingResolver` rules: unique / multiple / none) |
-| core | `queue_actions` | up to 12 `{tool, arguments}` items, each any action tool below, plus `done`. Each item gets the same checks as a direct call and switches on its tool's group. |
-| core | `record_transaction`, `add_pending_payment`, `settle_pending_payment` | `transactions.create`, `pending.create`, `pending.settle` |
-| edits | `edit_transaction`, `create_category` | `transactions.update`, `categories.create` |
-| budgets | `create_budget`, `update_budget`, `pause_or_resume_budget` | `budgets.create/update/setPaused` |
-| pending | `split_bill`, `write_off_pending_payment` | `pending.split/cancel` |
-| loans | `record_loan_payment`, `create_loan` | `loans.recordPayment/create` |
-| subscriptions | `add_subscription`, `mark_subscription_paid`, `set_subscription_status`, `skip_subscription_cycle` | `subscriptions.*` |
-| goals | `create_goal`, `contribute_to_goal`, `withdraw_from_goal` | `goals.create/contribute/withdraw` |
-| emergencyFund | `add_to_emergency_fund`, `withdraw_from_emergency_fund` | `emergencyFund.contribute/withdraw` |
+| `expense`, `income` | `transactions.create` | category by name or `@ref` |
+| `pending` | `pending.create` | `dir` collect (they owe the user) / owe |
+| `settle` | `pending.settle` | item matched locally; amount defaults to outstanding |
+| `write_off` | `pending.cancel` | |
+| `split` | `pending.split` | equal split, user included unless `me:false` |
+| `edit` | `transactions.update` | target `#n` (Recent) or `{text,date,amount}`; changed fields only |
+| `undo` | (none) | explained: the agent cannot delete |
+| `category` | `categories.create` | an existing category of that name is reused |
+| `budget`, `budget_pause` | `budgets.create` / `budgets.update`, `budgets.setPaused` | create or change by category |
+| `loan_pay`, `loan` | `loans.recordPayment`, `loans.create` | amount defaults to the due instalment |
+| `sub_paid`, `sub_status`, `sub_skip`, `subscription` | `subscriptions.markPaid/setStatus/skipCycle/create` | |
+| `goal`, `goal_add`, `goal_take` | `goals.create/contribute/withdraw` | goal by name or `@ref` |
+| `fund_add`, `fund_take` | `emergencyFund.contribute/withdraw` | |
+| `q` | (read) | spent, earned, balance, owed, budget, goal, subscriptions, loans; answered by `DataAnswers` |
+| `history` | (read) | answered from agent history |
 
-Not exposed: every `*.delete` (policy blocks these too), profile and asset edits, and sharing pending items with other FiNN users (`linkedUserId` is hidden).
+The runner refuses any op whose action is not registered or is a delete, whatever the model sends; the server's channel policy refuses deletes for `agent` too.
 
 ## Safety properties
 
-- **No direct data access.** Read tools use the `FinanceSnapshot` built from API-synced records. Writes go only through the dispatcher, so in remote mode they reach `POST /actions/{id}`, where the server validates and authorises them. The agent never holds database or provider credentials.
-- **Model output is untrusted.** It passes schema pruning, then the action's decoder (crashes are caught), then `prepare`, then the server's own validation.
-- **No fake success.** Only `ActionCompleted` counts as saved, and the report text and rows are built from dispatcher outcomes.
-- **Duplicates.** The idempotency key is `agent:<conversation>:<request fingerprint>:<occurrence>`.
-  - Identical calls in one turn are queued once.
-  - Retrying after an unknown outcome (a lost reply) reuses the key, so the server replays the stored result instead of writing twice.
-  - A deliberate identical entry in a later turn gets a new key and a "possible duplicate" note on the card.
-  - Known edge: if an outcome was unknown and the user then asks for a separate identical entry, the server replays the first one ("Already saved"). Repeating the request again records it, because the next occurrence gets a new key.
-- **No automatic retries of mutations.** Model calls are retried only after a timeout, an outage, a malformed tool call (`toolCallFailed`) or a rate-limit wait that fits the turn's budget.
-- **Partial success.** Each action commits on its own. Each outcome is reported separately.
-- **Prompt injection.** The instructions treat record text and tool results as data. Any write still needs approval of the app-generated preview.
-- **Limits** (`AgentConfig`):
-  - 10 model calls per turn; the last one forces `tool_choice: none`.
-  - 8 tool calls per step and 24 per turn. A `queue_actions` call counts as one and holds up to 12 actions.
-  - Rate-limit waiting: at most 60 s per wait and 150 s per turn (`maxRateLimitWait`, `rateLimitWaitBudget`).
-  - Messages up to 2,000 characters.
-  - History limited to 6 turns, about 12k characters and at most 180 provider items.
-  - Tool results truncated at 3,000 characters.
+- **No direct data access.** The model sees category names and today's date only. Resolution uses the synced snapshot; every write goes through `POST /plans/execute`, where the server validates, checks the approval fingerprint against fresh data and applies the `agent` channel policy.
+- **Model output is untrusted.** It passes the parser, the op compiler, the action's own decoder, the server preview and the server's validation at execution.
+- **No fake success.** Only steps the server reports as `succeeded` count as saved; recap, outcome rows and history come from those reports.
+- **Duplicates.** Step id = `<request fingerprint>-<occurrence>`, plan id = `agent.<conversation>`, so the server's idempotency key is `agent.<conversation>:<fingerprint>-<n>`.
+  - A lost reply is retried once by the gateway with the same body (the server replays); if that also fails the step is "Not confirmed", and sending the same request again replays it instead of writing twice.
+  - A deliberate repeat after a success gets the next occurrence (a new key) and a "possible duplicate" note on the card.
+  - Two identical ops in one message both appear, each with a note, so the user can exclude one.
+  - The controller ignores a second send while a turn runs, and a second Approve tap.
+- **Partial success.** Steps commit independently (never claimed atomic); each outcome is reported, and history marks the turn `partial`.
+- **Conflicts.** A record that changed after review fails or comes back as "Needs review again", never written on a stale approval.
+- **Prompt injection.** Context, Recent and Pending question are labelled app data; every write still needs approval of the app-generated preview.
+- **Limits** (`AgentConfig`): message ≤ 2,000 characters; output ≤ 700 tokens; one retry after an outage/timeout and one after unusable output; rate-limit waits ≤ 60 s each and 150 s per turn; at most 3 waves; ≤ 12 ops per plan.
+
+## Agent history
+
+- **Write.** `RemotePlanGateway.execute` sends `history: {runId, request, notes, labels}` with `POST /plans/execute`. The server builds the entry from its own step reports (status, preview summary, record ids, failure message) into `agent_runs`. A retry or a second wave with the same `runId` updates the same row, so there are no duplicate entries and no extra request. Turns that only asked or answered a question write nothing.
+- **Read.** `GET /agent/history?limit&before&status` (paginated, filterable) for the History sheet and for history questions; `DELETE /agent/history` clears it.
+- **Not context.** History is never sent to the model. Follow-ups ("make that 400", "undo that") use `AgentMemory`: the last 5 saved changes by reference (`#1` = newest) and the one open question, about 100–250 tokens at most.
+- Entries keep the request (≤ 500 characters), statuses, summaries and record ids, not copies of records. Owner-only (RLS), kept 180 days, deleted with the account.
+
+## Measured results
+
+Live, `gpt-6-luna` at `none`, demo data, all changes approved, 2026-10-13 (`test/agent/live/plan_benchmark_test.dart`; raw numbers in `docs/agent-benchmarks/`). The baseline is the previous tool-loop agent on the same 13 requests (commit `fc23482`).
+
+| 13 requests | Before (tool loop) | After (single plan) | Change |
+|---|---|---|---|
+| Correct | 12 / 13 | 13 / 13 | "add 2000 to my Japan trip goal" now resolves |
+| Model requests | 26 | 14 | −46% |
+| Input tokens (of which cached) | 53,728 (43,164) | 22,510 (20,636) | −58% |
+| Cache-write tokens | 10,486 | 0 (prefix already cached) | −100% |
+| Output tokens | 1,244 | 531 | −57% |
+| Cost as billed | $0.00237 | $0.00066 | −72% |
+| Cost with no cache hits | $0.00600 | $0.00252 | −58% |
+| Model time (sum) | 51.9 s | 27.4 s | −47% (median per call 2.0 s in both) |
+| FiNN API requests (remote mode) | 49 | 36 | multi-op turns 9 → 3 |
+
+Model latency varies between runs: a second run of the new agent made while another benchmark was calling OpenAI took 58.7 s for the same 13 requests (same call and token counts). A cold cache adds one cache write of the 1,474-token prefix (about $0.00018) every 30 minutes of inactivity, shared by all users.
+
+Per request: the 3-operation example went from 1 call / 9 API requests to 1 call / 3 API requests (one preview, one execute, one sync); a settlement 2 → 1 calls; "spent 250 on an auto and Karan paid back 1,200" 3 → 1; "create Pets and add 500" 4 → 1; a spending question 2 → 1; "make that 400" 4 → 2 (one per turn). Extra checks on the new agent: history and balance questions 0 calls; an ambiguous settlement followed by "the concert one" and a missing amount followed by "350" 1 call each in total (17 / 17 correct). Backend latency was not measured over the network; in remote mode every multi-op turn now makes 2–3 requests instead of 2N+1.
 
 ## Voice input
 
@@ -162,32 +195,37 @@ Response (`data`): `{ "text": string, "language": string | null, "durationSecond
 
 Errors use the relay's shapes: `unavailable` with `details.reason` `rateLimited` (with `retryAfterSeconds`), `providerRateLimited`, `timeout`, `network` or `notConfigured`, and `validation` with `details.reason: tooLarge`. Audio and transcript text are never logged or stored.
 
-## Context and memory
 
-The conversation lives in memory for the app session. It is cleared on sign-out, on an account switch or with "New chat". Pending approvals are never persisted, so an interrupted session can never execute anything later. Financial data is fetched fresh through tools and is not stored in the conversation. There is no long-term memory, vector store or RAG.
+## Adding an operation
 
-## Adding a tool
-
-- **Expose an existing action:** add an entry to `agentActionTools` (`lib/agent/tools/tool_catalog.dart`) and assign it a group in `toolGroupOf` (`tool_groups.dart`); core is the default. The schema comes from the action's `ActionFieldSpec`s. Use `_fieldOverrides` for coarse fields such as lists and `_excludedFields` for fields the agent must not set.
-- **New operation:** first create a `FinancialAction` in its feature module, plus the matching server action, so forms and the agent share it. Then expose it as above.
-- **New lookup:** subclass `ReadTool` (`read_tools.dart`) and add it to `AgentToolbox.standard`. Keep results compact and include ids and versions.
-- Add tests to `test/agent/tool_executor_test.dart`, and to `agent_runner_test.dart` (using `ScriptedProvider`) for multi-step behaviour.
+1. The operation exists as a `FinancialAction` in its feature module (and the matching server action), so forms and the agent share validation and previews.
+2. Add an `OpSpec` to `opCatalog` (`plan/op_catalog.dart`): the op type, the action id(s) it may produce, and a compile function that resolves the op's fields into the action's input (use `resolvers.dart`; return `OpQuestion` for missing essentials, `OpRejected` for impossible ones).
+3. Add one line for it under TYPES in `agentInstructions` (`prompt/agent_prompt.dart`). `test/agent/plan_test.dart` fails if the catalog and the instructions disagree, and compiles a sample of every op against real data and the real action decoder.
+4. Read-only answers go in `answers/data_answers.dart`.
 
 ## Replacing the LLM provider
 
-The boundary is `LlmProvider` (`lib/agent/llm/llm_provider.dart`). It uses neutral types: messages, tool specs and tool calls, plus an opaque `providerState` that a provider can use for exact replay.
+The boundary is `LlmProvider` (`lib/agent/llm/llm_provider.dart`), with neutral types: instructions, messages, `LlmOutputFormat.json`, usage. The plan format, op catalog, execution, history and UI do not depend on the vendor.
 
-- **Another OpenAI-compatible Chat Completions provider** (for example OpenAI, Together or a self-hosted vLLM): change `GROQ_BASE_URL`, `GROQ_MODEL` and the key on the server. No app change is needed (the env names would just read oddly).
-- **A different wire format:** write a new `LlmProvider` (encode and decode like `GroqChatProvider`). Point the relay at that provider, or add a second relay route, and override `llmProviderProvider` in `lib/agent/application/agent_providers.dart`. Tools, executor, runner and UI stay unchanged.
+- **Another OpenAI-compatible Chat Completions provider:** change `OPENAI_BASE_URL`, `OPENAI_MODEL` and the key on the server. Set `OPENAI_PROMPT_CACHE=implicit` if it does not support explicit cache breakpoints.
+- **A different wire format:** write a new `LlmProvider` (encode/decode like `ChatCompletionsProvider`, mapping `LlmOutputFormat.json` to that provider's JSON mode), point the relay at it, and override `llmProviderProvider` in `lib/agent/application/agent_providers.dart`.
 
 ## Tests
 
 `test/agent/`:
-- `groq_provider_test.dart`: wire format against the relay contract, the token budget of an opening request, decoding, error mapping and cancellation.
-- `tool_executor_test.dart`: tool groups, validation, pruning, the queue and the single approval card, decline, duplicates, stale approval, a lost reply followed by a safe retry, limits and read tools.
-- `agent_runner_test.dart`: multi-action flow with sequential calls, ambiguity, partial approval, dependent follow-up via `[continue]`, unsupported operations, rate-limit waits, failures, loop limits, cancellation and context.
-- `agent_screen_test.dart`: the controller (duplicate submit, stop, retry) and the screen (approve flow, unavailable state).
-- `voice_test.dart`: WAV encoding, levels, the voice controller (permission, short clips, failures, cancel, agent-mode close) and a spoken request through the review panel.
-- `test/journeys/agent_mode_journey_test.dart`: five evenly spaced slots with the orb centred, agent mode locks tabs and the add button, closing restores them, and the side drawer replaces the More tab.
+- `agent_runner_test.dart`: the three-operation example in one model call, one review and one backend round; repeated op types; local settlement matching; dependent ops in a second wave; skipped dependants; clarification with options answered locally; missing amount completed locally; clear ops proceeding next to a question; an unclear answer sent to the model with context; generic people; invalid model output (retry, then a safe message); unknown op types; preview failures; partial success; a lost reply followed by an idempotent replay; deliberate repeats; identical ops in one message; decline; stop; model outages; grounding of methods and shops; data, history and balance answers without extra calls; that the model never sees records or history; "make that 400"; "undo that"; the user's time zone.
+- `plan_test.dart`: parser rules, amount/date/method/name resolvers, catalog ↔ instructions consistency, a compiled sample of every op previewed by its real action, questions and rejections, local intents.
+- `plan_gateway_test.dart`: `/plans/preview` and `/plans/execute` contract, outcome mapping, history payload, one idempotent retry, "not confirmed" when the retry fails, the history repository and `historyAnswer`.
+- `chat_completions_provider_test.dart`: JSON-mode wire format, usage details, refusals, relay error mapping, cancellation.
+- `agent_screen_test.dart`, `voice_test.dart`, `test/journeys/agent_mode_journey_test.dart`: controller, review flow, history sheet (list, expand, filter, clear), voice, navigation.
+- `live/plan_benchmark_test.dart` (skipped unless `FINN_LIVE=1`): calls OpenAI with the key from `finn-backend/.env.local` and writes `docs/agent-benchmarks/single_plan.json`.
 
-These use scripted model responses. The live check against Groq described above was run manually with a temporary test that is not part of the suite.
+Backend: `tests/agent-relay.test.ts` (response formats, cache breakpoint, usage details) and `tests/agent-history.test.ts` (history from real outcomes, retries without duplicates, partial and declined turns, second waves, pagination, filters, isolation, clearing).
+
+## Known limits
+
+- Requests that need more than 12 operations, or more than 3 rounds of dependencies, are cut short with a message.
+- Fixed-offset time zones only (India and similar); for zones with daylight saving the device's date is used.
+- History questions are matched by a few narrow phrases; other wordings reach the model, which returns a `history` op (one call).
+- The agent cannot delete records, edit the profile or share pending items with other FiNN users.
+- Loan creation needs every term in the message (amount, rate, EMIs, first due date, lender); otherwise the agent asks for them.

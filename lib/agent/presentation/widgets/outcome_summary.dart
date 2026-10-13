@@ -83,6 +83,7 @@ class OutcomeSummary extends StatelessWidget {
       ActionResultStatus.declined => (LucideIcons.circleX, c.textTertiary, 'Not approved'),
       ActionResultStatus.cancelled => (LucideIcons.circleStop, c.textTertiary, 'Stopped'),
       ActionResultStatus.needsReapproval => (LucideIcons.circleAlert, c.warning, 'Needs review again'),
+      ActionResultStatus.skipped => (LucideIcons.circleMinus, c.textTertiary, 'Skipped'),
       ActionResultStatus.failed when record.outcomeUnknown => (LucideIcons.circleHelp, c.warning, 'Not confirmed'),
       ActionResultStatus.failed => (LucideIcons.circleX, c.negative, 'Failed'),
     };
