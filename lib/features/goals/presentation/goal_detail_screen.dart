@@ -10,20 +10,22 @@ import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/money/money.dart';
+import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../design_system/design_system.dart'
+    show AmountVisibility, AnimatedAmount, BottomClearanceX, FinnMenuItem, showFinnActionMenu;
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/async_view.dart';
-import '../../../shared/presentation/category_icons.dart';
+import '../../../ui/ui.dart';
 import '../application/goal_actions.dart';
 import '../application/goal_view.dart';
 import '../domain/goal.dart';
-import 'savings_visuals.dart';
+import 'goal_ui.dart';
 import 'savings_widgets.dart';
 
-/// One savings goal: a milestone ring (with a "where you should be" notch),
-/// add / withdraw, the path to the target with a live "what if I add more"
-/// slider, the saved-over-time chart and the history.
+/// One savings goal: what is saved and what is left, add / withdraw, the
+/// monthly plan with a live "what if I put in more" slider, and the
+/// history of money in and out.
 class GoalDetailScreen extends ConsumerWidget {
   const GoalDetailScreen({super.key, required this.id});
 
@@ -71,43 +73,35 @@ class GoalDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final value = ref.watch(goalProgressProvider(id));
     final g = value.value;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(g?.goal.name ?? 'Goal', maxLines: 1, overflow: TextOverflow.ellipsis),
-        actions: [
-          if (g != null) ...[
-            FinnIconButton(
-              icon: LucideIcons.pencil,
-              tooltip: 'Edit goal',
-              onPressed: () => context.push(AppRoutes.editGoal(id)),
-            ),
-            FinnIconButton(
-              key: const ValueKey('goal-more'),
-              icon: LucideIcons.ellipsisVertical,
-              tooltip: 'More actions',
-              onPressed: () => _menu(context, ref, g),
-            ),
-          ],
-          const SizedBox(width: Space.x2),
+    return UiPage(
+      title: g?.goal.name ?? 'Goal',
+      actions: [
+        if (g != null) ...[
+          UiIconButton(
+            icon: LucideIcons.pencil,
+            tooltip: 'Edit goal',
+            size: 20,
+            onPressed: () => context.push(AppRoutes.editGoal(id)),
+          ),
+          UiIconButton(
+            key: const ValueKey('goal-more'),
+            icon: LucideIcons.ellipsis,
+            tooltip: 'More actions',
+            onPressed: () => _menu(context, ref, g),
+          ),
         ],
-      ),
+      ],
       body: AsyncView<GoalProgress?>(
         value: value,
-        loading: const SkeletonPulse(
-          child: Padding(
-            padding: EdgeInsets.all(Space.gutter),
-            child: Column(children: [CardSkeleton(height: 240), SizedBox(height: Space.x4), CardSkeleton(height: 220)]),
-          ),
-        ),
+        loading: const _Placeholder(),
         builder: (context, g) => g == null
             ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(Space.x6),
-                  child: EmptyState(
+                child: SingleChildScrollView(
+                  child: UiEmpty(
                     icon: LucideIcons.target,
                     title: 'Goal not found',
                     message: 'It may have been deleted.',
-                    actionLabel: 'Back to goals',
+                    action: 'Back to goals',
                     onAction: () => context.go(AppRoutes.goals),
                   ),
                 ),
@@ -127,62 +121,40 @@ class _GoalBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final g = progress;
     final today = ref.watch(todayProvider);
-    final accent = AccentSwatches.solid(g.goal.colorIndex);
-    final growth = savedOverTime(g.movements);
-    Widget box(Widget child, {double top = Space.x3}) => SliverToBoxAdapter(
-          child: ResponsiveCenter(padding: EdgeInsets.fromLTRB(Space.gutter, top, Space.gutter, 0), child: child),
-        );
+    final archived = g.goal.status == GoalStatus.archived;
+    Widget box(Widget child, {double top = 0}) => SliverPadding(
+      padding: EdgeInsets.fromLTRB(UiSpace.gutter, top, UiSpace.gutter, 0),
+      sliver: SliverToBoxAdapter(child: UiColumnWidth(child: child)),
+    );
+    final movements = g.movements;
     return CustomScrollView(
       key: PageStorageKey('goal-${g.goal.id}'),
       slivers: [
-        if (g.goal.status == GoalStatus.archived)
+        if (archived) box(const UiNotice(icon: LucideIcons.archive, text: 'Archived · restore it to add or withdraw')),
+        box(UiReveal(index: 0, child: _Hero(progress: g)), top: UiSpace.sm),
+        if (!g.isAchieved)
           box(
-            const InfoBanner(
-              message: 'This goal is archived. Its money stays earmarked. Restore it to add or withdraw.',
-              icon: LucideIcons.archive,
+            UiReveal(
+              index: 1,
+              child: UiSection(title: 'Plan', child: _PlanPanel(progress: g, today: today)),
             ),
-            top: Space.x2,
-          ),
-        box(StaggeredEntrance(child: _HeroCard(progress: g, today: today)), top: Space.x2),
-        if (!g.isAchieved) box(StaggeredEntrance(index: 1, child: _PathCard(progress: g, today: today))),
-        if (growth.length >= 2)
-          box(
-            StaggeredEntrance(
-              index: 2,
-              child: FinnCard(
-                radius: Radii.xxl,
-                padding: const EdgeInsets.fromLTRB(Space.x4, Space.x3, Space.x4, Space.x3),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(child: Text('SAVED OVER TIME', style: context.text.eyebrow)),
-                        Text('dashed = target', style: context.text.micro),
-                      ],
-                    ),
-                    const SizedBox(height: Space.x2),
-                    SavedGrowthChart(
-                      points: growth,
-                      target: g.goal.target,
-                      color: accent,
-                      today: today,
-                      targetDate: g.goal.targetDate,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            top: UiSpace.sm,
           ),
         box(
-          SavingsHistory(
-            movements: g.movements,
-            accent: accent,
-            emptyText: 'No money added yet. Your first contribution will show here.',
+          UiSection(
+            title: 'History',
+            child: movements.isEmpty
+                ? const UiNotice(icon: LucideIcons.inbox, text: 'No money added yet')
+                : UiPanelList(
+                    ruleIndent: 60,
+                    children: [
+                      for (final m in movements) SavingsMovementRow(key: ValueKey(m.id), movement: m),
+                    ],
+                  ),
           ),
-          top: Space.section,
+          top: UiSpace.sm,
         ),
-        const SliverToBoxAdapter(child: SizedBox(height: Space.x12)),
+        SliverToBoxAdapter(child: SizedBox(height: context.bottomClearance)),
       ],
     );
   }
@@ -192,200 +164,95 @@ class _GoalBody extends ConsumerWidget {
 // Hero
 // ---------------------------------------------------------------------------
 
-class _HeroCard extends StatelessWidget {
-  const _HeroCard({required this.progress, required this.today});
+/// Saved so far, what is left and by when, progress to the target, and the
+/// two money actions.
+class _Hero extends StatelessWidget {
+  const _Hero({required this.progress});
 
   final GoalProgress progress;
-  final DateTime today;
 
   @override
   Widget build(BuildContext context) {
+    final c = UiColors.of(context);
+    final t = UiType.of(context);
     final g = progress;
-    final c = context.colors;
-    final t = context.text;
     final pace = goalPaceOf(g);
     final active = g.goal.status == GoalStatus.active;
     final date = g.goal.targetDate;
-    final expected = active && !g.isAchieved ? expectedShare(g, today) : null;
-    final months = date == null ? null : monthsUntil(today, date);
-    return FinnCard(
-      radius: Radii.xxl,
-      padding: const EdgeInsets.all(Space.x4),
-      child: Column(
+    final caption = g.isAchieved
+        ? 'Goal reached'
+        : [
+            '${savingsMoney(context, g.remaining)} to go',
+            if (date != null) 'by ${DateFormats.monthYear.format(date)}',
+          ].join(' · ');
+    return UiHero(
+      label: 'Saved',
+      labelTrailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(pace.icon, size: 14, color: pace.color(c)),
+          const SizedBox(width: 4),
+          Text(pace.label, style: t.label.copyWith(color: pace == GoalPace.behind ? c.warning : null)),
+        ],
+      ),
+      value: AnimatedAmount(g.saved, style: t.amount, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
+      caption: caption,
+      captionColor: g.isAchieved ? c.positive : null,
+      footer: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  GoalRing(
-                    progress: g.progress,
-                    colors: AccentSwatches.of(g.goal.colorIndex),
-                    expected: expected,
-                    size: 136,
-                    semanticsLabel: '${g.goal.name}, ${formatPct(g.progress)} saved'
-                        '${expected == null ? '' : '. By now you planned ${formatPct(expected)}'}',
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (g.isAchieved) ...[
-                          const SuccessCheck(size: 30),
-                          const SizedBox(height: Space.x1),
-                        ],
-                        AnimatedAmount(g.saved, style: t.amountMedium, animateOnMount: true),
-                        Text('of ${savingsMoney(context, g.goal.target)}', style: t.micro),
-                      ],
-                    ),
-                  ),
-                  if (g.isAchieved && !context.reduceMotion)
-                    const IgnorePointer(child: SizedBox.square(dimension: 136, child: _Confetti())),
-                ],
-              ),
-              const SizedBox(width: Space.x4),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(CategoryIcons.of(g.goal.category.iconKey), size: 13, color: c.textTertiary),
-                        const SizedBox(width: Space.x1),
-                        Text(g.goal.category.label, style: t.micro),
-                      ],
-                    ),
-                    const SizedBox(height: Space.x2),
-                    if (g.isAchieved) ...[
-                      Text('GOAL REACHED', style: t.eyebrow.copyWith(color: c.positive)),
-                      Text('Well done!', style: t.title),
-                    ] else ...[
-                      Text('TO GO', style: t.eyebrow),
-                      AmountText(g.remaining, style: t.amountLarge, fit: true),
-                    ],
-                    const SizedBox(height: Space.x1),
-                    Text(
-                      date == null
-                          ? 'No target date'
-                          : 'by ${DateFormats.monthYear.format(date)}'
-                              '${g.isAchieved || months == null ? '' : ' · ${months == 0 ? 'this month' : '$months mo left'}'}',
-                      style: t.caption,
-                    ),
-                    const SizedBox(height: Space.x2),
-                    StatusPill(label: pace.label, color: pace.color(c), icon: pace.icon),
-                  ],
-                ),
-              ),
-            ],
+          UiProgressFooter(
+            value: g.progress,
+            color: g.isAchieved ? c.positive : c.goals,
+            start: formatPct(g.progress),
+            end: 'of ${savingsMoney(context, g.goal.target)}',
+            semanticsLabel: 'Saved towards target',
           ),
-          if (expected != null) ...[
-            const SizedBox(height: Space.x2),
+          if (active) ...[
+            const SizedBox(height: UiSpace.xl),
             Row(
               children: [
-                Container(width: 2, height: 10, color: c.textPrimary),
-                const SizedBox(width: Space.x1_5),
                 Expanded(
-                  child: Text(
-                    'Notch = where your date says you should be (${formatPct(expected)}). Dots mark 25 · 50 · 75%.',
-                    style: t.micro,
+                  child: UiPrimaryButton(
+                    label: 'Add money',
+                    icon: LucideIcons.plus,
+                    onPressed: () => context.push(AppRoutes.goalContribute(g.goal.id)),
+                  ),
+                ),
+                const SizedBox(width: UiSpace.md),
+                Expanded(
+                  child: UiSecondaryButton(
+                    label: 'Withdraw',
+                    icon: LucideIcons.minus,
+                    onPressed: g.saved.isPositive ? () => context.push(AppRoutes.goalWithdraw(g.goal.id)) : null,
                   ),
                 ),
               ],
             ),
           ],
-          const SizedBox(height: Space.x3),
-          Row(
-            children: [
-              Expanded(
-                child: FinnButton(
-                  label: 'Add money',
-                  icon: LucideIcons.plus,
-                  variant: FinnButtonVariant.positive,
-                  expand: true,
-                  onPressed: active ? () => context.push(AppRoutes.goalContribute(g.goal.id)) : null,
-                ),
-              ),
-              const SizedBox(width: Space.x3),
-              Expanded(
-                child: FinnButton(
-                  label: 'Withdraw',
-                  icon: LucideIcons.minus,
-                  variant: FinnButtonVariant.outline,
-                  expand: true,
-                  onPressed:
-                      active && g.saved.isPositive ? () => context.push(AppRoutes.goalWithdraw(g.goal.id)) : null,
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
 }
 
-/// One finite burst for a reached goal.
-class _Confetti extends StatelessWidget {
-  const _Confetti();
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final colors = [c.positive, c.accentGoals, c.warning, c.primary, c.accentEmergency];
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 1600),
-      builder: (context, t, _) => CustomPaint(painter: _ConfettiPainter(t: t, colors: colors)),
-    );
-  }
-}
-
-class _ConfettiPainter extends CustomPainter {
-  const _ConfettiPainter({required this.t, required this.colors});
-
-  final double t;
-  final List<Color> colors;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (t >= 1) return;
-    final center = size.center(Offset.zero);
-    final rnd = math.Random(7);
-    final ease = Curves.easeOutCubic.transform(t);
-    for (var i = 0; i < 26; i++) {
-      final a = rnd.nextDouble() * 2 * math.pi;
-      final dist = size.width * (0.35 + rnd.nextDouble() * 0.45) * ease;
-      final p = center + Offset(math.cos(a), math.sin(a)) * dist + Offset(0, 40 * t * t);
-      final paint = Paint()..color = colors[i % colors.length].withValues(alpha: (1 - t).clamp(0.0, 1.0));
-      canvas.save();
-      canvas.translate(p.dx, p.dy);
-      canvas.rotate(a + t * 6);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(const Rect.fromLTWH(-3, -1.5, 6, 3), const Radius.circular(1)),
-        paint,
-      );
-      canvas.restore();
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ConfettiPainter old) => old.t != t;
-}
-
 // ---------------------------------------------------------------------------
-// Path to the goal
+// Plan
 // ---------------------------------------------------------------------------
 
-class _PathCard extends ConsumerStatefulWidget {
-  const _PathCard({required this.progress, required this.today});
+/// Where the goal is heading, a slider to try another monthly amount (and
+/// keep it as the plan), and the three amounts worth comparing.
+class _PlanPanel extends ConsumerStatefulWidget {
+  const _PlanPanel({required this.progress, required this.today});
 
   final GoalProgress progress;
   final DateTime today;
 
   @override
-  ConsumerState<_PathCard> createState() => _PathCardState();
+  ConsumerState<_PlanPanel> createState() => _PlanPanelState();
 }
 
-class _PathCardState extends ConsumerState<_PathCard> {
+class _PlanPanelState extends ConsumerState<_PlanPanel> {
   static const _step = 500;
 
   late int _monthly = _initial();
@@ -394,7 +261,8 @@ class _PathCardState extends ConsumerState<_PathCard> {
   /// Starting point for the slider, in whole rupees.
   int _initial() {
     final g = widget.progress;
-    final m = g.goal.plannedMonthlyContribution ??
+    final m =
+        g.goal.plannedMonthlyContribution ??
         g.averageMonthlyContribution ??
         g.requiredMonthly ??
         g.remaining.scale(1, 12);
@@ -415,7 +283,7 @@ class _PathCardState extends ConsumerState<_PathCard> {
   }
 
   @override
-  void didUpdateWidget(_PathCard old) {
+  void didUpdateWidget(_PlanPanel old) {
     super.didUpdateWidget(old);
     if (old.progress.goal.plannedMonthlyContribution != widget.progress.goal.plannedMonthlyContribution) {
       _monthly = _initial();
@@ -448,27 +316,33 @@ class _PathCardState extends ConsumerState<_PathCard> {
     if (mounted) setState(() => _saving = false);
   }
 
+  int _roundUp(Money m) => math.max(_step, ((m.paise / 100) / _step).ceil() * _step);
+
+  String _timing(int months, {required bool early}) => switch (months) {
+    0 => 'On track · right on time',
+    1 => early ? 'On track · about a month early' : 'Behind · about a month late',
+    _ => early ? 'On track · about $months months early' : 'Behind · about $months months late',
+  };
+
   @override
   Widget build(BuildContext context) {
+    final c = UiColors.of(context);
+    final t = UiType.of(context);
     final g = widget.progress;
-    final today = widget.today;
-    final c = context.colors;
-    final t = context.text;
-    final accent = AccentSwatches.solid(g.goal.colorIndex);
     final date = g.goal.targetDate;
     final rate = Money.rupees(_monthly);
-    final finish = finishWith(g.remaining, rate, today);
+    final finish = finishWith(g.remaining, rate, widget.today);
     final plan = g.goal.plannedMonthlyContribution;
     final max = _max;
     final value = _monthly.clamp(_step, max);
 
     // The honest current estimate (plan, else recent average).
     final current = g.estimatedCompletion;
-    final (String verdict, Color tone) = switch (g.onTrack) {
+    final (String verdict, Color? tone) = switch (g.onTrack) {
       true when date != null && current != null => (_timing(monthsApart(date, current), early: true), c.positive),
       false when date != null && current != null => (_timing(monthsApart(current, date), early: false), c.warning),
-      _ when current != null => ('Done around ${DateFormats.monthYear.format(current)} at your current pace', c.textPrimary),
-      _ => ('Set a monthly amount to see when you finish', c.textSecondary),
+      _ when current != null => ('Done around ${DateFormats.monthYear.format(current)} at your pace', null),
+      _ => ('Set a monthly amount to see when you finish', c.inkSoft),
     };
 
     String whatIf() {
@@ -484,43 +358,30 @@ class _PathCardState extends ConsumerState<_PathCard> {
     }
 
     final late = finish != null && date != null && finish.isAfter(date);
-    return FinnCard(
-      radius: Radii.xxl,
-      padding: const EdgeInsets.fromLTRB(Space.x4, Space.x3, Space.x4, Space.x4),
+    String perMonth(Money? m) => m == null
+        ? '—'
+        : '${AmountVisibility.hiddenOf(context) ? MoneyFormatter.masked : m.whole}/mo';
+    return UiPanel(
+      padding: const EdgeInsets.fromLTRB(UiSpace.lg, UiSpace.lg, UiSpace.lg, UiSpace.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('PATH TO YOUR GOAL', style: t.eyebrow),
-          const SizedBox(height: Space.x1),
-          Text(verdict, style: t.bodyStrong.copyWith(color: tone)),
-          const SizedBox(height: Space.x3),
-          _PathLine(
-            start: g.goal.createdAt,
-            today: today,
-            target: date,
-            finish: finish,
-            color: accent,
-          ),
-          const SizedBox(height: Space.x3),
-          const FinnDivider(),
-          const SizedBox(height: Space.x2_5),
+          Text(verdict, style: t.body.copyWith(color: tone)),
+          const SizedBox(height: UiSpace.lg),
           Row(
             children: [
-              Flexible(child: Text('WHAT IF I PUT IN', maxLines: 1, overflow: TextOverflow.ellipsis, style: t.eyebrow)),
-              const Spacer(),
-              Text(
-                '${savingsMoney(context, rate)}/mo',
-                style: t.bodyStrong.copyWith(fontWeight: FontWeight.w900, color: accent),
-              ),
+              Expanded(child: Text('If I put in', style: t.label)),
+              Text('${savingsMoney(context, rate)}/mo', style: t.figureSmall),
             ],
           ),
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              activeTrackColor: accent,
-              thumbColor: accent,
-              inactiveTrackColor: accent.withValues(alpha: 0.18),
-              overlayColor: accent.withValues(alpha: 0.12),
-              trackHeight: 6,
+              activeTrackColor: c.goals,
+              thumbColor: c.goals,
+              inactiveTrackColor: c.muted,
+              overlayColor: c.goals.withValues(alpha: 0.12),
+              trackHeight: 4,
+              tickMarkShape: SliderTickMarkShape.noTickMark,
               showValueIndicator: ShowValueIndicator.never,
             ),
             child: Slider(
@@ -537,47 +398,50 @@ class _PathCardState extends ConsumerState<_PathCard> {
               },
             ),
           ),
-          Row(
-            children: [
-              Icon(late ? LucideIcons.clock : LucideIcons.flag, size: 14, color: late ? c.warning : c.positive),
-              const SizedBox(width: Space.x1_5),
-              Expanded(
-                child: Text(
-                  whatIf(),
-                  style: t.label.copyWith(fontWeight: FontWeight.w800, color: late ? c.warning : c.textPrimary),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: UiSpace.touch),
+            child: Row(
+              children: [
+                Icon(late ? LucideIcons.clock : LucideIcons.flag, size: 14, color: late ? c.warning : c.inkSoft),
+                const SizedBox(width: UiSpace.sm),
+                Expanded(
+                  child: Text(whatIf(), style: t.label.copyWith(color: late ? c.warning : c.ink)),
                 ),
-              ),
-              if (plan != rate && g.goal.status == GoalStatus.active)
-                FinnButton(
-                  key: const ValueKey('goal-use-plan'),
-                  label: 'Make it my plan',
-                  size: FinnButtonSize.sm,
-                  variant: FinnButtonVariant.secondary,
-                  loading: _saving,
-                  onPressed: _saving ? null : _usePlan,
-                ),
-            ],
+                if (plan != rate && g.goal.status == GoalStatus.active)
+                  UiChipButton(
+                    key: const ValueKey('goal-use-plan'),
+                    label: _saving ? 'Saving…' : 'Make it my plan',
+                    onTap: _saving ? () {} : _usePlan,
+                  ),
+              ],
+            ),
           ),
-          const SizedBox(height: Space.x3),
+          Container(height: 1, color: c.hairline),
           Row(
             children: [
-              _Mini(
-                label: 'NEEDED',
-                value: g.requiredMonthly == null ? '—' : '${savingsMoney(context, g.requiredMonthly!)}/mo',
-                onTap: g.requiredMonthly == null
-                    ? null
-                    : () => setState(() => _monthly = _roundUp(g.requiredMonthly!)),
+              Expanded(
+                child: UiStat(
+                  label: 'Needed',
+                  value: Text(perMonth(g.requiredMonthly), style: t.figureSmall),
+                  semanticLabel: 'Needed ${perMonth(g.requiredMonthly)}. Try this amount',
+                  onTap: g.requiredMonthly == null
+                      ? null
+                      : () => setState(() => _monthly = _roundUp(g.requiredMonthly!)),
+                ),
               ),
-              _Mini(
-                label: 'YOUR AVERAGE',
-                value: g.averageMonthlyContribution == null
-                    ? '—'
-                    : '${savingsMoney(context, g.averageMonthlyContribution!)}/mo',
+              Expanded(
+                child: UiStat(
+                  label: 'Your average',
+                  value: Text(perMonth(g.averageMonthlyContribution), style: t.figureSmall),
+                ),
               ),
-              _Mini(
-                label: 'PLAN',
-                value: plan == null ? 'Not set' : '${savingsMoney(context, plan)}/mo',
-                onTap: plan == null ? null : () => setState(() => _monthly = _roundUp(plan)),
+              Expanded(
+                child: UiStat(
+                  label: 'Plan',
+                  value: Text(plan == null ? 'Not set' : perMonth(plan), style: t.figureSmall),
+                  semanticLabel: plan == null ? null : 'Plan ${perMonth(plan)}. Try this amount',
+                  onTap: plan == null ? null : () => setState(() => _monthly = _roundUp(plan)),
+                ),
               ),
             ],
           ),
@@ -585,229 +449,29 @@ class _PathCardState extends ConsumerState<_PathCard> {
       ),
     );
   }
-
-  int _roundUp(Money m) => math.max(_step, ((m.paise / 100) / _step).ceil() * _step);
-
-  String _timing(int months, {required bool early}) => switch (months) {
-        0 => 'On track — right on time',
-        1 => early ? 'On track — about a month early' : 'Behind — about a month late',
-        _ => early ? 'On track — about $months months early' : 'Behind — about $months months late',
-      };
 }
 
-class _Mini extends StatelessWidget {
-  const _Mini({required this.label, required this.value, this.onTap});
-
-  final String label;
-  final String value;
-  final VoidCallback? onTap;
+class _Placeholder extends StatelessWidget {
+  const _Placeholder();
 
   @override
   Widget build(BuildContext context) {
-    final t = context.text;
-    final c = context.colors;
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, maxLines: 1, style: t.eyebrow.copyWith(fontSize: 10)),
-        const SizedBox(height: 2),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            value,
-            maxLines: 1,
-            style: t.label.copyWith(fontWeight: FontWeight.w800, color: onTap == null ? c.textPrimary : c.primary),
-          ),
-        ),
-      ],
-    );
-    return Expanded(
-      child: Semantics(
-        button: onTap != null,
-        hint: onTap == null ? null : 'Try this amount',
-        child: InkWell(
-          borderRadius: Radii.rMd,
-          onTap: onTap,
-          child: Padding(padding: const EdgeInsets.symmetric(vertical: Space.x1, horizontal: 2), child: body),
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(UiSpace.gutter, UiSpace.lg, UiSpace.gutter, 0),
+      child: UiColumnWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            UiPlaceholder(width: 80, height: 12),
+            SizedBox(height: UiSpace.md),
+            UiPlaceholder(width: 200, height: 40),
+            SizedBox(height: UiSpace.xl),
+            UiPlaceholder(height: 6),
+            SizedBox(height: UiSpace.section),
+            UiPlaceholder(height: 220, radius: UiRadius.panel),
+          ],
         ),
       ),
     );
   }
-}
-
-/// Timeline from the day the goal began to whichever comes last of its
-/// target date and the finish date at the chosen monthly amount. The gap
-/// between target and a later finish is shown in warning colour. The
-/// finish marker glides as the slider moves.
-class _PathLine extends StatelessWidget {
-  const _PathLine({required this.start, required this.today, required this.target, required this.finish, required this.color});
-
-  final DateTime start;
-  final DateTime today;
-  final DateTime? target;
-  final DateTime? finish;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    var end = today.add(const Duration(days: 30));
-    for (final d in [target, finish]) {
-      if (d != null && d.isAfter(end)) end = d;
-    }
-    final span = math.max(1, daysBetween(start, end)).toDouble();
-    double at(DateTime d) => (daysBetween(start, d) / span).clamp(0.0, 1.0);
-    return Semantics(
-      label: [
-        'Today',
-        if (target != null) 'target ${DateFormats.monthYear.format(target!)}',
-        if (finish != null) 'finish ${DateFormats.monthYear.format(finish!)}',
-      ].join(', '),
-      excludeSemantics: true,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(end: finish == null ? 1 : at(finish!)),
-        duration: context.motion.slow,
-        curve: Curves2.emphasized,
-        builder: (context, f, _) => CustomPaint(
-          size: const Size(double.infinity, 52),
-          painter: _PathPainter(
-            today: at(today),
-            target: target == null ? null : at(target!),
-            finish: finish == null ? null : f,
-            startLabel: DateFormats.shortMonthYear.format(start),
-            targetLabel: target == null ? null : 'Target ${DateFormats.shortMonthYear.format(target!)}',
-            finishLabel: finish == null ? null : 'Done ${DateFormats.shortMonthYear.format(finish!)}',
-            color: color,
-            late: c.warning,
-            track: c.surfaceMuted,
-            ink: c.textPrimary,
-            muted: c.textTertiary,
-            labelStyle: t.micro,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PathPainter extends CustomPainter {
-  const _PathPainter({
-    required this.today,
-    required this.target,
-    required this.finish,
-    required this.startLabel,
-    required this.targetLabel,
-    required this.finishLabel,
-    required this.color,
-    required this.late,
-    required this.track,
-    required this.ink,
-    required this.muted,
-    required this.labelStyle,
-  });
-
-  final double today;
-  final double? target;
-  final double? finish;
-  final String startLabel;
-  final String? targetLabel;
-  final String? finishLabel;
-  final Color color;
-  final Color late;
-  final Color track;
-  final Color ink;
-  final Color muted;
-  final TextStyle labelStyle;
-
-  void _label(Canvas canvas, String s, double x, double y, double w, {Color? color, bool bold = false}) {
-    final tp = TextPainter(
-      text: TextSpan(text: s, style: labelStyle.copyWith(color: color ?? muted, fontWeight: bold ? FontWeight.w800 : null)),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final dx = (x - tp.width / 2).clamp(0.0, math.max(0.0, w - tp.width)).toDouble();
-    tp.paint(canvas, Offset(dx, y));
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    const lineY = 22.0;
-    const bar = 6.0;
-    double x(double v) => v * w;
-    final rr = RRect.fromRectAndRadius(Rect.fromLTWH(0, lineY - bar / 2, w, bar), const Radius.circular(bar / 2));
-    canvas.drawRRect(rr, Paint()..color = track);
-
-    // Travelled so far.
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(0, lineY - bar / 2, x(today), bar), const Radius.circular(bar / 2)),
-      Paint()..color = color,
-    );
-    // Planned stretch to the finish.
-    final f = finish;
-    if (f != null && f > today) {
-      final p = Paint()
-        ..color = color.withValues(alpha: 0.55)
-        ..strokeWidth = bar
-        ..strokeCap = StrokeCap.round;
-      for (var d = x(today) + 4.0; d < x(f); d += 10) {
-        canvas.drawLine(Offset(d, lineY), Offset(math.min(d + 4, x(f)), lineY), p);
-      }
-    }
-    // Late gap.
-    final tg = target;
-    if (tg != null && f != null && f > tg) {
-      canvas.drawRect(Rect.fromLTRB(x(tg), lineY - bar / 2, x(f), lineY + bar / 2), Paint()..color = late.withValues(alpha: 0.45));
-    }
-
-    // Target flag above the line.
-    if (tg != null) {
-      final tx = x(tg);
-      canvas.drawLine(Offset(tx, 4), Offset(tx, lineY + bar), Paint()
-        ..color = ink
-        ..strokeWidth = 1.6);
-      final flag = Path()
-        ..moveTo(tx, 4)
-        ..lineTo(tx + 9, 7.5)
-        ..lineTo(tx, 11)
-        ..close();
-      canvas.drawPath(flag, Paint()..color = ink);
-    }
-    // Today dot.
-    canvas.drawCircle(Offset(x(today), lineY), 5.5, Paint()..color = ink);
-    canvas.drawCircle(Offset(x(today), lineY), 2.5, Paint()..color = track);
-    // Finish marker.
-    if (f != null) {
-      final fx = x(f);
-      final c = tg != null && f > tg ? late : color;
-      canvas.drawCircle(Offset(fx, lineY), 8, Paint()..color = c.withValues(alpha: 0.25));
-      canvas.drawCircle(Offset(fx, lineY), 5, Paint()..color = c);
-    }
-
-    // Labels: start + today under the line at the left, target and finish
-    // under their markers (target above when the two would collide).
-    const below = lineY + 10;
-    _label(canvas, startLabel, 0, below, w);
-    final fl = finishLabel;
-    if (f != null && fl != null) _label(canvas, fl, x(f), below, w, color: ink, bold: true);
-    final tl = targetLabel;
-    if (tg != null && tl != null) {
-      final collide = f != null && (x(f) - x(tg)).abs() < 80;
-      if (collide) {
-        _label(canvas, tl, x(tg) + 46, 0, w, color: ink);
-      } else {
-        _label(canvas, tl, x(tg), below, w, color: ink);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_PathPainter old) =>
-      old.today != today ||
-      old.target != target ||
-      old.finish != finish ||
-      old.finishLabel != finishLabel ||
-      old.color != color ||
-      old.ink != ink;
 }

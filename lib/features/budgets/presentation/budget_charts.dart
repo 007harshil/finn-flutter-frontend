@@ -7,163 +7,11 @@ import 'package:flutter/services.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../design_system/design_system.dart' show AmountVisibility;
+import '../../../ui/ui.dart';
 import '../application/budget_history.dart';
 import '../application/budget_view.dart';
 import 'budget_widgets.dart';
-
-/// Half-circle usage gauge. The arc fills with spending; a notch on the rim
-/// marks how far through the period today is, so "fill past the notch"
-/// reads as "spending faster than time". The faint zone is the warning
-/// threshold.
-class BudgetGauge extends StatelessWidget {
-  const BudgetGauge({
-    super.key,
-    required this.used,
-    required this.elapsed,
-    required this.warnAt,
-    required this.color,
-    required this.child,
-    this.semanticsLabel,
-  });
-
-  /// Spent share of the limit (may exceed 1).
-  final double used;
-  final double elapsed;
-  final double warnAt;
-  final Color color;
-  final Widget child;
-  final String? semanticsLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Semantics(
-      label: semanticsLabel,
-      child: LayoutBuilder(
-        builder: (context, box) {
-          final w = math.min(box.maxWidth, 280.0);
-          final h = w * 0.56;
-          return SizedBox(
-            width: w,
-            height: h,
-            child: Stack(
-              alignment: Alignment.bottomCenter,
-              children: [
-                Positioned.fill(
-                  child: RepaintBoundary(
-                    child: TweenAnimationBuilder<double>(
-                      tween: Tween(begin: 0, end: 1),
-                      duration: context.reduceMotion ? Duration.zero : const Duration(milliseconds: 1200),
-                      curve: Curves.easeOutCubic,
-                      builder: (context, t, _) => CustomPaint(
-                        painter: _GaugePainter(
-                          used: used * t,
-                          elapsed: elapsed,
-                          warnAt: warnAt,
-                          reveal: t,
-                          color: used > 1 ? c.negative : color,
-                          track: c.surfaceMuted,
-                          warn: c.warning,
-                          ink: c.textPrimary,
-                          knob: c.surface,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: EdgeInsets.only(bottom: h * 0.02, left: w * 0.2, right: w * 0.2),
-                  child: child,
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _GaugePainter extends CustomPainter {
-  const _GaugePainter({
-    required this.used,
-    required this.elapsed,
-    required this.warnAt,
-    required this.reveal,
-    required this.color,
-    required this.track,
-    required this.warn,
-    required this.ink,
-    required this.knob,
-  });
-
-  final double used;
-  final double elapsed;
-  final double warnAt;
-  final double reveal;
-  final Color color;
-  final Color track;
-  final Color warn;
-  final Color ink;
-  final Color knob;
-
-  static const _stroke = 14.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = math.min(size.width / 2, size.height) - _stroke / 2 - 6;
-    final center = Offset(size.width / 2, size.height - 4);
-    final rect = Rect.fromCircle(center: center, radius: r);
-    Paint arc(Color c, [double w = _stroke]) => Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w
-      ..strokeCap = StrokeCap.round
-      ..color = c;
-
-    canvas.drawArc(rect, math.pi, math.pi, false, arc(track));
-    if (warnAt > 0 && warnAt < 1) {
-      canvas.drawArc(rect, math.pi + math.pi * warnAt, math.pi * (1 - warnAt), false,
-          arc(warn.withValues(alpha: 0.22), _stroke)..strokeCap = StrokeCap.butt);
-    }
-    final fill = used.clamp(0.0, 1.0);
-    if (fill > 0) canvas.drawArc(rect, math.pi, math.pi * fill, false, arc(color));
-
-    // Today notch on the outer rim.
-    if (elapsed > 0 && elapsed < 1) {
-      final a = math.pi + math.pi * elapsed;
-      final dir = Offset(math.cos(a), math.sin(a));
-      final outer = center + dir * (r + _stroke / 2 + 5);
-      final inner = center + dir * (r - _stroke / 2 - 2);
-      canvas.drawLine(
-        inner,
-        outer,
-        Paint()
-          ..color = ink.withValues(alpha: reveal)
-          ..strokeWidth = 2.5
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-
-    // Knob at the end of the fill.
-    if (fill > 0) {
-      final a = math.pi + math.pi * fill;
-      final p = center + Offset(math.cos(a), math.sin(a)) * r;
-      canvas.drawCircle(p.translate(0, 1.5), _stroke / 2 + 2, Paint()..color = Colors.black.withValues(alpha: 0.15));
-      canvas.drawCircle(p, _stroke / 2 + 2, Paint()..color = knob);
-      canvas.drawCircle(p, _stroke / 2 - 2, Paint()..color = color);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GaugePainter old) =>
-      old.used != used ||
-      old.elapsed != elapsed ||
-      old.reveal != reveal ||
-      old.color != color ||
-      old.track != track ||
-      old.ink != ink;
-}
 
 /// Running total through the period against an even-pace line and the
 /// limit, with daily spends as small bars along the bottom and a dotted
@@ -196,8 +44,8 @@ class BurnChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = UiColors.of(context);
+    final t = UiType.of(context);
     final hidden = AmountVisibility.hiddenOf(context);
     return LayoutBuilder(
       builder: (context, box) {
@@ -219,7 +67,7 @@ class BurnChart extends StatelessWidget {
           child: RepaintBoundary(
             child: TweenAnimationBuilder<double>(
               tween: Tween(begin: 0, end: 1),
-              duration: context.reduceMotion ? Duration.zero : const Duration(milliseconds: 1100),
+              duration: UiMotion.of(context).reduced ? Duration.zero : const Duration(milliseconds: 1100),
               curve: Curves.easeOutCubic,
               builder: (context, reveal, _) => CustomPaint(
                 size: Size(box.maxWidth, height),
@@ -234,10 +82,10 @@ class BurnChart extends StatelessWidget {
                   reveal: reveal,
                   color: color,
                   over: c.negative,
-                  ink: c.textPrimary,
-                  muted: c.textTertiary,
-                  grid: c.border,
-                  labelStyle: t.micro,
+                  ink: c.ink,
+                  muted: c.inkFaint,
+                  grid: c.hairline,
+                  labelStyle: t.small,
                 ),
               ),
             ),
@@ -297,7 +145,7 @@ class _BurnPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: s,
-        style: labelStyle.copyWith(color: color ?? muted, fontWeight: bold ? FontWeight.w800 : null),
+        style: labelStyle.copyWith(color: color ?? muted, fontWeight: bold ? FontWeight.w600 : null),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -461,13 +309,13 @@ class HistoryBars extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = UiColors.of(context);
+    final t = UiType.of(context);
     final limit = points.isEmpty ? 0 : points.last.limit.paise;
     final maxV = points.fold<int>(limit, (m, p) => math.max(m, p.spent.paise)) * 1.1;
     double h(int v) => maxV <= 0 ? 0 : v / maxV;
     final avg = averageSpentBefore(points);
-    final reduce = context.reduceMotion;
+    final reduce = UiMotion.of(context).reduced;
     String label(BudgetPeriodPoint p) =>
         points.length > 2 ? DateFormats.shortMonth.format(p.period.start) : (p.isCurrent ? 'Now' : 'Before');
     return SizedBox(
@@ -486,7 +334,7 @@ class HistoryBars extends StatelessWidget {
                 top: limitTop,
                 child: Row(
                   children: [
-                    Expanded(child: Container(height: 1.2, color: c.textPrimary.withValues(alpha: 0.4))),
+                    Expanded(child: Container(height: 1.2, color: c.ink.withValues(alpha: 0.4))),
                   ],
                 ),
               ),
@@ -495,7 +343,7 @@ class HistoryBars extends StatelessWidget {
                   left: 0,
                   right: 0,
                   top: avgTop,
-                  child: Container(height: 1, color: c.textTertiary.withValues(alpha: 0.5)),
+                  child: Container(height: 1, color: c.inkFaint.withValues(alpha: 0.5)),
                 ),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -524,19 +372,19 @@ class HistoryBars extends StatelessWidget {
                                   child: TweenAnimationBuilder<double>(
                                     tween: Tween(begin: 0, end: h(points[i].spent.paise)),
                                     duration: reduce ? Duration.zero : Duration(milliseconds: 600 + 70 * i),
-                                    curve: Curves.easeOutBack,
+                                    curve: Curves.easeOutCubic,
                                     builder: (context, v, _) => FractionallySizedBox(
                                       heightFactor: v.clamp(0.0, 1.0),
                                       widthFactor: 0.5,
                                       child: AnimatedContainer(
-                                        duration: context.motion.fast,
+                                        duration: UiMotion.of(context).quick,
                                         decoration: BoxDecoration(
                                           color: points[i].isOver
                                               ? c.negative
                                               : color.withValues(
                                                   alpha: points[i].isCurrent || selected == i ? 1 : 0.35),
-                                          borderRadius: const BorderRadius.vertical(top: Radius.circular(Radii.sm)),
-                                          border: selected == i ? Border.all(color: c.textPrimary, width: 1.5) : null,
+                                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                                          border: selected == i ? Border.all(color: c.ink, width: 1.5) : null,
                                         ),
                                       ),
                                     ),
@@ -548,9 +396,9 @@ class HistoryBars extends StatelessWidget {
                                 child: Center(
                                   child: Text(
                                     label(points[i]),
-                                    style: t.micro.copyWith(
-                                      color: points[i].isCurrent || selected == i ? c.textPrimary : c.textSecondary,
-                                      fontWeight: points[i].isCurrent || selected == i ? FontWeight.w900 : FontWeight.w600,
+                                    style: t.small.copyWith(
+                                      color: points[i].isCurrent || selected == i ? c.ink : c.inkSoft,
+                                      fontWeight: points[i].isCurrent || selected == i ? FontWeight.w700 : FontWeight.w500,
                                     ),
                                   ),
                                 ),

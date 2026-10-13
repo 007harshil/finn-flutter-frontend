@@ -1,8 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -13,23 +11,23 @@ import '../../../app/router/routes.dart';
 import '../../../app/shell/app_drawer.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
-import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../design_system/design_system.dart'
+    show AmountText, BottomClearanceX, FinnMenuItem, showFinnActionMenu;
 import '../../../features/transactions/domain/transaction.dart';
 import '../../../shared/presentation/transaction_row.dart';
+import '../../../ui/ui.dart';
 import '../../categories/domain/category.dart';
 import '../application/transaction_filter.dart';
 import 'widgets/activity_filter_sheet.dart';
-import 'widgets/activity_pulse.dart';
 
 /// Rows rendered per page of the client-side pagination.
 const int _pageSize = 60;
 
-/// "Activity": every completed transaction, filterable by period, text,
-/// type and category. Filter state lives in [transactionFilterProvider] so
-/// it survives tab switches; the filtered feed is derived in
-/// [transactionFeedProvider].
+/// "Activity": every completed transaction for a month (or a custom range),
+/// with in/out totals that double as the type filter, search, and a filter
+/// sheet. Filter state lives in [transactionFilterProvider] so it survives
+/// tab switches; the filtered feed is derived in [transactionFeedProvider].
 class TransactionsScreen extends ConsumerStatefulWidget {
   const TransactionsScreen({super.key, this.initialType, this.initialMonth});
 
@@ -41,7 +39,7 @@ class TransactionsScreen extends ConsumerStatefulWidget {
 }
 
 class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
-  late final TextEditingController _search = TextEditingController(text: ref.read(transactionFilterProvider).query);
+  late bool _searching = ref.read(transactionFilterProvider).query.isNotEmpty;
   int _visibleRows = _pageSize;
   bool _extendQueued = false;
 
@@ -68,16 +66,15 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     });
   }
 
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
   TransactionFilterController get _filter => ref.read(transactionFilterProvider.notifier);
 
+  void _toggleSearch() {
+    setState(() => _searching = !_searching);
+    if (!_searching) _filter.setQuery('');
+  }
+
   void _clearRefinements() {
-    _search.clear();
+    setState(() => _searching = false);
     _filter.clearRefinements();
   }
 
@@ -131,109 +128,120 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   @override
   Widget build(BuildContext context) {
     final feedValue = ref.watch(transactionFeedProvider);
+    final advanced = ref.watch(transactionFilterProvider.select((f) => f.advancedCount));
     ref.listen(transactionFilterProvider, (prev, next) {
       if (prev != next && _visibleRows != _pageSize) setState(() => _visibleRows = _pageSize);
     });
     final feed = feedValue.value;
-    final c = context.colors;
 
-    return Scaffold(
-      backgroundColor: c.background,
-      body: SafeArea(
-        bottom: false,
-        child: LayoutBuilder(
-          builder: (context, box) {
-            final side = math.max(Space.gutter, (box.maxWidth - Space.maxContentWidth) / 2);
-            return NotificationListener<ScrollNotification>(
-              onNotification: (n) => _onScroll(n, feed),
-              child: CustomScrollView(
-                key: const PageStorageKey('activity-list'),
-                slivers: [
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(side, Space.x4, side, Space.x2),
-                    sliver: SliverToBoxAdapter(child: _TitleRow(onSort: _pickSort)),
+    return UiPage(
+      leading: const AppMenuButton(),
+      title: 'Activity',
+      actions: [
+        UiIconButton(
+          key: const ValueKey('activity-search'),
+          icon: LucideIcons.search,
+          tooltip: _searching ? 'Close search' : 'Search',
+          onPressed: _toggleSearch,
+        ),
+        UiIconButton(
+          key: const ValueKey('activity-filters'),
+          icon: LucideIcons.slidersHorizontal,
+          tooltip: advanced == 0 ? 'Filters' : 'Filters, $advanced on',
+          badge: advanced,
+          onPressed: _openFilters,
+        ),
+      ],
+      body: NotificationListener<ScrollNotification>(
+        onNotification: (n) => _onScroll(n, feed),
+        child: CustomScrollView(
+          key: const PageStorageKey('activity-list'),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(UiSpace.gutter, 0, UiSpace.gutter, 0),
+              sliver: SliverToBoxAdapter(
+                child: UiColumnWidth(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_searching) ...[
+                        UiSearchField(
+                          hint: 'Name, note, category or amount',
+                          initialValue: ref.read(transactionFilterProvider).query,
+                          onChanged: _filter.setQuery,
+                          onClose: _toggleSearch,
+                        ),
+                        const SizedBox(height: UiSpace.xs),
+                      ],
+                      _PeriodBar(onPickRange: _pickRange),
+                    ],
                   ),
-                  PinnedHeaderSliver(
-                    child: _FilterHeader(
-                      side: side,
-                      search: _search,
-                      onPickRange: _pickRange,
-                      onOpenFilters: _openFilters,
-                    ),
-                  ),
-                  ..._content(context, feedValue, side),
-                  SliverToBoxAdapter(child: SizedBox(height: context.bottomClearance)),
-                ],
+                ),
               ),
-            );
-          },
+            ),
+            ..._content(context, feedValue),
+            SliverToBoxAdapter(child: SizedBox(height: context.bottomClearance)),
+          ],
         ),
       ),
     );
   }
 
-  List<Widget> _content(BuildContext context, AsyncValue<TransactionFeed> value, double side) {
-    EdgeInsets pad([double top = 0]) => EdgeInsets.fromLTRB(side, top, side, 0);
+  List<Widget> _content(BuildContext context, AsyncValue<TransactionFeed> value) {
+    Widget box(Widget child, {double top = 0}) => SliverPadding(
+      padding: EdgeInsets.fromLTRB(UiSpace.gutter, top, UiSpace.gutter, 0),
+      sliver: SliverToBoxAdapter(child: UiColumnWidth(child: child)),
+    );
+
     if (!value.hasValue) {
       if (value.hasError) {
-        final e = value.error;
         return [
-          SliverPadding(
-            padding: pad(Space.x6),
-            sliver: SliverToBoxAdapter(
-              child: ErrorState(
-                title: 'Could not load your transactions',
-                message: e is AppFailure ? e.message : 'Please try again.',
-                onRetry: () => refreshFinanceData(ref),
-              ),
+          box(
+            UiEmpty(
+              icon: LucideIcons.cloudOff,
+              title: 'Could not load your transactions',
+              message: 'Check your connection and try again.',
+              action: 'Try again',
+              onAction: () => refreshFinanceData(ref),
             ),
           ),
         ];
       }
-      return [
-        SliverPadding(
-          padding: pad(Space.x3),
-          sliver: const SliverToBoxAdapter(
-            child: SkeletonPulse(
-              child: Column(
-                children: [
-                  CardSkeleton(height: 92),
-                  SizedBox(height: Space.x4),
-                  ListSkeleton(count: 8, padding: EdgeInsets.zero),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ];
+      return [box(const _Placeholder(), top: UiSpace.md)];
     }
 
     final feed = value.requireValue;
     final filter = feed.filter;
+    final summary = box(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          UiReveal(index: 0, child: _Summary(feed: feed)),
+          _ActiveFilters(onSort: _pickSort, onClearAll: _clearRefinements),
+        ],
+      ),
+      top: UiSpace.sm,
+    );
+
     if (feed.isEmpty) {
       final refined = filter.hasRefinements;
       return [
-        SliverPadding(
-          padding: pad(Space.x4),
-          sliver: SliverToBoxAdapter(
-            child: refined
-                ? EmptyState(
-                    icon: LucideIcons.searchX,
-                    title: 'No transactions match these filters',
-                    message: 'Try a different search or filter, or widen the dates.',
-                    actionLabel: 'Clear filters',
-                    actionIcon: LucideIcons.filterX,
-                    onAction: _clearRefinements,
-                  )
-                : EmptyState(
-                    icon: LucideIcons.inbox,
-                    title: 'Nothing recorded ${_periodPhrase(filter)}',
-                    message: 'Income and expenses you record will appear here.',
-                    actionLabel: 'Add transaction',
-                    actionIcon: LucideIcons.plus,
-                    onAction: () => context.push(AppRoutes.newTransaction()),
-                  ),
-          ),
+        summary,
+        box(
+          refined
+              ? UiEmpty(
+                  icon: LucideIcons.searchX,
+                  title: 'No matches',
+                  message: 'Try another search or filter, or widen the dates.',
+                  action: 'Clear filters',
+                  onAction: _clearRefinements,
+                )
+              : UiEmpty(
+                  icon: LucideIcons.inbox,
+                  title: 'Nothing recorded ${_periodPhrase(filter)}',
+                  action: 'Add transaction',
+                  onAction: () => context.push(AppRoutes.newTransaction()),
+                ),
         ),
       ];
     }
@@ -242,56 +250,51 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final entryCount = feed.entryCountFor(rows);
     final grouped = filter.sort.groupsByDate;
     final today = ref.read(todayProvider);
+    final entries = feed.entries;
+    bool isHeader(int i) => i >= entryCount || entries[i] is FeedDayHeader;
+
     return [
-      SliverPadding(
-        padding: pad(Space.x3),
-        sliver: SliverToBoxAdapter(
-          child: StaggeredEntrance(child: ActivityPulse(feed: feed)),
+      summary,
+      box(
+        UiSectionTitle(
+          title: feed.count == 1 ? '1 transaction' : '${feed.count} transactions',
+          action: filter.sort.label,
+          onAction: _pickSort,
         ),
+        top: UiSpace.lg,
       ),
       SliverPadding(
-        padding: EdgeInsets.fromLTRB(side, Space.x2, side, 0),
+        padding: const EdgeInsets.symmetric(horizontal: UiSpace.gutter),
         sliver: SliverList.builder(
           itemCount: entryCount,
-          itemBuilder: (context, i) => switch (feed.entries[i]) {
-            FeedDayHeader(:final date, :final net, :final count) => _DayHeader(
-              key: ValueKey('day-${date.millisecondsSinceEpoch}'),
-              date: date,
-              today: today,
-              net: net,
-              count: count,
-            ),
-            FeedTransaction(:final transaction) => TransactionRow(
-              key: ValueKey(transaction.id),
-              transaction: transaction,
-              showDate: !grouped,
-            ),
-          },
+          itemBuilder: (context, i) => UiColumnWidth(
+            child: switch (entries[i]) {
+              FeedDayHeader(:final date, :final net, :final count) => _DayHeader(
+                key: ValueKey('day-${date.millisecondsSinceEpoch}'),
+                date: date,
+                today: today,
+                net: net,
+                count: count,
+                first: i == 0,
+              ),
+              FeedTransaction(:final transaction) => UiPanelSlice(
+                key: ValueKey(transaction.id),
+                first: i == 0 || isHeader(i - 1),
+                last: i == entryCount - 1 || isHeader(i + 1),
+                child: TransactionRow(transaction: transaction, showDate: !grouped),
+              ),
+            },
+          ),
         ),
       ),
       if (rows < feed.count)
-        SliverPadding(
-          padding: pad(Space.x4),
-          sliver: SliverToBoxAdapter(
-            child: FinnButton(
-              label: 'Load more (${feed.count - rows} left)',
-              icon: LucideIcons.chevronDown,
-              variant: FinnButtonVariant.outline,
-              expand: true,
-              onPressed: () => setState(() => _visibleRows += _pageSize),
-            ),
+        box(
+          UiSecondaryButton(
+            label: 'Show more',
+            icon: LucideIcons.chevronDown,
+            onPressed: () => setState(() => _visibleRows += _pageSize),
           ),
-        )
-      else if (feed.count > 8)
-        SliverPadding(
-          padding: pad(Space.x5),
-          sliver: SliverToBoxAdapter(
-            child: Text(
-              "That's everything ${_periodPhrase(filter)}",
-              textAlign: TextAlign.center,
-              style: context.text.caption,
-            ),
-          ),
+          top: UiSpace.lg,
         ),
     ];
   }
@@ -311,128 +314,184 @@ String _rangeLabel(DateRange r) {
 }
 
 String _periodPhrase(TransactionFilter f) =>
-    f.hasCustomRange ? 'in this date range' : 'in ${DateFormats.monthYear.format(f.month.start)}';
+    f.hasCustomRange ? 'in these dates' : 'in ${DateFormats.monthYear.format(f.month.start)}';
 
 // ---------------------------------------------------------------------------
 // Header
 // ---------------------------------------------------------------------------
 
-class _TitleRow extends ConsumerWidget {
-  const _TitleRow({required this.onSort});
+/// "‹ October 2026 ›" with a calendar for a custom range; a custom range
+/// replaces the stepper until it is cleared.
+class _PeriodBar extends ConsumerWidget {
+  const _PeriodBar({required this.onPickRange});
 
-  final VoidCallback onSort;
+  final VoidCallback onPickRange;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sort = ref.watch(transactionFilterProvider.select((f) => f.sort));
-    return Row(
+    final t = UiType.of(context);
+    final month = ref.watch(transactionFilterProvider.select((f) => f.month));
+    final range = ref.watch(transactionFilterProvider.select((f) => f.customRange));
+    final bounds = ref.watch(activityMonthBoundsProvider);
+    final notifier = ref.read(transactionFilterProvider.notifier);
+
+    if (range != null) {
+      final label = _rangeLabel(range);
+      return SizedBox(
+        height: UiSpace.touch,
+        child: Row(
+          children: [
+            Flexible(
+              child: Semantics(
+                button: true,
+                label: 'Dates $label. Change',
+                excludeSemantics: true,
+                child: InkWell(
+                  onTap: onPickRange,
+                  borderRadius: UiRadius.chip,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: UiSpace.xs, vertical: UiSpace.sm),
+                    child: Text(
+                      label,
+                      style: t.body.copyWith(fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const Spacer(),
+            UiIconButton(icon: LucideIcons.x, tooltip: 'Back to monthly view', size: 18, onPressed: notifier.clearRange),
+          ],
+        ),
+      );
+    }
+
+    return UiPeriodStepper(
+      label: DateFormats.monthYear.format(month.start),
+      onPrevious: month > bounds.first ? () => notifier.setMonth(month.previous) : null,
+      onNext: month < bounds.last ? () => notifier.setMonth(month.next) : null,
+      trailing: UiIconButton(
+        icon: LucideIcons.calendarRange,
+        tooltip: 'Choose dates',
+        size: 18,
+        onPressed: onPickRange,
+      ),
+    );
+  }
+}
+
+/// In and out for the period (each one also filters the list to that
+/// type), what was kept, and one line comparing spending with the period
+/// before.
+class _Summary extends ConsumerWidget {
+  const _Summary({required this.feed});
+
+  final TransactionFeed feed;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = UiColors.of(context);
+    final t = UiType.of(context);
+    final f = feed.filter;
+    final notifier = ref.read(transactionFilterProvider.notifier);
+    void toggle(TransactionType type) {
+      final cats = ref.read(categoriesByIdProvider).value ?? const <String, TransactionCategory>{};
+      notifier.setType(f.type == type ? null : type, categories: cats);
+    }
+
+    final net = feed.net;
+    final showNet = f.type == null && !(feed.income.isZero && feed.expense.isZero);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: Semantics(header: true, child: Text('Activity', style: context.text.pageTitle)),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: UiStat(
+                key: const ValueKey('activity-in'),
+                label: 'In',
+                value: AmountText(
+                  feed.income,
+                  style: t.figure.copyWith(color: feed.income.isZero ? null : c.positive),
+                  decimals: DecimalDisplay.none,
+                ),
+                selected: f.type == TransactionType.income,
+                semanticLabel: 'Money in, ${MoneyFormatter.spoken(feed.income)}. Show only income',
+                onTap: () => toggle(TransactionType.income),
+              ),
+            ),
+            const SizedBox(width: UiSpace.md),
+            Expanded(
+              child: UiStat(
+                key: const ValueKey('activity-out'),
+                label: 'Out',
+                value: AmountText(feed.expense, style: t.figure, decimals: DecimalDisplay.none),
+                selected: f.type == TransactionType.expense,
+                semanticLabel: 'Money out, ${MoneyFormatter.spoken(feed.expense)}. Show only spending',
+                onTap: () => toggle(TransactionType.expense),
+              ),
+            ),
+            const SizedBox(width: UiSpace.md),
+            Expanded(
+              child: showNet
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: UiSpace.xs),
+                      child: UiStat(
+                        label: net.isNegative ? 'Overspent' : 'Kept',
+                        value: AmountText(
+                          net.abs(),
+                          style: t.figure.copyWith(color: net.isNegative ? c.negative : null),
+                          decimals: DecimalDisplay.none,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
         ),
-        FinnIconButton(
-          icon: LucideIcons.arrowUpDown,
-          tooltip: 'Sort: ${sort.label}',
-          variant: sort == TransactionSort.newest ? FinnIconButtonVariant.outline : FinnIconButtonVariant.filled,
-          onPressed: onSort,
-        ),
+        _Trend(feed: feed),
       ],
     );
   }
 }
 
-class _FilterHeader extends ConsumerWidget {
-  const _FilterHeader({
-    required this.side,
-    required this.search,
-    required this.onPickRange,
-    required this.onOpenFilters,
-  });
+/// "Spending 12% lower than Sep". Nothing when there is no fair comparison.
+class _Trend extends StatelessWidget {
+  const _Trend({required this.feed});
 
-  final double side;
-  final TextEditingController search;
-  final VoidCallback onPickRange;
-  final VoidCallback onOpenFilters;
+  final TransactionFeed feed;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
-    final month = ref.watch(transactionFilterProvider.select((f) => f.month));
-    final range = ref.watch(transactionFilterProvider.select((f) => f.customRange));
-    final advanced = ref.watch(transactionFilterProvider.select((f) => f.advancedCount));
-    final bounds = ref.watch(activityMonthBoundsProvider);
-    final notifier = ref.read(transactionFilterProvider.notifier);
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: c.background,
-        border: Border(bottom: BorderSide(color: c.border)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(side, Space.x1, side, Space.x2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const AppMenuButton(variant: FinnIconButtonVariant.outline, size: FinnButtonSize.sm),
-                if (AppDrawerScope.maybeOf(context) != null) const SizedBox(width: Space.x2),
-                Expanded(
-                  child: range == null
-                      ? MonthSwitcher(month: month, min: bounds.first, max: bounds.last, onChanged: notifier.setMonth)
-                      : _RangePill(range: range, onClear: notifier.clearRange, onTap: onPickRange),
-                ),
-                const SizedBox(width: Space.x2),
-                FinnIconButton(
-                  icon: LucideIcons.calendarRange,
-                  tooltip: 'Choose a date range',
-                  variant: range == null ? FinnIconButtonVariant.outline : FinnIconButtonVariant.filled,
-                  size: FinnButtonSize.sm,
-                  onPressed: onPickRange,
-                ),
-              ],
-            ),
-            const SizedBox(height: Space.x1_5),
-            Row(
-              children: [
-                Expanded(
-                  child: FinnSearchField(
-                    controller: search,
-                    hint: 'Search name, note, category or ₹',
-                    onChanged: notifier.setQuery,
-                  ),
-                ),
-                const SizedBox(width: Space.x2),
-                CountBadge(
-                  count: advanced,
-                  color: c.primary,
-                  semanticsLabel: advanced == 0 ? null : '$advanced filters on',
-                  child: FinnIconButton(
-                    key: const ValueKey('activity-filters'),
-                    icon: LucideIcons.slidersHorizontal,
-                    tooltip: 'Filters',
-                    variant: advanced == 0 ? FinnIconButtonVariant.outline : FinnIconButtonVariant.filled,
-                    onPressed: onOpenFilters,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: Space.x1_5),
-            _QuickFilterRow(onOpenFilters: onOpenFilters),
-          ],
-        ),
-      ),
+  Widget build(BuildContext context) {
+    final c = UiColors.of(context);
+    final f = feed.filter;
+    final incomeMode = f.type == TransactionType.income;
+    final now = incomeMode ? feed.income : feed.expense;
+    final before = incomeMode ? feed.previousIncome : feed.previousExpense;
+    if (before.isZero || now.isZero || f.query.trim().isNotEmpty) return const SizedBox.shrink();
+    final pct = ((now.paise - before.paise) * 100 / before.paise).round();
+    final vs = f.hasCustomRange ? 'the dates before' : DateFormats.shortMonth.format(f.month.previous.start);
+    final what = incomeMode ? 'Income' : 'Spending';
+    final up = pct > 0;
+    final good = incomeMode ? up : !up;
+    return UiNotice(
+      icon: pct == 0 ? LucideIcons.equal : (up ? LucideIcons.trendingUp : LucideIcons.trendingDown),
+      color: pct == 0 ? null : (good ? c.positive : c.negative),
+      text: pct == 0 ? '$what same as $vs' : '$what ${pct.abs()}% ${up ? 'higher' : 'lower'} than $vs',
     );
   }
 }
 
-/// One slim row: the income/expense toggle, then a removable chip per
-/// active filter so the whole filter state reads at a glance.
-class _QuickFilterRow extends ConsumerWidget {
-  const _QuickFilterRow({required this.onOpenFilters});
+/// A removable chip per filter set in the filter sheet, so the whole
+/// filter state reads at a glance. Hidden when nothing is set.
+class _ActiveFilters extends ConsumerWidget {
+  const _ActiveFilters({required this.onSort, required this.onClearAll});
 
-  final VoidCallback onOpenFilters;
+  final VoidCallback onSort;
+  final VoidCallback onClearAll;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -456,252 +515,23 @@ class _QuickFilterRow extends ConsumerWidget {
       else if (f.origins.length > 1)
         ('origins', '${f.origins.length} sources', () => notifier.setOrigins(const {})),
     ];
+    if (chips.isEmpty) return const SizedBox.shrink();
 
-    return SizedBox(
-      height: 32,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
+    return Padding(
+      padding: const EdgeInsets.only(top: UiSpace.sm),
+      child: Wrap(
+        spacing: UiSpace.sm,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          _TypeToggle(
-            selected: f.type,
-            onChanged: (t) => notifier.setType(t, categories: cats),
-          ),
-          for (final (key, label, onRemove) in chips) ...[
-            const SizedBox(width: Space.x1_5),
-            _ActiveChip(key: ValueKey('active-filter:$key'), label: label, onRemove: onRemove),
-          ],
-          if (chips.isEmpty) ...[const SizedBox(width: Space.x1_5), _AddFilterChip(onTap: onOpenFilters)],
-        ],
-      ),
-    );
-  }
-}
-
-/// Compact All / In / Out switch with a sliding thumb.
-class _TypeToggle extends StatelessWidget {
-  const _TypeToggle({required this.selected, required this.onChanged});
-
-  final TransactionType? selected;
-  final ValueChanged<TransactionType?> onChanged;
-
-  static const _items = <(TransactionType?, String)>[
-    (null, 'All'),
-    (TransactionType.income, 'Income'),
-    (TransactionType.expense, 'Expense'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final index = _items.indexWhere((i) => i.$1 == selected);
-    final accent = switch (selected) {
-      TransactionType.income => c.positive,
-      TransactionType.expense => c.negative,
-      null => c.textPrimary,
-    };
-    return Container(
-      width: 204,
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(color: c.surfaceMuted, borderRadius: Radii.rFull),
-      child: Stack(
-        children: [
-          AnimatedAlign(
-            alignment: Alignment(-1 + index.toDouble(), 0),
-            duration: context.motion.normal,
-            curve: Curves2.emphasized,
-            child: FractionallySizedBox(
-              widthFactor: 1 / _items.length,
-              heightFactor: 1,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: c.isDark ? c.border : c.surface,
-                  borderRadius: Radii.rFull,
-                  boxShadow: c.isDark ? Elevation.none : Elevation.sm,
-                ),
-              ),
+          for (final (key, label, onRemove) in chips)
+            UiChipButton(
+              key: ValueKey('active-filter:$key'),
+              label: label,
+              trailingIcon: LucideIcons.x,
+              semanticLabel: 'Remove filter $label',
+              onTap: onRemove,
             ),
-          ),
-          Row(
-            children: [
-              for (final (value, label) in _items)
-                Expanded(
-                  child: Semantics(
-                    button: true,
-                    selected: value == selected,
-                    inMutuallyExclusiveGroup: true,
-                    label: label,
-                    excludeSemantics: true,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {
-                        if (value == selected) return;
-                        HapticFeedback.selectionClick();
-                        onChanged(value);
-                      },
-                      child: Center(
-                        child: AnimatedDefaultTextStyle(
-                          duration: context.motion.fast,
-                          style: t.micro.copyWith(
-                            color: value == selected ? accent : c.textSecondary,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.6,
-                          ),
-                          child: Text(label.toUpperCase()),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActiveChip extends StatelessWidget {
-  const _ActiveChip({super.key, required this.label, required this.onRemove});
-
-  final String label;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final chip = Semantics(
-      button: true,
-      label: '$label filter. Remove',
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onRemove();
-        },
-        child: Container(
-          padding: const EdgeInsets.only(left: Space.x3, right: Space.x2),
-          decoration: BoxDecoration(
-            color: c.primary.withValues(alpha: 0.1),
-            borderRadius: Radii.rFull,
-            border: Border.all(color: c.primary.withValues(alpha: 0.35)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 140),
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.text.micro.copyWith(color: c.textPrimary, fontWeight: FontWeight.w800),
-                ),
-              ),
-              const SizedBox(width: Space.x1),
-              Icon(LucideIcons.x, size: 13, color: c.textSecondary),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (context.reduceMotion) return chip;
-    return chip.animate().fadeIn(duration: Durations2.fast).scaleXY(begin: 0.85, curve: Curves2.emphasized);
-  }
-}
-
-class _AddFilterChip extends StatelessWidget {
-  const _AddFilterChip({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Semantics(
-      button: true,
-      label: 'Filter by amount, category, payment method or source',
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: Space.x3),
-          decoration: BoxDecoration(
-            borderRadius: Radii.rFull,
-            border: Border.all(color: c.border),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(LucideIcons.plus, size: 13, color: c.textSecondary),
-              const SizedBox(width: Space.x1),
-              Text(
-                'Amount, category…',
-                style: context.text.micro.copyWith(color: c.textSecondary, fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RangePill extends StatelessWidget {
-  const _RangePill({required this.range, required this.onClear, required this.onTap});
-
-  final DateRange range;
-  final VoidCallback onClear;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final label = _rangeLabel(range);
-    return Container(
-      constraints: const BoxConstraints(minHeight: Dimens.buttonHeightSm),
-      decoration: BoxDecoration(
-        color: c.surfaceMuted,
-        borderRadius: Radii.rFull,
-        border: Border.all(color: c.border),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Semantics(
-              button: true,
-              label: 'Date range $label. Change',
-              excludeSemantics: true,
-              child: InkWell(
-                borderRadius: Radii.rFull,
-                onTap: onTap,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: Space.x3, vertical: Space.x2),
-                  child: Row(
-                    children: [
-                      Icon(LucideIcons.calendarRange, size: 16, color: c.textSecondary),
-                      const SizedBox(width: Space.x2),
-                      Expanded(
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: context.text.label.copyWith(color: c.textPrimary, fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Back to monthly view',
-            onPressed: onClear,
-            icon: Icon(LucideIcons.x, size: 16, color: c.textSecondary),
-          ),
+          if (chips.length > 1) UiTextButton(label: 'Clear all', onTap: onClearAll),
         ],
       ),
     );
@@ -712,17 +542,26 @@ class _RangePill extends StatelessWidget {
 // List pieces
 // ---------------------------------------------------------------------------
 
+/// "Today" · net for the day, above that day's panel.
 class _DayHeader extends StatelessWidget {
-  const _DayHeader({super.key, required this.date, required this.today, required this.net, required this.count});
+  const _DayHeader({
+    super.key,
+    required this.date,
+    required this.today,
+    required this.net,
+    required this.count,
+    required this.first,
+  });
 
   final DateTime date;
   final DateTime today;
   final Money net;
   final int count;
+  final bool first;
 
   @override
   Widget build(BuildContext context) {
-    final t = context.text;
+    final t = UiType.of(context);
     final diff = daysBetween(today, date);
     final label = switch (diff) {
       0 => 'Today',
@@ -737,18 +576,41 @@ class _DayHeader extends StatelessWidget {
       label: '$label, $count transaction${count == 1 ? '' : 's'}, net ${MoneyFormatter.spoken(net)}',
       excludeSemantics: true,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(Space.x1, Space.x4, Space.x1, Space.x1),
+        padding: EdgeInsets.fromLTRB(UiSpace.xs, first ? 0 : UiSpace.lg, UiSpace.xs, UiSpace.sm),
         child: Row(
           children: [
-            Expanded(child: Text(label.toUpperCase(), style: t.eyebrow)),
-            AmountText(
-              net,
-              sign: net.isZero ? SignDisplay.auto : SignDisplay.always,
-              style: t.caption.copyWith(fontWeight: FontWeight.w800),
-            ),
+            Expanded(child: Text(label, style: t.label)),
+            AmountText(net, sign: net.isZero ? SignDisplay.auto : SignDisplay.always, style: t.small),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Shaped like the summary and first day, so nothing jumps on load.
+class _Placeholder extends StatelessWidget {
+  const _Placeholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: UiPlaceholder(height: 44)),
+            SizedBox(width: UiSpace.md),
+            Expanded(child: UiPlaceholder(height: 44)),
+            SizedBox(width: UiSpace.md),
+            Expanded(child: UiPlaceholder(height: 44)),
+          ],
+        ),
+        SizedBox(height: UiSpace.section),
+        UiPlaceholder(width: 120, height: 14),
+        SizedBox(height: UiSpace.md),
+        UiPlaceholder(height: 300, radius: UiRadius.panel),
+      ],
     );
   }
 }

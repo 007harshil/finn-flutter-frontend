@@ -2,70 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../actions/action.dart';
-import '../../../design_system/design_system.dart';
+import '../../../ui/ui.dart';
 import '../../execution/proposals.dart';
 import 'action_visuals.dart';
 
-/// One headline number of a review ("2 Move money").
-class ImpactTile extends StatelessWidget {
-  const ImpactTile({super.key, required this.value, required this.label, required this.icon, required this.color});
-
-  final String value;
-  final String label;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Space.x2_5, vertical: Space.x2),
-      decoration: BoxDecoration(
-        color: c.surface.withValues(alpha: c.isDark ? 0.6 : 0.85),
-        borderRadius: BorderRadius.circular(Radii.lg),
-        border: Border.all(color: c.border),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: Space.x1_5),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(value, style: t.bodyStrong),
-                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.micro.copyWith(color: c.textSecondary)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// What one proposed change does, built from the app's own preview (never
-/// the model's words): module and kind, the headline amount, the preview's
-/// details, before → after effects, risk pills and warnings. [trailing] sits
-/// at the end of the title row (e.g. a status mark).
+/// the model's words): module and kind, the summary, the headline amount,
+/// the details as label/value lines, before → after effects, risks and
+/// warnings. [trailing] sits at the end of the title row (e.g. a status).
 class ChangeDetails extends StatelessWidget {
-  const ChangeDetails({super.key, required this.proposal, this.accent, this.trailing});
+  const ChangeDetails({super.key, required this.proposal, this.trailing});
 
   final ProposedAction proposal;
-
-  /// Overrides the module colour of the eyebrow (regenerated changes).
-  final Color? accent;
   final Widget? trailing;
 
   static const _arrow = ' → ';
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = UiColors.of(context);
+    final t = UiType.of(context);
     final preview = proposal.preview;
-    final visual = actionVisualFor(proposal.descriptor.id, c);
+    final visual = actionVisualFor(proposal.descriptor.id);
     final warnings = [...preview.warnings, ...proposal.notes];
 
     PreviewLine? amount;
@@ -80,6 +38,10 @@ class ChangeDetails extends StatelessWidget {
         details.add(l);
       }
     }
+    final risks = <(IconData, String, Color)>[
+      if (proposal.descriptor.movesMoney) (LucideIcons.arrowLeftRight, 'Moves money', c.inkSoft),
+      if (!proposal.descriptor.reversible) (LucideIcons.lock, 'Cannot be undone', c.negative),
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -87,130 +49,99 @@ class ChangeDetails extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ActionIconBadge(visual: visual),
-            const SizedBox(width: Space.x3),
+            UiMark(icon: visual.icon),
+            const SizedBox(width: UiSpace.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${visual.module.toUpperCase()} · ${visual.verb.toUpperCase()}',
-                      style: t.eyebrow.copyWith(color: accent ?? visual.color)),
+                  Text('${visual.module} · ${visual.verb}', style: t.small),
                   const SizedBox(height: 2),
-                  Text(preview.summary, style: t.bodyStrong),
+                  Text(preview.summary, style: t.body),
+                  if (amount != null && !preview.summary.contains(amount.value)) ...[
+                    const SizedBox(height: UiSpace.xs),
+                    Text(amount.value, style: t.figure),
+                  ],
                 ],
               ),
             ),
-            ?trailing,
+            if (trailing != null) ...[const SizedBox(width: UiSpace.sm), trailing!],
           ],
         ),
-        if (amount != null) ...[
-          const SizedBox(height: Space.x2),
-          Text(amount.value, style: t.amountMedium),
+        if (details.isNotEmpty || effects.isNotEmpty) ...[
+          const SizedBox(height: UiSpace.md),
+          for (final l in details) _Line(label: l.label, value: Text(l.value, style: _value(t, l.emphasis), textAlign: TextAlign.end)),
+          for (final e in effects)
+            Semantics(
+              label: '${e.label} changes from ${e.value.split(_arrow).first} to ${e.value.split(_arrow).last}',
+              excludeSemantics: true,
+              child: _Line(
+                label: e.label,
+                value: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: e.value.split(_arrow).first,
+                        style: t.label.copyWith(decoration: TextDecoration.lineThrough),
+                      ),
+                      const TextSpan(text: '  →  '),
+                      TextSpan(text: e.value.split(_arrow).last, style: _value(t, true)),
+                    ],
+                  ),
+                  style: t.label,
+                  textAlign: TextAlign.end,
+                ),
+              ),
+            ),
         ],
-        if (details.isNotEmpty) ...[
-          const SizedBox(height: Space.x2),
+        if (risks.isNotEmpty) ...[
+          const SizedBox(height: UiSpace.sm),
           Wrap(
-            spacing: Space.x1_5,
-            runSpacing: Space.x1_5,
-            children: [for (final l in details) _DetailChip(line: l)],
-          ),
-        ],
-        for (final e in effects) ...[
-          const SizedBox(height: Space.x2),
-          _EffectRow(label: e.label, before: e.value.split(_arrow).first, after: e.value.split(_arrow).last),
-        ],
-        if (proposal.descriptor.movesMoney || !proposal.descriptor.reversible) ...[
-          const SizedBox(height: Space.x2),
-          Wrap(
-            spacing: Space.x1_5,
-            runSpacing: Space.x1_5,
+            spacing: UiSpace.lg,
+            runSpacing: UiSpace.xs,
             children: [
-              if (proposal.descriptor.movesMoney)
-                StatusPill(label: 'Moves money', color: c.attention, icon: LucideIcons.arrowLeftRight),
-              if (!proposal.descriptor.reversible)
-                StatusPill(label: 'Cannot be undone', color: c.negative, icon: LucideIcons.lock),
+              for (final (icon, label, color) in risks)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 13, color: color),
+                    const SizedBox(width: 6),
+                    Text(label, style: t.small.copyWith(color: color)),
+                  ],
+                ),
             ],
           ),
         ],
-        for (final w in warnings) ...[
-          const SizedBox(height: Space.x2),
-          InfoBanner(message: w, tone: FinnTone.warning),
-        ],
+        for (final w in warnings) UiNotice(icon: LucideIcons.triangleAlert, text: w, color: c.warning),
       ],
     );
   }
+
+  static TextStyle _value(UiType t, bool emphasis) =>
+      t.label.copyWith(color: t.body.color, fontWeight: emphasis ? FontWeight.w600 : FontWeight.w500);
 }
 
-class _DetailChip extends StatelessWidget {
-  const _DetailChip({required this.line});
-  final PreviewLine line;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Space.x2, vertical: Space.x1),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(Radii.md),
-        border: Border.all(color: c.border),
-      ),
-      child: Text.rich(
-        TextSpan(children: [
-          TextSpan(text: '${line.label}  ', style: t.micro.copyWith(color: c.textSecondary)),
-          TextSpan(
-            text: line.value,
-            style: t.caption.copyWith(color: c.textPrimary, fontWeight: line.emphasis ? FontWeight.w800 : FontWeight.w600),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-/// "Available to spend  ₹10,000 → ₹9,550" as a before/after strip.
-class _EffectRow extends StatelessWidget {
-  const _EffectRow({required this.label, required this.before, required this.after});
+/// "Category ............ Food & Dining".
+class _Line extends StatelessWidget {
+  const _Line({required this.label, required this.value});
 
   final String label;
-  final String before;
-  final String after;
+  final Widget value;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return Semantics(
-      label: '$label changes from $before to $after',
-      excludeSemantics: true,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: Space.x3, vertical: Space.x2),
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: BorderRadius.circular(Radii.lg),
-          border: Border.all(color: c.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: t.micro.copyWith(color: c.textSecondary)),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                Flexible(
-                  child: Text(before,
-                      style: t.caption.copyWith(color: c.textTertiary, decoration: TextDecoration.lineThrough)),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: Space.x2),
-                  child: Icon(LucideIcons.arrowRight, size: 14, color: c.textSecondary),
-                ),
-                Flexible(child: Text(after, style: t.bodyStrong)),
-              ],
-            ),
-          ],
-        ),
+    final t = UiType.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: t.small),
+          const SizedBox(width: UiSpace.md),
+          Expanded(
+            child: Align(alignment: AlignmentDirectional.centerEnd, child: value),
+          ),
+        ],
       ),
     );
   }

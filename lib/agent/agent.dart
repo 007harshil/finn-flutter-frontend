@@ -20,7 +20,6 @@ export 'application/agent_providers.dart';
 export 'llm/llm_provider.dart' show LlmProvider, CancellationToken;
 export 'application/agent_mode.dart' show agentModeProvider, AgentModeController;
 export 'presentation/agent_screen.dart' show AgentScreen, AgentModePanel, AgentExperience;
-export 'presentation/widgets/agent_visualizer.dart' show AgentVisualizer, AgentAtmosphere, AgentPresence, AgentLight;
 export 'presentation/widgets/agent_logo.dart' show AgentOrb, FinnAgentMark;
 export 'voice/speech_transcriber.dart' show SpeechTranscriber, FinnRelayTranscriber;
 export 'voice/voice_capture.dart' show VoiceCapture, VoiceClip, RecordVoiceCapture;
