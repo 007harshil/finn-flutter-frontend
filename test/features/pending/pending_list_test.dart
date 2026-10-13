@@ -171,7 +171,7 @@ void main() {
   testWidgets('swiping a row right opens the settle sheet', (tester) async {
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
-    await scrollAndTap(tester, find.byKey(const ValueKey('quick-tile:Pending payments')));
+    await scrollAndTap(tester, find.byKey(const ValueKey('quick-tile:Pending')));
     final id = views.firstWhere((v) => v.payment.purpose == 'Goa trip hotel share').payment.id;
     await scrollTo(tester, find.byKey(ValueKey(id)));
     await tester.drag(find.byKey(ValueKey(id)), const Offset(260, 0));

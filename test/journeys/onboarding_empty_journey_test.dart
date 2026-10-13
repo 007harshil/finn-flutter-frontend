@@ -29,9 +29,9 @@ void main() {
     await tapButton(tester, 'Start fresh');
     await tester.pumpAndSettle();
 
-    // Fresh home: welcome card, hero = opening balance.
+    // Fresh home: get-started checklist, hero = opening balance.
     expect(navTab('Home'), findsOneWidget);
-    expect(find.text('Welcome to FiNN'), findsOneWidget);
+    expect(find.text('Get started'), findsOneWidget);
     expect(inHero('₹25,000'), findsWidgets);
     final fresh = await env.snapshot();
     expect(fresh.isFreshUser, isTrue);
@@ -45,9 +45,9 @@ void main() {
     await tapTab(tester, 'Goals');
     expect(find.text('START YOUR FIRST GOAL'), findsOneWidget);
 
-    // Record the first transaction from the welcome card.
+    // Record the first transaction from the get-started section.
     await tapTab(tester, 'Home');
-    await tapButton(tester, 'Record first transaction');
+    await scrollAndTap(tester, find.text('Add first transaction'));
     await tester.pumpAndSettle();
     expect(find.text('Record transaction'), findsOneWidget);
     await enterAmount(tester, '1500');
@@ -65,7 +65,7 @@ void main() {
     expect(after.isFreshUser, isFalse);
 
     // Home switches to the full dashboard with the new balance.
-    expect(find.text('Welcome to FiNN'), findsNothing);
+    expect(find.text('Get started'), findsNothing);
     expect(inHero('₹23,500'), findsWidgets);
 
     // Activity now lists it instead of the empty state.

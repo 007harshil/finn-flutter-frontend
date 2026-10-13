@@ -19,7 +19,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Home quick access → Loans & EMIs → Car loan.
-    await scrollAndTap(tester, find.byKey(const ValueKey('quick-tile:Loans & EMIs')));
+    await scrollAndTap(tester, find.byKey(const ValueKey('quick-tile:Loans')));
     await scrollAndTap(tester, find.descendant(of: find.byKey(const ValueKey(loanId)), matching: find.text('Car loan')));
     expect(find.text(AmountText.formatted(loanBefore.outstanding)), findsWidgets);
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -8,10 +7,9 @@ import '../../../../app/di/core_providers.dart';
 import '../../../../app/di/data_providers.dart';
 import '../../../../app/router/routes.dart';
 import '../../../../app/shell/app_drawer.dart';
-import '../../../../core/time/dates.dart';
-import '../../../../design_system/design_system.dart';
+import '../../../../ui/ui.dart';
 
-/// Greeting, today's date, hide-balances toggle and the alerts bell.
+/// Menu, a one-line greeting, and two controls: hide balances and alerts.
 class HomeHeader extends ConsumerWidget {
   const HomeHeader({super.key});
 
@@ -23,58 +21,53 @@ class HomeHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
-    final t = context.text;
+    final t = UiType.of(context);
     final name = ref.watch(profileStreamProvider.select((v) => v.value?.displayName.trim()));
-    final today = ref.watch(todayProvider);
     final hidden = ref.watch(settingsProvider.select((s) => s.hideBalances));
     final unread = ref.watch(unreadAlertCountProvider);
     final greeting = greetingFor(ref.read(clockProvider).now().hour);
-    final title = name == null || name.isEmpty ? greeting : '$greeting, $name';
+    final first = name == null || name.isEmpty ? null : name.split(RegExp(r'\s+')).first;
+    final openMenu = AppDrawerScope.maybeOf(context);
+    final haptic = ref.watch(settingsProvider.select((s) => s.hapticsEnabled));
 
-    return Padding(
-      padding: const EdgeInsets.only(top: Space.x2),
-      child: Row(
-        children: [
-          const AppMenuButton(),
-          if (AppDrawerScope.maybeOf(context) != null) const SizedBox(width: Space.x3),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(DateFormats.weekdayDayMonth.format(today).toUpperCase(), style: t.eyebrow),
-                const SizedBox(height: Space.x1),
-                Semantics(
-                  header: true,
-                  child: Text(title, style: t.pageTitle, maxLines: 2, overflow: TextOverflow.ellipsis),
-                ),
-              ],
+    return Row(
+      children: [
+        if (openMenu != null)
+          UiIconButton(
+            key: const ValueKey('app-menu'),
+            icon: LucideIcons.menu,
+            tooltip: 'Menu',
+            haptic: haptic,
+            onPressed: openMenu,
+          )
+        else
+          const SizedBox(width: 4),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Semantics(
+            header: true,
+            child: Text(
+              first == null ? greeting : '$greeting, $first',
+              style: t.section,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(width: Space.x2),
-          FinnIconButton(
-            icon: hidden ? LucideIcons.eyeOff : LucideIcons.eye,
-            tooltip: hidden ? 'Show balances' : 'Hide balances',
-            variant: FinnIconButtonVariant.filled,
-            onPressed: () {
-              if (ref.read(settingsProvider).hapticsEnabled) HapticFeedback.selectionClick();
-              ref.read(settingsProvider.notifier).update((s) => s.copyWith(hideBalances: !s.hideBalances));
-            },
-          ),
-          const SizedBox(width: Space.x2),
-          CountBadge(
-            count: unread,
-            color: c.attention,
-            semanticsLabel: '$unread unread alerts',
-            child: FinnIconButton(
-              icon: LucideIcons.bell,
-              tooltip: unread > 0 ? 'Alerts, $unread unread' : 'Alerts',
-              variant: FinnIconButtonVariant.filled,
-              onPressed: () => context.push(AppRoutes.alerts),
-            ),
-          ),
-        ],
-      ),
+        ),
+        UiIconButton(
+          icon: hidden ? LucideIcons.eyeOff : LucideIcons.eye,
+          tooltip: hidden ? 'Show balances' : 'Hide balances',
+          haptic: haptic,
+          onPressed: () => ref.read(settingsProvider.notifier).update((s) => s.copyWith(hideBalances: !s.hideBalances)),
+        ),
+        UiIconButton(
+          icon: LucideIcons.bell,
+          tooltip: unread > 0 ? 'Alerts, $unread unread' : 'Alerts',
+          haptic: haptic,
+          badge: unread,
+          onPressed: () => context.push(AppRoutes.alerts),
+        ),
+      ],
     );
   }
 }
