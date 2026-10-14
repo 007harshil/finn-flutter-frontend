@@ -4,47 +4,47 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/router/routes.dart';
-import '../../../../design_system/design_system.dart';
-import '../../../../shared/presentation/async_view.dart';
+import '../../../../design_system/luxe/luxe.dart';
 import '../../application/home_overview.dart';
-import 'home_common.dart';
 
-/// First-run welcome with the primary call to action.
+/// First-run welcome: one sentence of promise and the one action that
+/// starts everything.
 class WelcomeCard extends StatelessWidget {
   const WelcomeCard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final t = context.text;
-    return GradientHeroCard(
-      watermark: LucideIcons.sparkles,
-      padding: const EdgeInsets.all(Space.x6),
+    final p = context.luxe;
+    final t = context.lt;
+    return LuxeCard(
+      padding: const EdgeInsets.fromLTRB(24, 26, 24, 24),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle),
-            child: const Icon(LucideIcons.wallet, size: 26, color: Colors.white),
+          Text('A FRESH START', style: t.eyebrow.c(p.goldInk)),
+          const SizedBox(height: 10),
+          Text.rich(
+            TextSpan(
+              children: [
+                const TextSpan(text: 'Welcome to '),
+                TextSpan(
+                  text: 'FiNN',
+                  style: TextStyle(fontStyle: FontStyle.italic, color: p.goldInk),
+                ),
+              ],
+            ),
+            style: t.title.copyWith(fontSize: 30, height: 1.1),
           ),
-          const SizedBox(height: Space.x4),
+          const SizedBox(height: 10),
           Text(
-            'Welcome to FiNN',
-            style: t.title.copyWith(color: Colors.white, fontSize: 22),
-            textAlign: TextAlign.center,
+            'Your calm, private command centre for money. Record your first transaction and everything else '
+            'builds from there.',
+            style: t.bodySoft,
           ),
-          const SizedBox(height: Space.x1_5),
-          Text(
-            'Your calm, private command centre for money. Record your first transaction and everything else builds from there.',
-            style: t.body.copyWith(color: Colors.white70),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: Space.x5),
-          FinnButton(
+          const SizedBox(height: 22),
+          LuxeButton(
             label: 'Record first transaction',
             icon: LucideIcons.plus,
-            variant: FinnButtonVariant.secondary,
-            size: FinnButtonSize.lg,
             expand: true,
             onPressed: () => context.push(AppRoutes.newTransaction()),
           ),
@@ -54,7 +54,7 @@ class WelcomeCard extends StatelessWidget {
   }
 }
 
-/// Getting-started checklist for new users.
+/// Getting-started checklist for new users, with a ring for progress.
 class SetupChecklistSection extends ConsumerWidget {
   const SetupChecklistSection({super.key});
 
@@ -67,37 +67,95 @@ class SetupChecklistSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
+    final p = context.luxe;
+    final t = context.lt;
     final value = ref.watch(setupChecklistProvider);
-    final done = value.value;
-    return HomeSection(
-      icon: LucideIcons.listChecks,
-      title: 'Get set up',
-      subtitle: done == null ? null : '${done.completed} of ${done.total} done · takes a few minutes',
-      tileColor: c.accentTransactions,
-      child: AsyncView<SetupChecklist>(
-        value: value,
-        loading: const SkeletonPulse(child: CardSkeleton(height: 240)),
-        builder: (context, list) => HomeListCard(
-          children: [
-            for (final step in SetupStep.values)
-              HomeRow(
-                key: ValueKey(step),
-                onTap: () => context.push(routeFor(step)),
-                semanticLabel: list.isDone(step) ? '${step.title}, done' : step.title,
-                leading: Icon(
-                  list.isDone(step) ? LucideIcons.circleCheck : LucideIcons.circle,
-                  size: 22,
-                  color: list.isDone(step) ? c.positive : c.textTertiary,
+    final list = value.value;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LuxeSectionHeader(
+          title: 'Get set up',
+          caption: list == null ? null : '${list.completed} of ${list.total} done · takes a few minutes',
+          trailing: list == null
+              ? null
+              : LuxeRing(
+                  value: list.completed / list.total,
+                  color: p.gold,
+                  size: 40,
+                  stroke: 2.5,
+                  child: Text('${list.completed}/${list.total}', style: t.micro.w(700).c(p.ink)),
                 ),
-                title: step.title,
-                subtitle: list.isDone(step) ? 'Done' : step.description,
-                subtitleColor: list.isDone(step) ? c.positive : null,
-                showChevron: true,
-              ),
-          ],
         ),
-      ),
+        const SizedBox(height: 14),
+        if (list == null)
+          const LuxeShimmer(child: LuxeBone(height: 260, radius: LuxeSpace.rCard))
+        else
+          LuxeCard(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Column(
+              children: [
+                for (final (i, step) in SetupStep.values.indexed) ...[
+                  if (i > 0) const LuxeHairline(indent: 64, endIndent: 20),
+                  Reveal(
+                    index: i,
+                    blur: 0,
+                    offset: 10,
+                    child: Squish(
+                      key: ValueKey(step),
+                      onTap: () => context.push(routeFor(step)),
+                      scale: 0.985,
+                      semanticLabel: list.isDone(step) ? '${step.title}, done' : step.title,
+                      excludeSemantics: true,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                        child: Row(
+                          children: [
+                            AnimatedContainer(
+                              duration: LuxeDurations.base,
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: list.isDone(step) ? p.positive : Colors.transparent,
+                                border: Border.all(color: list.isDone(step) ? p.positive : p.lineStrong),
+                              ),
+                              child: list.isDone(step)
+                                  ? Icon(LucideIcons.check, size: 15, color: p.canvas)
+                                  : Center(child: Text('${i + 1}', style: t.micro.w(700).c(p.inkSoft))),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    step.title,
+                                    style: t.heading.copyWith(
+                                      fontSize: 15,
+                                      decoration: list.isDone(step) ? TextDecoration.lineThrough : null,
+                                      decorationColor: p.inkMute,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    list.isDone(step) ? 'Done' : step.description,
+                                    style: t.caption.c(list.isDone(step) ? p.positive : p.inkSoft),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(LucideIcons.chevronRight, size: 16, color: p.inkMute),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

@@ -10,21 +10,37 @@ import '../../../../app/di/data_providers.dart';
 import '../../../../app/router/routes.dart';
 import '../../../../core/money/money_format.dart';
 import '../../../../design_system/design_system.dart';
-import '../../../../shared/presentation/async_view.dart';
+import '../../../../design_system/luxe/luxe.dart';
 import '../../../alerts/domain/alert.dart';
-import '../../../alerts/presentation/alert_card.dart';
+import '../../../alerts/presentation/alert_card.dart' show alertRoute;
 import '../../application/upcoming.dart';
-import 'home_common.dart';
 
-/// Top alerts from the alert engine, most urgent first, as a horizontal
-/// carousel. The next card peeks in from the edge so it is obvious there is
-/// more; the header badge and dots say exactly how many.
+/// Severity → colour, icon and a short word (never colour alone).
+extension _SeverityLuxe on AlertSeverity {
+  Color tone(LuxePalette p) => switch (this) {
+    AlertSeverity.critical => p.negative,
+    AlertSeverity.warning => p.warning,
+    AlertSeverity.info => p.info,
+    AlertSeverity.positive => p.positive,
+  };
+
+  IconData get glyph => switch (this) {
+    AlertSeverity.critical => LucideIcons.circleAlert,
+    AlertSeverity.warning => LucideIcons.clock,
+    AlertSeverity.info => LucideIcons.info,
+    AlertSeverity.positive => LucideIcons.sparkles,
+  };
+}
+
+/// Top alerts from the alert engine, most urgent first, as a deck of
+/// notes you swipe through. The next note peeks in so it is obvious there
+/// is more; the count and the progress hairline say exactly how many.
 class AttentionSection extends ConsumerWidget {
   const AttentionSection({super.key});
 
   static const maxShown = 6;
 
-  /// "2 urgent · 1 soon · 3 FYI" for the header.
+  /// "2 urgent · 1 soon · 3 FYI".
   static String breakdown(List<FinancialAlert> alerts) {
     final counts = <AlertSeverity, int>{};
     for (final a in alerts) {
@@ -38,54 +54,76 @@ class AttentionSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
     final value = ref.watch(activeAlertsProvider);
     final loaded = value.value;
-    return HomeSection(
-      icon: LucideIcons.shieldAlert,
-      title: 'What needs attention',
-      subtitle: loaded == null || loaded.isEmpty ? null : breakdown(loaded),
-      count: loaded == null || loaded.isEmpty ? null : loaded.length,
-      tileColor: c.attention,
-      onAction: () => context.push(AppRoutes.alerts),
-      child: AsyncView<List<FinancialAlert>>(
-        value: value,
-        loading: const SkeletonPulse(child: CardSkeleton(height: 220)),
-        builder: (context, alerts) {
-          if (alerts.isEmpty) {
-            return HomeNoteCard(
-              icon: LucideIcons.circleCheck,
-              color: c.positive,
-              title: 'All clear',
-              message: 'Nothing needs your attention right now. Anything important will show up here.',
-            );
-          }
-          return _AlertCarousel(alerts: alerts);
-        },
-      ),
+    final p = context.luxe;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LuxeSectionHeader(
+          title: 'Needs your attention',
+          caption: loaded == null || loaded.isEmpty ? null : breakdown(loaded),
+          count: loaded?.length,
+          actionLabel: 'See all',
+          onAction: () => context.push(AppRoutes.alerts),
+        ),
+        const SizedBox(height: 14),
+        if (loaded == null)
+          value.hasError
+              ? LuxeCard(
+                  child: LuxeError(title: 'Alerts unavailable', onRetry: () => refreshFinanceData(ref)),
+                )
+              : const LuxeShimmer(child: LuxeBone(height: 196, radius: LuxeSpace.rCard))
+        else if (loaded.isEmpty)
+          LuxeCard(
+            child: Row(
+              children: [
+                LuxeRing(
+                  value: 1,
+                  color: p.positive,
+                  size: 44,
+                  stroke: 2,
+                  child: Icon(LucideIcons.check, size: 18, color: p.positive),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('All clear', style: context.lt.title.copyWith(fontSize: 21)),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Nothing needs your attention right now. Anything important will show up here.',
+                        style: context.lt.caption,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          _AlertDeck(alerts: loaded),
+      ],
     );
   }
 }
 
-class _AlertCarousel extends StatefulWidget {
-  const _AlertCarousel({required this.alerts});
+class _AlertDeck extends StatefulWidget {
+  const _AlertDeck({required this.alerts});
 
   final List<FinancialAlert> alerts;
 
   @override
-  State<_AlertCarousel> createState() => _AlertCarouselState();
+  State<_AlertDeck> createState() => _AlertDeckState();
 }
 
-class _AlertCarouselState extends State<_AlertCarousel> {
-  final _controller = PageController(viewportFraction: 0.87);
-
-  /// Drives only the dots, so a swipe never rebuilds the cards.
-  final _page = ValueNotifier<int>(0);
+class _AlertDeckState extends State<_AlertDeck> {
+  final _controller = PageController(viewportFraction: 0.86);
 
   @override
   void dispose() {
     _controller.dispose();
-    _page.dispose();
     super.dispose();
   }
 
@@ -95,14 +133,13 @@ class _AlertCarouselState extends State<_AlertCarousel> {
     final shown = alerts.take(AttentionSection.maxShown).toList();
     final more = alerts.length - shown.length;
     final pages = shown.length + (more > 0 ? 1 : 0);
-    // Grow with the text size so larger fonts never clip.
     final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
-    final height = 220 + (scale - 1).clamp(0.0, 1.5) * 96;
+    final height = 206 + (scale - 1).clamp(0.0, 1.5) * 96;
 
-    Widget card(int i) =>
-        AlertCard(key: ValueKey(shown[i].key), alert: shown[i], position: i + 1, total: alerts.length, expand: true);
+    Widget note(int i) =>
+        _AlertNote(key: ValueKey(shown[i].key), alert: shown[i], position: i + 1, total: alerts.length);
 
-    if (pages == 1) return SizedBox(height: height, child: card(0));
+    if (pages == 1) return SizedBox(height: height, child: note(0));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -114,89 +151,200 @@ class _AlertCarouselState extends State<_AlertCarousel> {
             padEnds: false,
             clipBehavior: Clip.none,
             itemCount: pages,
-            onPageChanged: (p) {
-              HapticFeedback.selectionClick();
-              _page.value = p;
-            },
-            itemBuilder: (context, i) => Padding(
-              padding: const EdgeInsetsDirectional.only(end: Space.x2_5),
-              child: i < shown.length ? card(i) : _MoreCard(count: more, onTap: () => context.push(AppRoutes.alerts)),
+            onPageChanged: (_) => HapticFeedback.selectionClick(),
+            itemBuilder: (context, i) => AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                // Neighbours recede slightly: depth without decoration.
+                final page = _controller.hasClients && _controller.position.haveDimensions
+                    ? (_controller.page ?? 0)
+                    : 0.0;
+                final d = (page - i).abs().clamp(0.0, 1.0);
+                return Opacity(
+                  opacity: 1 - d * 0.35,
+                  child: Transform.scale(scale: 1 - d * 0.04, child: child),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsetsDirectional.only(end: 12),
+                child: i < shown.length ? note(i) : _MoreNote(count: more, onTap: () => context.push(AppRoutes.alerts)),
+              ),
             ),
           ),
         ),
-        const SizedBox(height: Space.x3),
-        ValueListenableBuilder<int>(
-          valueListenable: _page,
-          builder: (context, page, _) => _PageDots(count: pages, index: math.min(page, pages - 1)),
-        ),
+        const SizedBox(height: 14),
+        _DeckProgress(controller: _controller, count: pages),
       ],
     );
   }
 }
 
-/// Dot indicator; the active dot stretches into a pill.
-class _PageDots extends StatelessWidget {
-  const _PageDots({required this.count, required this.index});
+/// A hairline that fills as you move through the deck.
+class _DeckProgress extends StatelessWidget {
+  const _DeckProgress({required this.controller, required this.count});
 
+  final PageController controller;
   final int count;
-  final int index;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    return Semantics(
-      label: 'Alert ${index + 1} of $count',
-      excludeSemantics: true,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+    final p = context.luxe;
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final page = controller.hasClients && controller.position.haveDimensions ? (controller.page ?? 0) : 0.0;
+        final i = page.round().clamp(0, count - 1);
+        return Semantics(
+          label: 'Alert ${i + 1} of $count',
+          excludeSemantics: true,
+          child: Row(
+            children: [
+              Text('${i + 1}'.padLeft(2, '0'), style: context.lt.micro.w(700).c(p.ink)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, box) {
+                    final w = box.maxWidth;
+                    final seg = w / count;
+                    return SizedBox(
+                      height: 2,
+                      child: Stack(
+                        children: [
+                          Container(color: p.line),
+                          Positioned(
+                            left: (page.clamp(0.0, count - 1.0)) * seg,
+                            width: seg,
+                            top: 0,
+                            bottom: 0,
+                            child: Container(color: p.ink),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text('$count'.padLeft(2, '0'), style: context.lt.micro),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AlertNote extends StatelessWidget {
+  const _AlertNote({super.key, required this.alert, required this.position, required this.total});
+
+  final FinancialAlert alert;
+  final int position;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.luxe;
+    final t = context.lt;
+    final a = alert;
+    final tone = a.severity.tone(p);
+    final amount = a.amount;
+    return LuxeCard(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+      onTap: () => context.push(alertRoute(a)),
+      semanticLabel: '${a.severity.label}. ${a.title}. ${a.message} ${a.reason}. ${a.actionLabel}.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (var i = 0; i < count; i++)
-            AnimatedContainer(
-              duration: context.motion.normal,
-              curve: context.motion.standard,
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              width: i == index ? 20 : 6,
-              height: 6,
-              decoration: BoxDecoration(color: i == index ? c.attention : c.border, borderRadius: Radii.rFull),
-            ),
+          Row(
+            children: [
+              Flexible(
+                child: LuxeStatus(label: a.severity.label, color: tone, icon: a.severity.glyph),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  a.type.label.toUpperCase(),
+                  style: t.eyebrow.copyWith(fontSize: 10),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(a.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.title.copyWith(fontSize: 21)),
+          const SizedBox(height: 6),
+          Flexible(
+            child: Text(a.message, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.caption),
+          ),
+          const Spacer(),
+          Row(
+            children: [
+              if (amount != null)
+                Expanded(
+                  flex: 2,
+                  child: AmountText(
+                    amount,
+                    decimals: DecimalDisplay.none,
+                    fit: true,
+                    style: t.figure.copyWith(fontSize: 22, color: p.ink),
+                  ),
+                )
+              else
+                const Spacer(),
+              const SizedBox(width: 10),
+              Flexible(
+                flex: 3,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(color: p.ink, borderRadius: BorderRadius.circular(20)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          a.actionLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: t.micro.w(700).c(p.canvas),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(LucideIcons.arrowUpRight, size: 13, color: p.canvas),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// Last carousel page when there are more alerts than fit.
-class _MoreCard extends StatelessWidget {
-  const _MoreCard({required this.count, required this.onTap});
+class _MoreNote extends StatelessWidget {
+  const _MoreNote({required this.count, required this.onTap});
 
   final int count;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return FinnCard(
-      variant: FinnCardVariant.muted,
-      radius: Radii.xxl,
+    final p = context.luxe;
+    return LuxeCard(
+      color: p.sunk,
+      elevated: false,
       onTap: onTap,
       semanticLabel: 'View $count more alerts',
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconTile(
-              icon: LucideIcons.layers,
-              background: c.attention.withValues(alpha: 0.14),
-              foreground: c.attention,
-              size: 52,
-              radius: Radii.full,
-              iconSize: 24,
-            ),
-            const SizedBox(height: Space.x3),
-            Text('+$count more', style: t.title),
-            const SizedBox(height: Space.x1),
-            Text('See every alert', style: t.caption),
+            Text('+$count', style: context.lt.display.copyWith(fontSize: 48)),
+            const SizedBox(height: 4),
+            Text('more to review', style: context.lt.caption),
           ],
         ),
       ),
@@ -204,9 +352,22 @@ class _MoreCard extends StatelessWidget {
   }
 }
 
-/// EMIs and subscriptions due in the next [UpcomingWindow.days] days, with
-/// the total to keep ready. The list scrolls inside a fixed-height card so
-/// a busy week never pushes the rest of the dashboard down.
+// ---------------------------------------------------------------------------
+// Coming up
+// ---------------------------------------------------------------------------
+
+/// "in 3 days" / "today" / "2 days overdue".
+String relativeDue(int days) {
+  if (days < -1) return '${-days} days overdue';
+  if (days == -1) return '1 day overdue';
+  if (days == 0) return 'Due today';
+  if (days == 1) return 'Due tomorrow';
+  return 'In $days days';
+}
+
+/// EMIs and subscriptions due in the next [UpcomingWindow.days] days with
+/// the cash to keep ready, as a calendar strip of dated rows. A busy week
+/// scrolls inside the card so it never pushes the rest of Home down.
 class UpcomingSection extends ConsumerWidget {
   const UpcomingSection({super.key});
 
@@ -223,59 +384,69 @@ class UpcomingSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
     const days = UpcomingWindow.days;
-    return HomeSection(
-      icon: LucideIcons.calendarClock,
-      title: 'Coming up',
-      subtitle: 'Next $days days · projected, not yet paid',
-      tileColor: c.accentLoans,
-      child: AsyncView<UpcomingOverview>(
-        value: ref.watch(upcomingCommitmentsProvider),
-        loading: const SkeletonPulse(child: CardSkeleton(height: 240)),
-        builder: (context, o) {
-          if (o.items.isEmpty) {
-            return HomeNoteCard(
-              icon: LucideIcons.calendar,
-              color: c.info,
-              title: 'Nothing due soon',
-              message: 'No EMIs or subscriptions are due in the next $days days.',
-            );
-          }
-          return FinnCard(
-            padding: EdgeInsets.zero,
-            child: Material(
-              type: MaterialType.transparency,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _UpcomingTotal(overview: o),
-                  const FinnDivider(),
-                  _UpcomingList(items: o.items),
-                ],
-              ),
+    final value = ref.watch(upcomingCommitmentsProvider);
+    final o = value.value;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const LuxeSectionHeader(title: 'Coming up', caption: 'Next $days days · projected, not yet paid'),
+        const SizedBox(height: 14),
+        if (o == null)
+          value.hasError
+              ? LuxeCard(
+                  child: LuxeError(title: 'Could not load what is due', onRetry: () => refreshFinanceData(ref)),
+                )
+              : const LuxeShimmer(child: LuxeBone(height: 240, radius: LuxeSpace.rCard))
+        else if (o.items.isEmpty)
+          LuxeCard(
+            child: Row(
+              children: [
+                Icon(LucideIcons.calendarCheck, size: 22, color: context.luxe.inkSoft),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Nothing due soon', style: context.lt.heading),
+                      const SizedBox(height: 2),
+                      Text('No EMIs or subscriptions are due in the next $days days.', style: context.lt.caption),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          );
-        },
-      ),
+          )
+        else
+          LuxeCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _KeepReady(overview: o),
+                const LuxeHairline(),
+                _UpcomingList(items: o.items),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
 
-/// "₹8,000 to keep ready" for the window, so the user can arrange it early.
-class _UpcomingTotal extends StatelessWidget {
-  const _UpcomingTotal({required this.overview});
+class _KeepReady extends StatelessWidget {
+  const _KeepReady({required this.overview});
 
   final UpcomingOverview overview;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final p = context.luxe;
+    final t = context.lt;
     final o = overview;
     final n = o.outflowCount;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.x4, Space.x3 + 2, Space.x4, Space.x3),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -283,10 +454,10 @@ class _UpcomingTotal extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Keep ready', style: t.caption),
-                const SizedBox(height: Space.x0_5),
-                AmountText(o.toArrange, decimals: DecimalDisplay.none, style: t.amountMedium),
-                const SizedBox(height: Space.x0_5),
+                Text('KEEP READY', style: t.eyebrow),
+                const SizedBox(height: 6),
+                LuxeAmount(o.toArrange, style: t.figure.copyWith(fontSize: 30), symbolScale: 0.55),
+                const SizedBox(height: 2),
                 Text(
                   n == 0
                       ? 'Nothing going out in the next ${UpcomingWindow.days} days'
@@ -297,18 +468,18 @@ class _UpcomingTotal extends StatelessWidget {
             ),
           ),
           if (o.expectedIn.isPositive) ...[
-            const SizedBox(width: Space.x3),
+            const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('Expected in', style: t.caption),
-                const SizedBox(height: Space.x0_5),
+                Text('EXPECTED IN', style: t.eyebrow),
+                const SizedBox(height: 6),
                 AmountText(
                   o.expectedIn,
                   sign: SignDisplay.always,
                   decimals: DecimalDisplay.none,
-                  color: c.positive,
-                  style: t.amountSmall,
+                  color: p.positive,
+                  style: t.number,
                 ),
               ],
             ),
@@ -319,8 +490,6 @@ class _UpcomingTotal extends StatelessWidget {
   }
 }
 
-/// Soonest first; scrolls once there are more than
-/// [UpcomingSection.visibleRows] rows. Shrinks to fit when there are fewer.
 class _UpcomingList extends StatelessWidget {
   const _UpcomingList({required this.items});
 
@@ -328,19 +497,16 @@ class _UpcomingList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Grow with the text size so larger fonts still show the same rows.
     final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
-    final rowHeight = 57 + (scale - 1).clamp(0.0, 1.5) * 24;
+    final rowHeight = 68 + (scale - 1).clamp(0.0, 1.5) * 24;
     final scrolls = items.length > UpcomingSection.visibleRows;
-    // Half a row peeks at the bottom so it is obvious the list scrolls.
     final maxHeight = rowHeight * (UpcomingSection.visibleRows + 0.5);
-    final list = ListView.separated(
+    final list = ListView.builder(
       restorationId: UpcomingSection.listRestorationId,
       shrinkWrap: true,
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(vertical: 6),
       physics: scrolls ? const ClampingScrollPhysics() : const NeverScrollableScrollPhysics(),
       itemCount: items.length,
-      separatorBuilder: (_, _) => const FinnDivider(indent: Space.x4, endIndent: Space.x4),
       itemBuilder: (context, n) {
         final i = items[n];
         return _UpcomingRow(key: ValueKey('${i.kind.name}_${i.recordId}_${i.date}'), item: i);
@@ -349,7 +515,7 @@ class _UpcomingList extends StatelessWidget {
     if (!scrolls) return list;
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: maxHeight),
-      child: Scrollbar(child: list),
+      child: list,
     );
   }
 }
@@ -359,34 +525,82 @@ class _UpcomingRow extends StatelessWidget {
 
   final UpcomingItem item;
 
+  static const _days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final p = context.luxe;
+    final t = context.lt;
     final i = item;
-    final (icon, accent) = switch (i.kind) {
-      UpcomingKind.loanPayment || UpcomingKind.loanReceipt => (LucideIcons.landmark, c.accentLoans),
-      UpcomingKind.subscription => (LucideIcons.repeat, c.accentSubscriptions),
-    };
     final due = relativeDue(i.daysUntil);
-    return HomeRow(
+    final icon = i.kind == UpcomingKind.subscription ? LucideIcons.repeat : LucideIcons.landmark;
+    return Squish(
       onTap: () => context.push(UpcomingSection.routeFor(i)),
-      leading: IconTile(
-        icon: icon,
-        background: accent.withValues(alpha: c.isDark ? 0.2 : 0.12),
-        foreground: accent,
-        size: 36,
-        radius: Radii.lg,
-        iconSize: 17,
-      ),
-      title: i.title,
-      subtitle: '${i.kind.label} · $due',
-      subtitleColor: i.isOverdue ? c.negative : null,
-      trailing: AmountText(
-        i.isInflow ? i.amount : -i.amount,
-        sign: SignDisplay.always,
-        decimals: DecimalDisplay.none,
-        color: i.isInflow ? c.positive : c.textPrimary,
-        style: context.text.amountSmall,
+      scale: 0.985,
+      semanticLabel: '${i.title}, ${i.kind.label}, $due, ${MoneyFormatter.spoken(i.amount)}',
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 9),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 50,
+              decoration: BoxDecoration(
+                color: i.isOverdue ? p.tint(p.negative, 0.1) : p.canvas,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: i.isOverdue ? p.negative.withValues(alpha: 0.3) : p.line),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _days[i.date.weekday - 1],
+                    style: t.micro.copyWith(fontSize: 9, letterSpacing: 1.2, color: i.isOverdue ? p.negative : null),
+                  ),
+                  Text('${i.date.day}', style: t.figure.copyWith(fontSize: 22, height: 1.05)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(i.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.heading.copyWith(fontSize: 15)),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(icon, size: 11, color: p.inkMute),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          '${i.kind.label} · $due',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: t.caption.c(i.isOverdue ? p.negative : p.inkSoft),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: math.max(80, MediaQuery.sizeOf(context).width * 0.3)),
+              child: AmountText(
+                i.isInflow ? i.amount : -i.amount,
+                sign: SignDisplay.always,
+                decimals: DecimalDisplay.none,
+                fit: true,
+                textAlign: TextAlign.end,
+                color: i.isInflow ? p.positive : p.ink,
+                style: t.number,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

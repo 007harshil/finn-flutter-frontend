@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../design_system/design_system.dart';
-import '../../../shared/presentation/async_view.dart';
+import '../../../app/di/data_providers.dart';
+import '../../../core/result/result.dart';
+import '../../../design_system/luxe/luxe.dart';
+import '../../../shared/presentation/luxe_page.dart';
 import '../application/home_overview.dart';
 import 'widgets/attention_section.dart';
 import 'widgets/hero_balance_card.dart';
@@ -11,144 +13,98 @@ import 'widgets/period_overview.dart';
 import 'widgets/quick_access_grid.dart';
 import 'widgets/welcome_section.dart';
 
-/// The financial command centre: where money stands, what needs attention,
-/// what is coming up, and how the month is going.
+/// The financial command centre, read top to bottom as one calm story:
+/// who and when (greeting) → where money stands (obsidian balance card) →
+/// how the month is going (cash flow) → what needs you → what is coming →
+/// every money module, one tap away.
 ///
-/// Every section is its own widget watching only its own provider, so a
-/// change in one module never rebuilds the rest of the dashboard.
+/// Each section watches only its own provider, so a change in one module
+/// never rebuilds the rest of the page.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
-  static const _sections = <Widget>[
-    HomeHeader(),
-    _MoneyAtAGlance(),
-    AttentionSection(),
-    UpcomingSection(),
-    QuickAccessGrid(),
+  static const _sections = <(Widget, double)>[
+    (HeroBalanceCard(), 22),
+    (PeriodOverview(), 14),
+    (AttentionSection(), LuxeSpace.section),
+    (UpcomingSection(), LuxeSpace.section),
+    (QuickAccessGrid(), LuxeSpace.section),
   ];
 
-  static const _freshSections = <Widget>[HomeHeader(), WelcomeCard(), HeroBalanceCard(), SetupChecklistSection()];
+  static const _freshSections = <(Widget, double)>[
+    (WelcomeCard(), 22),
+    (HeroBalanceCard(), 14),
+    (SetupChecklistSection(), LuxeSpace.section),
+  ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(
-      backgroundColor: context.colors.background,
-      body: SafeArea(
-        bottom: false,
-        child: AsyncView<bool>(
-          value: ref.watch(isFreshUserProvider),
-          loading: const _HomeSkeleton(),
-          builder: (context, fresh) => _HomeBody(key: ValueKey(fresh), sections: fresh ? _freshSections : _sections),
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeBody extends StatelessWidget {
-  const _HomeBody({super.key, required this.sections});
-
-  final List<Widget> sections;
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomScrollView(
-      key: const PageStorageKey<String>('home'),
-      slivers: [
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(Space.gutter, Space.x2, Space.gutter, context.bottomClearance),
-          // A fixed, short set of sections: kept alive together so local
-          // state (selected month) and entrance animations survive scrolling.
-          sliver: SliverToBoxAdapter(
-            child: ResponsiveCenter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var i = 0; i < sections.length; i++) ...[
-                    // The header flows straight into the first card; every
-                    // other pair of sections gets a visible divider with
-                    // breathing room on both sides.
-                    if (i > 1) const _SectionDivider(),
-                    Padding(
-                      padding: EdgeInsets.only(bottom: i == 0 ? Space.x5 : 0),
-                      child: StaggeredEntrance(index: i, child: sections[i]),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+    final fresh = ref.watch(isFreshUserProvider);
+    final List<Widget> body;
+    if (fresh.hasValue) {
+      final sections = fresh.requireValue ? _freshSections : _sections;
+      // One short, fixed set of sections built together (not lazily), so
+      // local state such as the cash-flow month and finished entrances
+      // survive scrolling away and back.
+      body = [
+        luxeBox(
+          Column(
+            key: ValueKey('home-body-${fresh.requireValue}'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < sections.length; i++)
+                Padding(
+                  padding: EdgeInsets.only(top: sections[i].$2),
+                  child: Reveal(index: i + 1, child: sections[i].$1),
+                ),
+            ],
           ),
         ),
+      ];
+    } else if (fresh.hasError) {
+      final e = fresh.error;
+      body = [
+        luxeBox(
+          LuxeError(
+            title: 'Could not load your money',
+            message: e is AppFailure ? e.message : null,
+            onRetry: () => refreshFinanceData(ref),
+          ),
+          top: 40,
+        ),
+      ];
+    } else {
+      body = [luxeBox(const _HomeSkeleton(), top: 22)];
+    }
+
+    return LuxePage(
+      storageKey: 'home',
+      compactTitle: 'Overview',
+      slivers: [
+        luxeBox(const Reveal(child: HomeHeader()), top: 4),
+        ...body,
       ],
     );
   }
 }
 
-/// Balance and this month's flow read as one block: no divider between
-/// them, only a small gap, so the top of Home answers "where do I stand?"
-/// in one screen.
-class _MoneyAtAGlance extends StatelessWidget {
-  const _MoneyAtAGlance();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [HeroBalanceCard(), SizedBox(height: Space.x3), PeriodOverview()],
-    );
-  }
-}
-
-/// Line between dashboard sections. Stronger than the in-card hairline so
-/// it reads clearly on the page background in both themes.
-class _SectionDivider extends StatelessWidget {
-  const _SectionDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Space.x6),
-      child: Container(
-        height: 1.5,
-        decoration: BoxDecoration(
-          color: c.textTertiary.withValues(alpha: c.isDark ? 0.45 : 0.5),
-          borderRadius: Radii.rFull,
-        ),
-      ),
-    );
-  }
-}
-
-/// Placeholder shaped like the dashboard to avoid layout shift.
+/// Placeholder shaped like the page, so nothing jumps when data arrives.
 class _HomeSkeleton extends StatelessWidget {
   const _HomeSkeleton();
 
   @override
-  Widget build(BuildContext context) {
-    return const SkeletonPulse(
-      child: SingleChildScrollView(
-        physics: NeverScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(Space.gutter, Space.x4, Space.gutter, Space.x4),
-        child: ResponsiveCenter(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SkeletonBox(width: 110, height: 10),
-              SizedBox(height: Space.x2),
-              SkeletonBox(width: 220, height: 26),
-              SizedBox(height: Space.x5),
-              CardSkeleton(height: 168, radius: Radii.xxxl),
-              SizedBox(height: Space.x3),
-              CardSkeleton(height: 172),
-              SizedBox(height: Space.section),
-              SkeletonBox(width: 180, height: 24),
-              SizedBox(height: Space.x3),
-              CardSkeleton(height: 220),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const LuxeShimmer(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LuxeBone(height: 236, radius: LuxeSpace.rCard),
+        SizedBox(height: 14),
+        LuxeBone(height: 196, radius: LuxeSpace.rCard),
+        SizedBox(height: LuxeSpace.section),
+        LuxeBone(width: 180, height: 26),
+        SizedBox(height: 14),
+        LuxeBone(height: 180, radius: LuxeSpace.rCard),
+      ],
+    ),
+  );
 }

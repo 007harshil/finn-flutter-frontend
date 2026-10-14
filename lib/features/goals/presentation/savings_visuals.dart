@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/money/money.dart';
@@ -197,85 +196,6 @@ class _GoalRingPainter extends CustomPainter {
       old.end != end ||
       old.track != track ||
       old.ink != ink;
-}
-
-/// Every active goal as one segment of a bar: segment width = its target,
-/// filled part = what is saved. Big goals look big, nearly-done ones look
-/// full. Tap a segment to open it.
-class GoalMosaic extends StatelessWidget {
-  const GoalMosaic({super.key, required this.goals, required this.onOpen, this.height = 22});
-
-  final List<GoalProgress> goals;
-  final ValueChanged<GoalProgress> onOpen;
-  final double height;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    if (goals.isEmpty) return const SizedBox.shrink();
-    final total = goals.fold<int>(0, (s, g) => s + g.goal.target.paise);
-    // Small goals still get a tappable sliver.
-    final flexes = [
-      for (final g in goals) math.max(60, total == 0 ? 1000 : (g.goal.target.paise * 1000 / total).round()),
-    ];
-    final reduce = context.reduceMotion;
-    return SizedBox(
-      height: height,
-      child: Row(
-        children: [
-          for (var i = 0; i < goals.length; i++) ...[
-            if (i > 0) const SizedBox(width: 3),
-            Expanded(
-              flex: flexes[i],
-              child: Semantics(
-                button: true,
-                label: '${goals[i].goal.name}, ${formatPct(goals[i].progress)} saved',
-                excludeSemantics: true,
-                child: GestureDetector(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    onOpen(goals[i]);
-                  },
-                  child: Tooltip(
-                    message: '${goals[i].goal.name} · ${formatPct(goals[i].progress)}',
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(Radii.sm),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          ColoredBox(color: AccentSwatches.solid(goals[i].goal.colorIndex).withValues(alpha: 0.18)),
-                          TweenAnimationBuilder<double>(
-                            tween: Tween(begin: 0, end: goals[i].progress),
-                            duration: reduce ? Duration.zero : Duration(milliseconds: 700 + 90 * i),
-                            curve: Curves.easeOutCubic,
-                            builder: (context, v, _) => FractionallySizedBox(
-                              alignment: Alignment.centerLeft,
-                              widthFactor: v.clamp(0.0, 1.0),
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(gradient: AccentSwatches.gradient(goals[i].goal.colorIndex)),
-                              ),
-                            ),
-                          ),
-                          if (goals[i].goal.status == GoalStatus.active && goals[i].onTrack == false)
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: Padding(
-                                padding: const EdgeInsets.only(right: 3),
-                                child: Icon(LucideIcons.clock, size: 11, color: c.warning),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 }
 
 String formatPct(double share) => '${(share * 100).round()}%';
