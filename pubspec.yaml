@@ -71,33 +71,6 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # Luxe type: Instrument Serif for display figures and titles, Manrope
-  # (variable, weight set through FontVariation) for everything else. Both
-  # SIL Open Font License. Manrope is declared at every weight so the engine
-  # never synthesises bold on top of the variation axis.
-  fonts:
-    - family: InstrumentSerif
-      fonts:
-        - asset: assets/fonts/InstrumentSerif-Regular.ttf
-        - asset: assets/fonts/InstrumentSerif-Italic.ttf
-          style: italic
-    - family: Manrope
-      fonts:
-        - asset: assets/fonts/Manrope-Variable.ttf
-          weight: 200
-        - asset: assets/fonts/Manrope-Variable.ttf
-          weight: 300
-        - asset: assets/fonts/Manrope-Variable.ttf
-          weight: 400
-        - asset: assets/fonts/Manrope-Variable.ttf
-          weight: 500
-        - asset: assets/fonts/Manrope-Variable.ttf
-          weight: 600
-        - asset: assets/fonts/Manrope-Variable.ttf
-          weight: 700
-        - asset: assets/fonts/Manrope-Variable.ttf
-          weight: 800
-
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

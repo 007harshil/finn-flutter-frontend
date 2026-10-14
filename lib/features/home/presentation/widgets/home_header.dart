@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -7,12 +6,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/core_providers.dart';
 import '../../../../app/di/data_providers.dart';
 import '../../../../app/router/routes.dart';
-import '../../../../core/time/dates.dart';
-import '../../../../design_system/luxe/luxe.dart';
-import '../../../../shared/presentation/luxe_page.dart';
+import '../../../../app/shell/app_drawer.dart';
+import '../../../../ui/ui.dart';
 
-/// Menu, privacy toggle and alerts on one quiet line; below, today's date
-/// and a serif greeting with the user's name set in italic.
+/// Menu, a one-line greeting, and two controls: hide balances and alerts.
 class HomeHeader extends ConsumerWidget {
   const HomeHeader({super.key});
 
@@ -24,49 +21,51 @@ class HomeHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final p = context.luxe;
+    final t = UiType.of(context);
     final name = ref.watch(profileStreamProvider.select((v) => v.value?.displayName.trim()));
-    final today = ref.watch(todayProvider);
     final hidden = ref.watch(settingsProvider.select((s) => s.hideBalances));
     final unread = ref.watch(unreadAlertCountProvider);
     final greeting = greetingFor(ref.read(clockProvider).now().hour);
-    final hasName = name != null && name.isNotEmpty;
-    final first = hasName ? name.split(RegExp(r'\s+')).first : null;
+    final first = name == null || name.isEmpty ? null : name.split(RegExp(r'\s+')).first;
+    final openMenu = AppDrawerScope.maybeOf(context);
+    final haptic = ref.watch(settingsProvider.select((s) => s.hapticsEnabled));
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Row(
       children: [
-        LuxeTopBar(
-          actions: [
-            LuxeIconButton(
-              icon: hidden ? LucideIcons.eyeOff : LucideIcons.eye,
-              tooltip: hidden ? 'Show balances' : 'Hide balances',
-              active: hidden,
-              onPressed: () {
-                if (ref.read(settingsProvider).hapticsEnabled) HapticFeedback.selectionClick();
-                ref.read(settingsProvider.notifier).update((s) => s.copyWith(hideBalances: !s.hideBalances));
-              },
+        if (openMenu != null)
+          UiIconButton(
+            key: const ValueKey('app-menu'),
+            icon: LucideIcons.menu,
+            tooltip: 'Menu',
+            haptic: haptic,
+            onPressed: openMenu,
+          )
+        else
+          const SizedBox(width: 4),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Semantics(
+            header: true,
+            child: Text(
+              first == null ? greeting : '$greeting, $first',
+              style: t.section,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            LuxeIconButton(
-              icon: LucideIcons.bell,
-              tooltip: unread > 0 ? 'Alerts, $unread unread' : 'Alerts',
-              badge: unread,
-              onPressed: () => context.push(AppRoutes.alerts),
-            ),
-          ],
+          ),
         ),
-        const SizedBox(height: 18),
-        LuxeTitle(
-          eyebrow: DateFormats.weekdayDayMonth.format(today),
-          semanticsLabel: hasName ? '$greeting, $name' : greeting,
-          title: <InlineSpan>[
-            TextSpan(text: hasName ? '$greeting,\n' : greeting),
-            if (hasName)
-              TextSpan(
-                text: first,
-                style: TextStyle(fontStyle: FontStyle.italic, color: p.goldInk),
-              ),
-          ],
+        UiIconButton(
+          icon: hidden ? LucideIcons.eyeOff : LucideIcons.eye,
+          tooltip: hidden ? 'Show balances' : 'Hide balances',
+          haptic: haptic,
+          onPressed: () => ref.read(settingsProvider.notifier).update((s) => s.copyWith(hideBalances: !s.hideBalances)),
+        ),
+        UiIconButton(
+          icon: LucideIcons.bell,
+          tooltip: unread > 0 ? 'Alerts, $unread unread' : 'Alerts',
+          haptic: haptic,
+          badge: unread,
+          onPressed: () => context.push(AppRoutes.alerts),
         ),
       ],
     );

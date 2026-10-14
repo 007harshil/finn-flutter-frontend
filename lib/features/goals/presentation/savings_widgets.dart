@@ -268,7 +268,6 @@ class _SavingsMovementFormState extends ConsumerState<SavingsMovementForm> {
             const SizedBox(height: Space.x4),
           ],
           AmountField(
-            prominent: true,
             controller: _amount,
             label: 'Amount',
             autofocus: !disabled,

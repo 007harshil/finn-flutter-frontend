@@ -147,7 +147,7 @@ class _DetailsState extends ConsumerState<_Details> {
     final edited = t.version > 1 || t.updatedAt.isAfter(t.createdAt.add(const Duration(seconds: 1)));
 
     return ListView(
-      padding: EdgeInsets.fromLTRB(0, Space.x2, 0, Space.x10 + context.safeBottom),
+      padding: const EdgeInsets.fromLTRB(0, Space.x2, 0, Space.x10),
       children: [
         ResponsiveCenter(
           padding: const EdgeInsets.symmetric(horizontal: Space.gutter),

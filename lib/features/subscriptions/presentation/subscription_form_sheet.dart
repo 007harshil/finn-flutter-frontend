@@ -7,7 +7,6 @@ import '../../../app/di/data_providers.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/frequency.dart';
 import '../../../design_system/design_system.dart';
-import '../../../design_system/luxe/luxe.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/category_icons.dart';
 import '../../categories/domain/category.dart';
@@ -138,9 +137,7 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
   }
 
   @override
-  Widget build(BuildContext context) => LuxeScope(paint: true, child: Builder(builder: _buildSheet));
-
-  Widget _buildSheet(BuildContext context) {
+  Widget build(BuildContext context) {
     final today = ref.watch(todayProvider);
     if (_editing && !_loaded) {
       final s = ref.watch(subscriptionProvider(widget.subscriptionId!)).value;
@@ -193,7 +190,6 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
           ),
           const SizedBox(height: Space.x3),
           AmountField(
-            prominent: true,
             label: 'Amount per renewal',
             controller: _amount,
             errorText: _errors['amount'],

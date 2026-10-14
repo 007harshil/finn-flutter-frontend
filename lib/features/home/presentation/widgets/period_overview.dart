@@ -1,24 +1,27 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/di/core_providers.dart';
 import '../../../../app/di/data_providers.dart';
 import '../../../../app/router/routes.dart';
 import '../../../../core/money/money.dart';
+import '../../../../core/money/money_format.dart';
 import '../../../../core/time/dates.dart';
-import '../../../../design_system/design_system.dart';
-import '../../../../design_system/luxe/luxe.dart';
+import '../../../../design_system/design_system.dart' show AmountText, AmountVisibility;
 import '../../../../finance/ledger.dart';
+import '../../../../shared/presentation/async_view.dart';
 import '../../../transactions/domain/transaction.dart';
+import '../../../../ui/ui.dart';
 
-/// The month as an equation: money in, money out, what you kept. Both bars
-/// share one scale; the ring is the share of income kept. Swipe sideways
-/// (or use the arrows) to change month; tap a line for its transactions.
+final DateFormat _monthLabel = DateFormat('MMMM yyyy');
+
+/// Money in vs money out for one month, on one shared scale, and what was
+/// kept. Arrows (or a sideways swipe) step through the last three years;
+/// each figure opens its transactions.
 class PeriodOverview extends ConsumerStatefulWidget {
   const PeriodOverview({super.key});
 
@@ -31,13 +34,13 @@ class _PeriodOverviewState extends ConsumerState<PeriodOverview> {
 
   void _go(MonthKey to, MonthKey min, MonthKey max) {
     if (to < min || to > max) return;
-    HapticFeedback.selectionClick();
+    if (ref.read(settingsProvider).hapticsEnabled) HapticFeedback.selectionClick();
     setState(() => _month = to);
   }
 
   @override
   Widget build(BuildContext context) {
-    final t = context.lt;
+    final c = UiColors.of(context);
     final today = ref.watch(todayProvider);
     final current = today.monthKey;
     final min = current.shift(-35);
@@ -46,338 +49,226 @@ class _PeriodOverviewState extends ConsumerState<PeriodOverview> {
     final isCurrent = month == current;
     void go(MonthKey to) => _go(to, min, current);
 
-    return LuxeCard(
-      padding: const EdgeInsets.fromLTRB(20, 16, 12, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return UiSection(
+      title: isCurrent ? 'This month' : _monthLabel.format(month.start),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Semantics(header: true, child: Text('CASH FLOW', style: t.eyebrow, maxLines: 1)),
-                ),
-                Icon(LucideIcons.arrowLeftRight, size: 14, color: context.luxe.inkMute),
-              ],
-            ),
+          _Step(
+            icon: LucideIcons.chevronLeft,
+            tooltip: 'Previous month',
+            onPressed: month > min ? () => go(month.previous) : null,
           ),
-          const SizedBox(height: 4),
-          LuxeMonthStepper(
-            month: month,
-            min: min,
-            max: current,
-            compact: true,
-            subtitle: isCurrent ? 'so far' : 'full month',
-            onChanged: go,
-          ),
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onHorizontalDragEnd: (d) {
-                final v = d.primaryVelocity ?? 0;
-                if (v < -200) go(month.next);
-                if (v > 200) go(month.previous);
-              },
-              child: _MonthFlow(month: month, today: today, isCurrent: isCurrent),
-            ),
+          _Step(
+            icon: LucideIcons.chevronRight,
+            tooltip: 'Next month',
+            onPressed: isCurrent ? null : () => go(month.next),
           ),
         ],
+      ),
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: (d) {
+          final v = d.primaryVelocity ?? 0;
+          if (v < -200) go(month.next);
+          if (v > 200) go(month.previous);
+        },
+        child: UiPanel(
+          child: AsyncView<PeriodSummary>(
+            value: ref.watch(monthSummaryProvider(month)),
+            loading: const Padding(padding: EdgeInsets.all(UiSpace.lg), child: UiPlaceholder(height: 104)),
+            builder: (context, s) => AnimatedSwitcher(
+              duration: UiMotion.of(context).normal,
+              child: _Flow(key: ValueKey(month), summary: s, month: month, isCurrent: isCurrent, colors: c),
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
-class _MonthFlow extends ConsumerWidget {
-  const _MonthFlow({required this.month, required this.today, required this.isCurrent});
+class _Step extends StatelessWidget {
+  const _Step({required this.icon, required this.tooltip, required this.onPressed});
 
-  final MonthKey month;
-  final DateTime today;
-  final bool isCurrent;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Like with like: a month in progress is measured against the same days
-    // of the month before, a finished month against all of it.
-    final prev = month.previous;
-    final compare = isCurrent
-        ? DateRange(prev.start, DateTime(prev.year, prev.month, math.min(today.day, prev.dayCount)))
-        : prev.range;
-    final before = ref.watch(rangeSummaryProvider(compare)).value;
-    final value = ref.watch(monthSummaryProvider(month));
-    final s = value.value;
-    if (s == null) {
-      if (value.hasError) {
-        return Text('Could not load this month.', style: context.lt.caption.c(context.luxe.negative));
-      }
-      return const LuxeShimmer(child: LuxeBone(height: 112));
-    }
-    return AnimatedSwitcher(
-      duration: context.reduceMotion ? Duration.zero : LuxeDurations.base,
-      child: _FlowBody(key: ValueKey(month), summary: s, before: before, month: month, isCurrent: isCurrent),
-    );
-  }
-}
-
-class _FlowBody extends StatelessWidget {
-  const _FlowBody({
-    super.key,
-    required this.summary,
-    required this.before,
-    required this.month,
-    required this.isCurrent,
-  });
-
-  final PeriodSummary summary;
-  final PeriodSummary? before;
-  final MonthKey month;
-  final bool isCurrent;
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final hidden = AmountVisibility.hiddenOf(context);
+    final c = UiColors.of(context);
+    final tap = onPressed;
+    if (tap == null) {
+      return Semantics(
+        button: true,
+        enabled: false,
+        label: tooltip,
+        excludeSemantics: true,
+        child: SizedBox.square(
+          dimension: UiSpace.touch,
+          child: Icon(icon, size: 18, color: c.hairline),
+        ),
+      );
+    }
+    return UiIconButton(icon: icon, tooltip: tooltip, size: 18, color: c.inkSoft, onPressed: tap);
+  }
+}
+
+class _Flow extends StatelessWidget {
+  const _Flow({super.key, required this.summary, required this.month, required this.isCurrent, required this.colors});
+
+  final PeriodSummary summary;
+  final MonthKey month;
+  final bool isCurrent;
+  final UiColors colors;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = colors;
     final income = summary.income;
     final expense = summary.expense;
-    final top = math.max(income.paise, expense.paise);
+    final top = income.paise > expense.paise ? income.paise : expense.paise;
     double share(Money m) => top <= 0 ? 0 : m.paise / top;
-    final rate = income.isPositive ? summary.net.paise / income.paise : null;
-    final prevName = DateFormats.shortMonth.format(month.previous.start);
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _KeptRing(rate: hidden ? null : rate, hidden: hidden),
-        const SizedBox(width: 18),
-        Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _FlowLine(
+        Row(
+          children: [
+            Expanded(
+              child: _Figure(
                 label: 'Income',
-                icon: LucideIcons.arrowDownLeft,
                 amount: income,
                 share: share(income),
-                color: p.positive,
-                semanticLabel: 'Money in',
+                bar: c.positive,
                 onTap: () => context.push(AppRoutes.transactionsFiltered(type: TransactionType.income, month: month)),
               ),
-              const SizedBox(height: 6),
-              _FlowLine(
+            ),
+            Container(width: 1, height: 56, color: c.hairline),
+            Expanded(
+              child: _Figure(
                 label: 'Spent',
-                icon: LucideIcons.arrowUpRight,
                 amount: expense,
                 share: share(expense),
-                color: p.ink,
-                semanticLabel: 'Money out',
-                trailing: hidden ? null : _SpendDelta(now: expense, before: before?.expense, against: prevName),
+                bar: c.ink,
                 onTap: () => context.push(AppRoutes.transactionsFiltered(type: TransactionType.expense, month: month)),
               ),
-              const SizedBox(height: 10),
-              _KeptLine(summary: summary, isCurrent: isCurrent),
-            ],
-          ),
+            ),
+          ],
         ),
+        const UiRule(indent: UiSpace.lg),
+        _Result(summary: summary, isCurrent: isCurrent),
       ],
     );
   }
 }
 
-class _FlowLine extends StatelessWidget {
-  const _FlowLine({
+/// Label, figure and a bar on the shared scale. Opens the transactions.
+class _Figure extends StatelessWidget {
+  const _Figure({
     required this.label,
-    required this.icon,
     required this.amount,
     required this.share,
-    required this.color,
-    required this.semanticLabel,
+    required this.bar,
     required this.onTap,
-    this.trailing,
   });
 
   final String label;
-  final IconData icon;
   final Money amount;
   final double share;
-  final Color color;
-  final String semanticLabel;
+  final Color bar;
   final VoidCallback onTap;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
-    final end = trailing;
-    return Squish(
-      onTap: onTap,
-      scale: 0.98,
-      semanticLabel: '$semanticLabel. Opens these transactions.',
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+    final c = UiColors.of(context);
+    final t = UiType.of(context);
+    final m = UiMotion.of(context);
+    return Semantics(
+      button: true,
+      hint: 'Opens these transactions',
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(UiSpace.lg, 14, UiSpace.lg, UiSpace.lg),
+          child: MergeSemantics(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, size: 13, color: color),
-                const SizedBox(width: 5),
-                Text(label, style: t.caption.w(650).c(p.inkSoft)),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 3,
-                  child: LuxeAmount(
-                    amount,
-                    style: t.number.copyWith(fontSize: 16),
-                    textAlign: TextAlign.end,
-                    countFromZero: true,
-                    symbolScale: 0.75,
+                Text(label, style: t.small),
+                const SizedBox(height: UiSpace.xs),
+                AmountText(amount, style: t.figure, decimals: DecimalDisplay.none, fit: true),
+                const SizedBox(height: 10),
+                ExcludeSemantics(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: share.clamp(0.0, 1.0)),
+                    duration: m.settle,
+                    curve: UiMotion.ease,
+                    builder: (context, v, _) => Container(
+                      height: 4,
+                      decoration: BoxDecoration(color: c.muted, borderRadius: BorderRadius.circular(2)),
+                      alignment: AlignmentDirectional.centerStart,
+                      child: FractionallySizedBox(
+                        widthFactor: v,
+                        heightFactor: 1,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(color: bar, borderRadius: BorderRadius.circular(2)),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            LuxeProgressLine(value: share, color: color, height: 4),
-            if (end != null) Align(alignment: Alignment.centerRight, child: end),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// "↓ 12% vs Sep": spending against the same stretch of last month. Less
-/// spending is good news, so it reads in green.
-class _SpendDelta extends StatelessWidget {
-  const _SpendDelta({required this.now, required this.before, required this.against});
-
-  final Money now;
-  final Money? before;
-  final String against;
-
-  @override
-  Widget build(BuildContext context) {
-    final b = before;
-    if (b == null || !b.isPositive) return const SizedBox.shrink();
-    final p = context.luxe;
-    final pct = ((now.paise - b.paise) / b.paise * 100).round();
-    final down = pct < 0;
-    final color = pct == 0 ? p.inkMute : (down ? p.positive : p.negative);
-    final text = pct == 0 ? 'same as $against' : '${pct.abs()}% vs $against';
-    return Semantics(
-      label: pct == 0
-          ? 'Spending is the same as $against'
-          : 'Spending is ${pct.abs()} percent ${down ? 'lower' : 'higher'} than $against',
-      excludeSemantics: true,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (pct != 0) Icon(down ? LucideIcons.trendingDown : LucideIcons.trendingUp, size: 11, color: color),
-          if (pct != 0) const SizedBox(width: 2),
-          Flexible(
-            child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.lt.micro.w(700).c(color)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The result of the equation: kept or overspent.
-class _KeptLine extends StatelessWidget {
-  const _KeptLine({required this.summary, required this.isCurrent});
+/// "Kept ₹12,000 · 24% of income", or "Overspent ₹3,000".
+class _Result extends StatelessWidget {
+  const _Result({required this.summary, required this.isCurrent});
 
   final PeriodSummary summary;
   final bool isCurrent;
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final c = UiColors.of(context);
+    final t = UiType.of(context);
     final net = summary.net;
+    final hidden = AmountVisibility.hiddenOf(context);
+    Widget wrap(Widget child) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: UiSpace.lg, vertical: 14),
+      child: child,
+    );
     if (summary.income.isZero && summary.expense.isZero) {
-      return Text(isCurrent ? 'Nothing recorded yet this month' : 'Nothing recorded this month', style: t.caption);
+      return wrap(Text(isCurrent ? 'Nothing recorded yet' : 'Nothing recorded', style: t.label));
     }
     final kept = !net.isNegative;
-    final color = kept ? p.positive : p.negative;
-    return Container(
-      padding: const EdgeInsets.only(top: 10),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: p.line)),
-      ),
-      child: MergeSemantics(
+    final color = kept ? c.positive : c.negative;
+    final income = summary.income;
+    final pct = income.isPositive && kept && !hidden ? (net.paise / income.paise * 100).round() : null;
+    return wrap(
+      MergeSemantics(
         child: Row(
           children: [
-            Icon(kept ? LucideIcons.piggyBank : LucideIcons.triangleAlert, size: 14, color: color),
-            const SizedBox(width: 6),
-            Flexible(
-              flex: 2,
-              child: Text(
-                kept ? (isCurrent ? 'Kept so far' : 'Kept') : 'Overspent by',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.caption.w(700).c(color),
-              ),
-            ),
-            const SizedBox(width: 8),
+            Icon(kept ? LucideIcons.arrowDownToLine : LucideIcons.triangleAlert, size: 16, color: color),
+            const SizedBox(width: UiSpace.sm),
+            Text(kept ? 'Kept' : 'Overspent', style: t.label.copyWith(color: c.ink)),
+            if (pct != null) ...[const SizedBox(width: 6), Text('· $pct% of income', style: t.small)],
+            const SizedBox(width: UiSpace.sm),
             Expanded(
-              flex: 3,
-              child: LuxeAmount(
+              child: AmountText(
                 net.abs(),
-                style: t.figure.copyWith(fontSize: 22, color: color),
+                style: t.figureSmall.copyWith(color: color),
+                decimals: DecimalDisplay.none,
+                fit: true,
                 textAlign: TextAlign.end,
-                symbolScale: 0.6,
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Share of income kept, as a fine ring with the figure set in serif.
-class _KeptRing extends StatelessWidget {
-  const _KeptRing({required this.rate, required this.hidden});
-
-  /// net / income; null when there is no income or amounts are hidden.
-  final double? rate;
-  final bool hidden;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
-    final r = rate;
-    final String label;
-    if (r == null) {
-      label = hidden ? 'Savings rate hidden' : 'No income recorded';
-    } else if (r >= 0) {
-      label = 'Kept ${(r * 100).round()} percent of income';
-    } else {
-      label = 'Spent ${(-r * 100).round()} percent more than income';
-    }
-    final color = (r ?? 0) >= 0 ? p.positive : p.negative;
-    return Semantics(
-      label: label,
-      excludeSemantics: true,
-      child: LuxeRing(
-        value: (r ?? 0).clamp(-1.0, 1.0),
-        color: color,
-        size: 92,
-        stroke: 3,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              r == null ? (hidden ? '••' : '—') : '${(r * 100).round()}%',
-              style: t.figure.copyWith(fontSize: 26, color: r == null ? p.inkMute : p.ink),
-            ),
-            Text(r == null ? (hidden ? 'hidden' : 'no income') : (r >= 0 ? 'kept' : 'over'), style: t.micro),
           ],
         ),
       ),

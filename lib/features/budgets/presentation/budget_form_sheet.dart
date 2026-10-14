@@ -181,7 +181,6 @@ class _BudgetFormSheetState extends ConsumerState<BudgetFormSheet> {
         ],
         const SizedBox(height: Space.x5),
         AmountField(
-            prominent: true,
           controller: _limit,
           label: 'Spending limit',
           errorText: _errors['limit'],

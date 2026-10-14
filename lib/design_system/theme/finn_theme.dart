@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../components/safe_insets.dart';
 import '../tokens/finn_colors.dart';
 import '../tokens/tokens.dart';
 import '../tokens/typography.dart';
@@ -11,11 +11,8 @@ abstract final class FinnTheme {
   static ThemeData light() => _build(FinnColors.light);
   static ThemeData dark() => _build(FinnColors.dark);
 
-  /// A theme from explicit tokens (used to re-skin a subtree, e.g. Luxe).
-  static ThemeData fromTokens(FinnColors c, {FinnTypography? type}) => _build(c, type: type);
-
-  static ThemeData _build(FinnColors c, {FinnTypography? type}) {
-    type ??= FinnTypography.from(c);
+  static ThemeData _build(FinnColors c) {
+    final type = FinnTypography.from(c);
     final scheme = ColorScheme(
       brightness: c.brightness,
       primary: c.primary,
@@ -73,7 +70,7 @@ abstract final class FinnTheme {
         scrolledUnderElevation: 0,
         centerTitle: false,
         titleTextStyle: type.title,
-        systemOverlayStyle: SystemBars.styleFor(c.brightness),
+        systemOverlayStyle: c.isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       ),
       dividerTheme: DividerThemeData(color: c.border, thickness: 1, space: 1),
       iconTheme: IconThemeData(color: c.textPrimary, size: 20),

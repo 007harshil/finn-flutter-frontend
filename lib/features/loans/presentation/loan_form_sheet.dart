@@ -10,7 +10,6 @@ import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../core/time/frequency.dart';
 import '../../../design_system/design_system.dart';
-import '../../../design_system/luxe/luxe.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../application/loan_actions.dart';
 import '../application/loan_quote.dart';
@@ -149,14 +148,13 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
   }
 
   @override
-  Widget build(BuildContext context) => LuxeScope(paint: true, child: Builder(builder: _buildSheet));
-
-  Widget _buildSheet(BuildContext context) {
+  Widget build(BuildContext context) {
     final today = ref.watch(todayProvider);
     if (_editing && !_loaded) {
       final s = ref.watch(loanStateProvider(widget.loanId!)).value;
       if (s != null) _load(s);
     }
+    final t = context.text;
     final c = context.colors;
     if (_editing && _existing == null) {
       return const FinnSheetScaffold(
@@ -171,18 +169,14 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
     final firstDue = _firstDueOr(today);
     final quote = LoanQuote.of(_input(today));
 
-    final p = context.vault;
-    final vt = context.vt;
-    var section = 0;
-
     return FinnSheetScaffold(
-      eyebrow: borrowed ? 'Money owed by you' : 'Money owed to you',
       title: _editing ? 'Edit loan' : 'Add a loan',
-      description: _editing ? _existing!.loan.name : 'An EMI loan, or money between you and someone you know.',
+      description: _editing
+          ? _existing!.loan.name
+          : 'Track an EMI loan or money borrowed from or lent to someone you know.',
       footer: FinnButton(
         label: _editing ? 'Save changes' : 'Add loan',
         icon: _editing ? LucideIcons.check : LucideIcons.plus,
-        size: FinnButtonSize.lg,
         expand: true,
         loading: _busy,
         onPressed: _busy ? null : _submit,
@@ -193,12 +187,12 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
           if (locked) ...[
             const InfoBanner(
               icon: LucideIcons.lock,
-              title: 'Terms are locked',
-              message: 'Payments are recorded on this loan, so its amount, rate, dates and tenure stay as they are. '
-                  'Name, lender, notes and prepayment preference can still change.',
+              message: 'Payments are recorded on this loan, so its amount, rate, dates and tenure are locked. '
+                  'You can still edit the name, lender, notes and prepayment preference.',
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: Space.x5),
           ],
+          const LoanFieldLabel('Direction'),
           if (_editing)
             _LockedValue(icon: _direction.icon, color: _direction.color(c), label: _direction.pill)
           else
@@ -210,32 +204,15 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
               selected: _direction,
               onChanged: (d) => setState(() => _direction = d),
             ),
-          const SizedBox(height: 10),
-          Center(
-            child: VaultSwap(
-              alignment: Alignment.topCenter,
-              child: Text(
-                borrowed ? 'You repay this. It counts as debt.' : 'Someone repays you. It counts as money owed to you.',
-                key: ValueKey(borrowed),
-                textAlign: TextAlign.center,
-                style: vt.caption,
-              ),
-            ),
+          const SizedBox(height: Space.x1_5),
+          Text(
+            borrowed ? 'You repay this loan. It counts as debt.' : 'Someone repays you. It counts as money owed to you.',
+            style: t.micro,
           ),
-          const SizedBox(height: 24),
-          AmountField(
-            label: borrowed ? 'Amount borrowed' : 'Amount lent',
-            controller: _principal,
-            prominent: true,
-            errorText: _errors['principal'],
-            enabled: !locked,
-            textInputAction: TextInputAction.next,
-            onChanged: (_) => setState(() {}),
-          ),
-          VaultSection(index: ++section, title: 'Who & what'),
+          const SizedBox(height: Space.x5),
           FinnTextField(
             label: 'Loan name',
-            hint: borrowed ? 'Car loan' : 'Bike down payment',
+            hint: borrowed ? 'e.g. Car loan' : 'e.g. Bike down payment',
             controller: _name,
             prefixIcon: LucideIcons.tag,
             errorText: _errors['name'],
@@ -243,7 +220,7 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
             textCapitalization: TextCapitalization.sentences,
             textInputAction: TextInputAction.next,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: Space.x3),
           FinnTextField(
             label: borrowed ? 'Lender' : 'Borrower',
             hint: borrowed ? 'Bank or person, e.g. HDFC Bank' : 'Name',
@@ -253,7 +230,8 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
           ),
-          VaultSection(index: ++section, title: 'Terms', hint: 'How it is repaid'),
+          const SizedBox(height: Space.x5),
+          const LoanFieldLabel('Repayment type'),
           SegmentedTabs<LoanStructure>(
             items: const [
               SegmentItem(LoanStructure.amortizing, 'EMI loan'),
@@ -262,9 +240,18 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
             selected: _structure,
             onChanged: locked ? (_) {} : (s) => setState(() => _structure = s),
           ),
-          const SizedBox(height: 8),
-          VaultSwap(child: Text(_structure.description, key: ValueKey(_structure), style: vt.caption)),
-          const SizedBox(height: 16),
+          const SizedBox(height: Space.x1_5),
+          Text(_structure.description, style: t.micro),
+          const SizedBox(height: Space.x5),
+          AmountField(
+            label: borrowed ? 'Amount borrowed' : 'Amount lent',
+            controller: _principal,
+            errorText: _errors['principal'],
+            enabled: !locked,
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: Space.x3),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -283,11 +270,11 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
                 ),
               ),
               if (amortizing) ...[
-                const SizedBox(width: 10),
+                const SizedBox(width: Space.x3),
                 Expanded(
                   child: FinnTextField(
                     label: 'Instalments',
-                    hint: '60',
+                    hint: 'e.g. 60',
                     controller: _tenure,
                     prefixIcon: LucideIcons.listOrdered,
                     errorText: _errors['tenureInstallments'],
@@ -300,7 +287,7 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
               ],
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: Space.x5),
           LoanFieldLabel(amortizing ? 'EMI frequency' : 'Interest paid'),
           IgnorePointer(
             ignoring: locked,
@@ -315,8 +302,11 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
               ),
             ),
           ),
-          VaultFieldError(_errors['frequency']),
-          VaultSection(index: ++section, title: 'Schedule'),
+          if (_errors['frequency'] != null) ...[
+            const SizedBox(height: Space.x1),
+            Text(_errors['frequency']!, style: t.micro.copyWith(color: c.negative)),
+          ],
+          const SizedBox(height: Space.x5),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -334,7 +324,7 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
                   }),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: Space.x3),
               Expanded(
                 child: DateField(
                   label: amortizing ? 'First EMI due' : 'First interest due',
@@ -349,7 +339,7 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
             ],
           ),
           if (!amortizing) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: Space.x3),
             DateField(
               label: 'Principal due (optional)',
               hint: 'No fixed date',
@@ -370,22 +360,22 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
               ),
           ],
           if (quote != null) ...[
-            const SizedBox(height: 18),
-            MotionAnimatedSize(child: _QuoteCard(quote: quote, frequency: _frequency)),
+            const SizedBox(height: Space.x4),
+            _QuoteCard(quote: quote, frequency: _frequency),
           ],
-          VaultSection(index: ++section, title: 'Preferences'),
           if (amortizing) ...[
+            const SizedBox(height: Space.x5),
             const LoanFieldLabel('If you prepay'),
             SegmentedTabs<PrepaymentStrategy>(
-              items: [for (final s in PrepaymentStrategy.values) SegmentItem(s, s.label)],
+              items: [for (final p in PrepaymentStrategy.values) SegmentItem(p, p.label)],
               selected: _prepayment,
-              onChanged: (s) => setState(() => _prepayment = s),
+              onChanged: (p) => setState(() => _prepayment = p),
             ),
-            const SizedBox(height: 8),
-            VaultSwap(child: Text(_prepayment.description, key: ValueKey(_prepayment), style: vt.caption)),
-            const SizedBox(height: 16),
+            const SizedBox(height: Space.x1_5),
+            Text(_prepayment.description, style: t.micro),
           ],
           if (!_editing) ...[
+            const SizedBox(height: Space.x5),
             LoanSwitchCard(
               title: borrowed ? 'Record money received' : 'Record money given',
               message: _recordDisbursement
@@ -396,19 +386,17 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
               value: _recordDisbursement,
               onChanged: (b) => setState(() => _recordDisbursement = b),
             ),
-            const SizedBox(height: 12),
           ],
+          const SizedBox(height: Space.x4),
           FinnTextField(
             label: 'Notes (optional)',
             hint: 'Account number, terms, anything to remember',
             controller: _note,
-            prefixIcon: LucideIcons.notebookPen,
             errorText: _errors['note'],
             maxLines: 3,
             minLines: 2,
             textCapitalization: TextCapitalization.sentences,
           ),
-          SizedBox(height: p.isDark ? 4 : 0),
         ],
       ),
     );
@@ -424,28 +412,26 @@ class _LockedValue extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.vault;
-    final t = context.vt;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
-      decoration: BoxDecoration(color: p.well, borderRadius: BorderRadius.circular(999)),
+    final c = context.colors;
+    final t = context.text;
+    return FinnCard(
+      variant: FinnCardVariant.muted,
+      padding: const EdgeInsets.all(Space.x3),
       child: Row(
         children: [
           Icon(icon, size: 18, color: color),
-          const SizedBox(width: 10),
-          Expanded(child: Text(label, style: t.heading.copyWith(fontSize: 14.5))),
-          Icon(LucideIcons.lock, size: 13, color: p.inkMute),
-          const SizedBox(width: 5),
-          Text('Locked', style: t.caption),
+          const SizedBox(width: Space.x2),
+          Expanded(child: Text(label, style: t.bodyStrong)),
+          Icon(LucideIcons.lock, size: 14, color: c.textTertiary),
+          const SizedBox(width: Space.x1),
+          Text('Locked', style: t.micro),
         ],
       ),
     );
   }
 }
 
-/// Live estimate of the regular payment, set on an obsidian slip so it
-/// reads as the outcome of everything above it. Figures roll to their new
-/// value as terms change.
+/// Live estimate of the regular payment (projected, from the calculator).
 class _QuoteCard extends StatelessWidget {
   const _QuoteCard({required this.quote, required this.frequency});
 
@@ -454,8 +440,8 @@ class _QuoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.vault;
-    final t = context.vt;
+    final c = context.colors;
+    final t = context.text;
     final q = quote;
     if (q.neverRepays) {
       return const InfoBanner(
@@ -465,60 +451,49 @@ class _QuoteCard extends StatelessWidget {
       );
     }
     final amortizing = q.structure == LoanStructure.amortizing;
-    const onDark = Color(0xFFF6F1E7);
-    const onDarkSoft = Color(0xFFB4AA99);
-    final soft = t.caption.vc(onDarkSoft);
-    Widget fact(String label, Widget value) => Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Row(
-        children: [
-          Expanded(child: Text(label, style: soft)),
-          DefaultTextStyle.merge(style: t.number.vc(onDark), child: value),
-        ],
-      ),
-    );
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(VaultShape.group),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF2A2621), Color(0xFF151311), Color(0xFF0E0D0B)],
-        ),
-        border: Border.all(color: p.accent.withValues(alpha: 0.28)),
-      ),
+    return FinnCard(
+      variant: FinnCardVariant.muted,
+      padding: const EdgeInsets.symmetric(horizontal: Space.x4, vertical: Space.x3),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Icon(LucideIcons.sparkles, size: 14, color: p.accent),
-              const SizedBox(width: 8),
-              Text('ESTIMATE', style: t.eyebrow.vc(p.accent)),
+              Icon(LucideIcons.calculator, size: 16, color: c.textSecondary),
+              const SizedBox(width: Space.x2),
+              Text('ESTIMATE', style: t.eyebrow),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(amortizing ? '${frequency.label} EMI' : 'Interest per ${frequency.unit}', style: soft),
-          const SizedBox(height: 4),
-          VaultCount(
-            value: q.installment.paise.toDouble(),
-            builder: (context, v) => AmountText(
-              Money.fromPaise(v.round()),
-              style: t.hero.copyWith(fontSize: 40, color: onDark),
-            ),
+          const SizedBox(height: Space.x2),
+          KeyValueRow(
+            label: amortizing ? '${frequency.label} EMI' : 'Interest per ${frequency.unit}',
+            valueWidget: AmountText(q.installment, style: t.bodyStrong),
+            padding: const EdgeInsets.symmetric(vertical: Space.x1),
           ),
-          const SizedBox(height: 6),
-          Container(height: 1, color: onDark.withValues(alpha: 0.1)),
-          if (q.totalInterest != null) fact('Total interest', AmountText(q.totalInterest!, style: t.number.vc(onDark))),
-          if (q.totalPayable != null) fact('Total repayable', AmountText(q.totalPayable!, style: t.number.vc(onDark))),
-          if (q.lastDueDate != null) fact('Last EMI', Text(DateFormats.dayMonthYear.format(q.lastDueDate!))),
-          const SizedBox(height: 12),
+          if (q.totalInterest != null)
+            KeyValueRow(
+              label: 'Total interest',
+              valueWidget: AmountText(q.totalInterest!, style: t.bodyStrong),
+              padding: const EdgeInsets.symmetric(vertical: Space.x1),
+            ),
+          if (q.totalPayable != null)
+            KeyValueRow(
+              label: 'Total repayable',
+              valueWidget: AmountText(q.totalPayable!, style: t.bodyStrong),
+              padding: const EdgeInsets.symmetric(vertical: Space.x1),
+            ),
+          if (q.lastDueDate != null)
+            KeyValueRow(
+              label: 'Last EMI',
+              value: DateFormats.dayMonthYear.format(q.lastDueDate!),
+              padding: const EdgeInsets.symmetric(vertical: Space.x1),
+            ),
+          const SizedBox(height: Space.x1),
           Text(
             amortizing
                 ? 'EMI rounded up to the next rupee; the last instalment is adjusted.'
                 : 'Principal is repaid separately, in one go or in parts.',
-            style: t.caption.copyWith(fontSize: 11.5).vc(onDarkSoft),
+            style: t.micro,
           ),
         ],
       ),

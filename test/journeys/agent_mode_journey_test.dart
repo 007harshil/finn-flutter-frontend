@@ -61,7 +61,7 @@ void main() {
 
     // A drawer page highlights no tab; Home is one tap away.
     await tapTab(tester, 'Home');
-    expect(find.text('AVAILABLE TO SPEND'), findsOneWidget);
+    expect(find.text('Available to spend'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

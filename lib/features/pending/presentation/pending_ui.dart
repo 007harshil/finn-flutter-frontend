@@ -13,7 +13,6 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
-import '../../../design_system/luxe/luxe.dart';
 import '../../transactions/domain/transaction.dart';
 import '../domain/pending_payment.dart';
 
@@ -27,9 +26,6 @@ extension PendingDirectionUi on PendingDirection {
   Color color(FinnColors c) => isOwe ? c.negative : c.positive;
 
   Color soft(FinnColors c) => isOwe ? c.negativeSoft : c.positiveSoft;
-
-  /// Luxe tone: what you pay reads warm-red, what comes back reads green.
-  Color tone(LuxePalette p) => isOwe ? p.negative : p.positive;
 
   /// "You owe Rahul" / "Priya owes you".
   String sentence(String who) => isOwe ? 'You owe $who' : '$who owes you';
@@ -49,10 +45,10 @@ enum PendingTab {
   final String label;
 
   bool matches(PendingStatus s) => switch (this) {
-    PendingTab.active => s.isActive,
-    PendingTab.settled => s == PendingStatus.settled,
-    PendingTab.writtenOff => s == PendingStatus.cancelled,
-  };
+        PendingTab.active => s.isActive,
+        PendingTab.settled => s == PendingStatus.settled,
+        PendingTab.writtenOff => s == PendingStatus.cancelled,
+      };
 }
 
 /// List order. Pending items have no deadline, so [waiting] (the default)
@@ -126,15 +122,16 @@ class PendingFilter {
     Set<PendingAge>? ages,
     Set<PendingKind>? kinds,
     bool? groupByPerson,
-  }) => PendingFilter(
-    tab: tab ?? this.tab,
-    direction: direction != null ? direction() : this.direction,
-    query: query ?? this.query,
-    sort: sort ?? this.sort,
-    ages: ages ?? this.ages,
-    kinds: kinds ?? this.kinds,
-    groupByPerson: groupByPerson ?? this.groupByPerson,
-  );
+  }) =>
+      PendingFilter(
+        tab: tab ?? this.tab,
+        direction: direction != null ? direction() : this.direction,
+        query: query ?? this.query,
+        sort: sort ?? this.sort,
+        ages: ages ?? this.ages,
+        kinds: kinds ?? this.kinds,
+        groupByPerson: groupByPerson ?? this.groupByPerson,
+      );
 
   /// Same tab, search and sort with every filter cleared.
   PendingFilter cleared() => PendingFilter(tab: tab, query: query, sort: sort, groupByPerson: groupByPerson);
@@ -165,14 +162,7 @@ class PendingFilter {
 
   @override
   int get hashCode => Object.hash(
-    tab,
-    direction,
-    query,
-    sort,
-    Object.hashAllUnordered(ages),
-    Object.hashAllUnordered(kinds),
-    groupByPerson,
-  );
+      tab, direction, query, sort, Object.hashAllUnordered(ages), Object.hashAllUnordered(kinds), groupByPerson);
 }
 
 /// A row in the pending list: one item, or several items with one person.
@@ -208,9 +198,9 @@ final class PendingSplitEntry extends PendingEntry {
 
 /// Rows an entry stands for.
 int pendingEntryCount(PendingEntry e) => switch (e) {
-  PendingItemEntry() => 1,
-  PendingPersonGroup(:final count) || PendingSplitEntry(:final count) => count,
-};
+      PendingItemEntry() => 1,
+      PendingPersonGroup(:final count) || PendingSplitEntry(:final count) => count,
+    };
 
 /// Every split in [pendingViewsProvider], by split id.
 final pendingSplitsProvider = Provider<Map<String, PendingSplitView>>(
@@ -240,19 +230,14 @@ List<PendingEntry> buildPendingEntries(List<PendingView> all, PendingFilter f) {
         : (f.groupByPerson ? 'person:${v.payment.counterparty.trim().toLowerCase()}' : 'item:${v.payment.id}');
     groups.putIfAbsent(key, () => []).add(v);
   }
-  final splits = groups.keys.any((k) => k.startsWith('split:'))
-      ? PendingSplitView.collect(all)
-      : const <String, PendingSplitView>{};
+  final splits = groups.keys.any((k) => k.startsWith('split:')) ? PendingSplitView.collect(all) : const <String, PendingSplitView>{};
   return [
     for (final MapEntry(:key, value: g) in groups.entries)
       if (key.startsWith('split:'))
         PendingSplitEntry(
           split: splits[key.substring(6)]!,
           // People in the order they were added, like the bill.
-          items: [
-            for (final m in splits[key.substring(6)]!.members)
-              if (g.contains(m)) m,
-          ],
+          items: [for (final m in splits[key.substring(6)]!.members) if (g.contains(m)) m],
         )
       else if (g.length == 1)
         PendingItemEntry(g.single)
@@ -273,13 +258,13 @@ int _compare(PendingView a, PendingView b, PendingFilter f) {
   final pa = a.payment, pb = b.payment;
   final int r = switch (f.sort) {
     PendingSort.waiting => switch (f.tab) {
-      PendingTab.active => () {
-        final age = pa.createdDate.compareTo(pb.createdDate);
-        return age != 0 ? age : pendingShownAmount(b).compareTo(pendingShownAmount(a));
-      }(),
-      PendingTab.settled => (b.settledOn ?? pb.updatedAt).compareTo(a.settledOn ?? pa.updatedAt),
-      PendingTab.writtenOff => pb.updatedAt.compareTo(pa.updatedAt),
-    },
+        PendingTab.active => () {
+            final age = pa.createdDate.compareTo(pb.createdDate);
+            return age != 0 ? age : pendingShownAmount(b).compareTo(pendingShownAmount(a));
+          }(),
+        PendingTab.settled => (b.settledOn ?? pb.updatedAt).compareTo(a.settledOn ?? pa.updatedAt),
+        PendingTab.writtenOff => pb.updatedAt.compareTo(pa.updatedAt),
+      },
     PendingSort.amount => pendingShownAmount(b).compareTo(pendingShownAmount(a)),
     PendingSort.newest => pb.createdDate.compareTo(pa.createdDate),
     PendingSort.name => pa.counterparty.toLowerCase().compareTo(pb.counterparty.toLowerCase()),
@@ -364,18 +349,8 @@ class PendingOverview {
       PendingTab.values.every((t) => other.counts[t] == counts[t]);
 
   @override
-  int get hashCode => Object.hash(
-    toPay,
-    toCollect,
-    payCount,
-    collectCount,
-    longToPay,
-    longToCollect,
-    longCount,
-    people,
-    Object.hashAll(oldest),
-    Object.hashAll(PendingTab.values.map((t) => counts[t])),
-  );
+  int get hashCode => Object.hash(toPay, toCollect, payCount, collectCount, longToPay, longToCollect, longCount,
+      people, Object.hashAll(oldest), Object.hashAll(PendingTab.values.map((t) => counts[t])));
 }
 
 final pendingOverviewProvider = Provider<AsyncValue<PendingOverview>>(
@@ -404,13 +379,13 @@ String pendingAgeSentence(PendingView v) {
 Future<void> sharePendingReminder(BuildContext context, PendingView v) {
   final p = v.payment;
   final since = v.daysOpen > 1 ? ' from ${v.daysOpen} days ago' : '';
-  final text =
-      'Hi ${p.counterparty.split(' ').first}, a gentle reminder about '
+  final text = 'Hi ${p.counterparty.split(' ').first}, a gentle reminder about '
       '${MoneyFormatter.format(v.outstanding, decimals: DecimalDisplay.none)} for ${p.purpose}$since. Thanks!';
   final box = context.findRenderObject() as RenderBox?;
-  return SharePlus.instance.share(
-    ShareParams(text: text, sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size),
-  );
+  return SharePlus.instance.share(ShareParams(
+    text: text,
+    sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+  ));
 }
 
 /// "PN" for "Priya Nair", "S" for "Society".
@@ -426,29 +401,29 @@ String pendingInitials(String name) {
 // Widgets
 // ---------------------------------------------------------------------------
 
-/// Tone for how long an item has waited: quiet when recent, warmer as it
+/// Colour for how long an item has waited: quiet when recent, warmer as it
 /// ages. Informative, never alarming red.
-Color pendingAgeColor(PendingView v, LuxePalette p) => switch (PendingAge.of(v)) {
-  PendingAge.fresh => p.inkMute,
-  PendingAge.weeks => p.inkSoft,
-  PendingAge.long => p.warning,
-};
+Color pendingAgeColor(PendingView v, FinnColors c) => switch (PendingAge.of(v)) {
+      PendingAge.fresh => c.textTertiary,
+      PendingAge.weeks => c.textSecondary,
+      PendingAge.long => c.warning,
+    };
 
 /// Label, colour and icon for an item's age or closed state (never colour
 /// alone).
-({String label, Color color, IconData icon}) pendingAgeInfo(PendingView view, LuxePalette p) {
+({String label, Color color, IconData icon}) pendingAgeInfo(PendingView view, FinnColors c) {
   switch (view.status) {
     case PendingStatus.settled:
       final on = view.settledOn;
       return (
         label: on == null ? 'Settled' : 'Settled ${DateFormats.dayMonth.format(on)}',
-        color: p.positive,
+        color: c.positive,
         icon: LucideIcons.circleCheck,
       );
     case PendingStatus.cancelled:
-      return (label: 'Written off', color: p.inkMute, icon: LucideIcons.ban);
+      return (label: 'Written off', color: c.textSecondary, icon: LucideIcons.ban);
     case PendingStatus.open || PendingStatus.partiallySettled:
-      return (label: pendingDays(view.daysOpen), color: pendingAgeColor(view, p), icon: LucideIcons.hourglass);
+      return (label: pendingDays(view.daysOpen), color: pendingAgeColor(view, c), icon: LucideIcons.hourglass);
   }
 }
 
@@ -460,8 +435,8 @@ class PendingAgeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final i = pendingAgeInfo(view, context.luxe);
-    return LuxeStatus(label: i.label, color: i.color, icon: i.icon);
+    final i = pendingAgeInfo(view, context.colors);
+    return StatusPill(label: i.label, color: i.color, icon: i.icon);
   }
 }
 
@@ -473,19 +448,19 @@ class PendingDirectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final color = onGradient ? p.gold : direction.tone(p);
+    final c = context.colors;
+    final color = onGradient ? Colors.white : direction.color(c);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(direction.icon, size: 13, color: color),
-        const SizedBox(width: 6),
+        const SizedBox(width: Space.x1),
         Flexible(
           child: Text(
             direction.label.toUpperCase(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: context.lt.eyebrow.c(color),
+            style: context.text.micro.copyWith(color: color, fontWeight: FontWeight.w900, letterSpacing: 0.6),
           ),
         ),
       ],
@@ -493,8 +468,8 @@ class PendingDirectionLabel extends StatelessWidget {
   }
 }
 
-/// Initials in a circle with a fine ring that fills as the item is
-/// settled, and a small arrow badge for the direction money flows.
+/// Initials in a circle with a ring that fills as the item is settled, and
+/// a small arrow badge for the direction money flows.
 class PendingAvatar extends StatelessWidget {
   const PendingAvatar({
     super.key,
@@ -517,11 +492,10 @@ class PendingAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final fg = onGradient ? p.onObsidian : color;
-    final track = onGradient ? p.onObsidian.withValues(alpha: 0.14) : p.line;
-    final badge = size * 0.4;
-    final d = direction;
+    final c = context.colors;
+    final fg = onGradient ? Colors.white : color;
+    final track = onGradient ? Colors.white.withValues(alpha: 0.22) : color.withValues(alpha: c.isDark ? 0.22 : 0.14);
+    final badge = size * 0.42;
     return ExcludeSemantics(
       child: SizedBox.square(
         dimension: size,
@@ -529,10 +503,12 @@ class PendingAvatar extends StatelessWidget {
           clipBehavior: Clip.none,
           children: [
             Positioned.fill(
-              child: DrawIn(
-                value: progress.clamp(0.0, 1.0),
-                builder: (context, v) => CustomPaint(
-                  painter: _RingPainter(progress: v, color: onGradient ? p.gold : p.positive, track: track),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: progress.clamp(0.0, 1.0)),
+                duration: context.motion.progress,
+                curve: Curves2.emphasized,
+                builder: (context, p, _) => CustomPaint(
+                  painter: _RingPainter(progress: p, color: fg, track: track),
                 ),
               ),
             ),
@@ -542,20 +518,23 @@ class PendingAvatar extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: onGradient ? p.onObsidian.withValues(alpha: 0.08) : p.tint(color, 0.09),
+                    color: onGradient ? Colors.white.withValues(alpha: 0.16) : color.withValues(alpha: c.isDark ? 0.2 : 0.12),
                   ),
                   child: Center(
                     child: Text(
                       pendingInitials(name),
-                      style: context.lt.label
-                          .w(750)
-                          .copyWith(color: fg, fontSize: size * 0.3, height: 1, letterSpacing: 0.4),
+                      style: context.text.label.copyWith(
+                        color: fg,
+                        fontWeight: FontWeight.w900,
+                        fontSize: size * 0.3,
+                        height: 1,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-            if (d != null)
+            if (direction != null)
               PositionedDirectional(
                 end: -2,
                 bottom: -2,
@@ -564,10 +543,10 @@ class PendingAvatar extends StatelessWidget {
                   height: badge,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: onGradient ? p.gold : d.tone(p),
-                    border: Border.all(color: onGradient ? p.obsidian : p.paper, width: 2),
+                    color: onGradient ? Colors.white : direction!.color(c),
+                    border: Border.all(color: onGradient ? Colors.transparent : c.surface, width: 2),
                   ),
-                  child: Icon(d.icon, size: badge * 0.58, color: onGradient ? p.obsidian : p.paper),
+                  child: Icon(direction!.icon, size: badge * 0.6, color: onGradient ? direction!.color(c) : Colors.white),
                 ),
               ),
           ],
@@ -586,8 +565,9 @@ class _RingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final stroke = math.max(1.5, size.width * 0.045);
-    final arc = (Offset.zero & size).deflate(stroke / 2);
+    final stroke = size.width * 0.07;
+    final rect = Offset.zero & size;
+    final arc = rect.deflate(stroke / 2);
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
@@ -603,7 +583,7 @@ class _RingPainter extends CustomPainter {
 }
 
 /// One pending item as a compact two-line row: who, what, how much and
-/// how long. Swipe right to settle; long-press for quick actions.
+/// when. Swipe right to settle; long-press for quick actions.
 class PendingRow extends StatelessWidget {
   const PendingRow({
     super.key,
@@ -628,33 +608,30 @@ class PendingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lp = context.luxe;
-    final t = context.lt;
+    final c = context.colors;
+    final t = context.text;
     final p = view.payment;
     final dir = p.direction;
     final active = view.status.isActive;
-    final tone = active ? dir.tone(lp) : lp.inkMute;
-    final age = pendingAgeInfo(view, lp);
+    final tone = active ? dir.color(c) : c.textSecondary;
+    final age = pendingAgeInfo(view, c);
     final shown = pendingShownAmount(view);
     final partial = view.status == PendingStatus.partiallySettled;
-    final semantics =
-        '${dir.sentence(p.counterparty)} ${MoneyFormatter.spoken(shown)} for ${p.purpose}. '
+    final semantics = '${dir.sentence(p.counterparty)} ${MoneyFormatter.spoken(shown)} for ${p.purpose}. '
         '${view.status.label}. ${active ? '${pendingDays(view.daysOpen)} open' : age.label}';
     final shared = p.isShared ? ' Shared on FiNN.' : '';
 
     final leading = grouped
-        ? Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: lp.tint(tone, 0.09)),
-            child: Icon(
-              active ? dir.icon : (view.status == PendingStatus.settled ? LucideIcons.check : LucideIcons.ban),
-              size: 15,
-              color: tone,
-            ),
+        ? IconTile(
+            icon: active ? dir.icon : (view.status == PendingStatus.settled ? LucideIcons.check : LucideIcons.ban),
+            background: active ? dir.soft(c) : c.surfaceMuted,
+            foreground: tone,
+            size: 30,
+            radius: Radii.md,
+            iconSize: 15,
           )
         : PendingAvatar(
-            size: inSplit ? 34 : 42,
+            size: inSplit ? 32 : 40,
             name: p.counterparty,
             color: tone,
             progress: view.settledBps / 10000,
@@ -662,11 +639,11 @@ class PendingRow extends StatelessWidget {
           );
 
     final row = Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: grouped || inSplit ? 12 : 15),
+      padding: EdgeInsets.symmetric(horizontal: Space.x3, vertical: grouped || inSplit ? Space.x2_5 : Space.x3),
       child: Row(
         children: [
           leading,
-          const SizedBox(width: 14),
+          const SizedBox(width: Space.x3),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -681,25 +658,25 @@ class PendingRow extends StatelessWidget {
                               grouped ? p.purpose : p.counterparty,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: grouped ? t.label.w(700).c(lp.ink) : t.heading.copyWith(fontSize: 15),
+                              style: grouped ? t.body.copyWith(fontWeight: FontWeight.w700) : t.bodyStrong,
                             ),
                           ),
                           if (p.isSplit && !grouped && !inSplit) ...[
-                            const SizedBox(width: 6),
-                            Icon(LucideIcons.users, size: 13, color: lp.inkMute),
+                            const SizedBox(width: Space.x1),
+                            Icon(LucideIcons.users, size: 13, color: c.textTertiary),
                           ],
                           if (p.isShared && !grouped) ...[
-                            const SizedBox(width: 6),
-                            Icon(LucideIcons.link2, size: 13, color: lp.info),
+                            const SizedBox(width: Space.x1),
+                            Icon(LucideIcons.link2, size: 13, color: c.info),
                           ],
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    LuxeAmount(shown, fit: false, style: t.number.copyWith(color: tone)),
+                    const SizedBox(width: Space.x2),
+                    AmountText(shown, style: t.amountSmall.copyWith(color: tone)),
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Row(
                   children: [
                     Expanded(
@@ -712,10 +689,10 @@ class PendingRow extends StatelessWidget {
                         style: t.caption,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Icon(age.icon, size: 11, color: age.color),
-                    const SizedBox(width: 4),
-                    Text(age.label, style: t.micro.w(700).c(age.color)),
+                    const SizedBox(width: Space.x2),
+                    Icon(age.icon, size: 12, color: age.color),
+                    const SizedBox(width: 3),
+                    Text(age.label, style: t.micro.copyWith(color: age.color, fontWeight: FontWeight.w800)),
                   ],
                 ),
               ],
@@ -729,8 +706,6 @@ class PendingRow extends StatelessWidget {
       type: MaterialType.transparency,
       child: InkWell(
         onTap: onTap,
-        splashColor: lp.gold.withValues(alpha: 0.08),
-        highlightColor: lp.sunk.withValues(alpha: 0.6),
         onLongPress: onLongPress == null
             ? null
             : () {
@@ -775,18 +750,18 @@ class _SwipeSettleBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    return DecoratedBox(
-      decoration: BoxDecoration(gradient: p.goldGradient),
+    final c = context.colors;
+    return ColoredBox(
+      color: c.positive,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 22),
+        padding: const EdgeInsets.symmetric(horizontal: Space.x5),
         child: Row(
           children: [
-            const Icon(LucideIcons.circleCheckBig, color: Color(0xFF17130C), size: 20),
-            const SizedBox(width: 10),
+            Icon(LucideIcons.circleCheckBig, color: c.onSolid, size: 20),
+            const SizedBox(width: Space.x2),
             Text(
               direction.isOwe ? 'Settle · I paid' : 'Settle · I received',
-              style: context.lt.label.w(750).c(const Color(0xFF17130C)),
+              style: context.text.label.copyWith(color: c.onSolid, fontWeight: FontWeight.w800),
             ),
           ],
         ),
@@ -813,12 +788,12 @@ class PendingMethodChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => FilterChipBar<PaymentMethod>(
-    padding: EdgeInsets.zero,
-    multiSelect: false,
-    items: [for (final m in PaymentMethod.values) FilterChipItem(m, m.label, icon: _icons[m])],
-    selected: {?selected},
-    onChanged: (s) => onChanged(s.first),
-  );
+        padding: EdgeInsets.zero,
+        multiSelect: false,
+        items: [for (final m in PaymentMethod.values) FilterChipItem(m, m.label, icon: _icons[m])],
+        selected: {?selected},
+        onChanged: (s) => onChanged(s.first),
+      );
 }
 
 /// Label above a non-text form control.
@@ -829,9 +804,9 @@ class PendingFieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: Space.x1_5),
-    child: Text(text, style: context.text.label),
-  );
+        padding: const EdgeInsets.only(bottom: Space.x1_5),
+        child: Text(text, style: context.text.label),
+      );
 }
 
 // ---------------------------------------------------------------------------
@@ -839,7 +814,7 @@ class PendingFieldLabel extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 Future<PendingFilter?> showPendingViewOptions(BuildContext context, PendingFilter current) =>
-    showLuxeSheet<PendingFilter>(context, builder: (_) => PendingViewSheet(initial: current));
+    showFinnSheet<PendingFilter>(context, builder: (_) => PendingViewSheet(initial: current));
 
 /// Sort and filter the list in one place, with a live result count.
 class PendingViewSheet extends ConsumerStatefulWidget {
@@ -864,28 +839,23 @@ class _PendingViewSheetState extends ConsumerState<PendingViewSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final t = context.text;
     final all = ref.watch(pendingViewsProvider).value ?? const <PendingView>[];
     final n = filterPending(all, _f).length;
-    final pristine = _f.activeCount == 0 && _f.sort == PendingSort.waiting && _f.groupByPerson;
-    Widget label(String s) => Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Text(s.toUpperCase(), style: t.eyebrow),
-    );
-    return LuxeSheet(
-      eyebrow: 'Money owed',
+    return FinnSheetScaffold(
       title: 'Sort & filter',
       footer: Row(
         children: [
-          LuxeButton(
+          FinnButton(
             label: 'Reset',
-            variant: LuxeButtonVariant.ghost,
-            onPressed: pristine ? null : () => _set(PendingFilter(tab: _f.tab, query: _f.query)),
+            variant: FinnButtonVariant.ghost,
+            onPressed: _f.activeCount == 0 && _f.sort == PendingSort.waiting && _f.groupByPerson
+                ? null
+                : () => _set(PendingFilter(tab: _f.tab, query: _f.query)),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: Space.x3),
           Expanded(
-            child: LuxeButton(
+            child: FinnButton(
               key: const ValueKey('pending-apply'),
               label: n == 0 ? 'No matches' : 'Show $n ${n == 1 ? 'item' : 'items'}',
               expand: true,
@@ -897,92 +867,154 @@ class _PendingViewSheetState extends ConsumerState<PendingViewSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          label('Sort by'),
+          const PendingFieldLabel('Sort by'),
           Wrap(
-            spacing: 8,
-            runSpacing: 4,
+            spacing: Space.x2,
+            runSpacing: Space.x2,
             children: [
               for (final s in PendingSort.values)
-                LuxeChip(
+                _OptionChip(
                   label: s.label,
-                  icon: _f.sort == s ? LucideIcons.check : s.icon,
+                  icon: s.icon,
                   selected: _f.sort == s,
                   onTap: () => _set(_f.copyWith(sort: s)),
                 ),
             ],
           ),
-          const SizedBox(height: 22),
-          label('Money'),
-          LuxeSegmented<PendingDirection?>(
-            segments: const [
-              LuxeSegment(null, 'Both'),
-              LuxeSegment(PendingDirection.iOwe, 'I owe'),
-              LuxeSegment(PendingDirection.owedToMe, 'Owed to me'),
+          const SizedBox(height: Space.x5),
+          const PendingFieldLabel('Money'),
+          SegmentedTabs<PendingDirection?>(
+            items: const [
+              SegmentItem(null, 'Both'),
+              SegmentItem(PendingDirection.iOwe, 'I owe'),
+              SegmentItem(PendingDirection.owedToMe, 'Owed to me'),
             ],
             selected: _f.direction,
             onChanged: (d) => _set(_f.copyWith(direction: () => d)),
           ),
-          const SizedBox(height: 22),
-          label('Waiting'),
+          const SizedBox(height: Space.x5),
+          const PendingFieldLabel('Waiting'),
           Wrap(
-            spacing: 8,
-            runSpacing: 4,
+            spacing: Space.x2,
+            runSpacing: Space.x2,
             children: [
               for (final d in PendingAge.values)
-                LuxeChip(
+                _OptionChip(
                   label: d.label,
-                  icon: _f.ages.contains(d) ? LucideIcons.check : d.icon,
+                  icon: d.icon,
                   selected: _f.ages.contains(d),
                   onTap: () => _set(_f.copyWith(ages: _toggle(_f.ages, d))),
                 ),
             ],
           ),
-          const SizedBox(height: 22),
-          label('Reason'),
+          const SizedBox(height: Space.x5),
+          const PendingFieldLabel('Reason'),
           Wrap(
-            spacing: 8,
-            runSpacing: 4,
+            spacing: Space.x2,
+            runSpacing: Space.x2,
             children: [
               for (final k in PendingKind.values)
-                LuxeChip(
+                _OptionChip(
                   label: k.label,
-                  icon: _f.kinds.contains(k) ? LucideIcons.check : null,
                   selected: _f.kinds.contains(k),
                   onTap: () => _set(_f.copyWith(kinds: _toggle(_f.kinds, k))),
                 ),
             ],
           ),
-          const SizedBox(height: 18),
-          MergeSemantics(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: p.line),
-              ),
-              child: Row(
+          const SizedBox(height: Space.x4),
+          _SwitchRow(
+            title: 'Group by person',
+            subtitle: 'Keep several items with one person together',
+            value: _f.groupByPerson,
+            onChanged: (b) => _set(_f.copyWith(groupByPerson: b)),
+          ),
+          Text('Filters apply within the ${_f.tab.label.toLowerCase()} list.', style: t.micro),
+        ],
+      ),
+    );
+  }
+}
+
+class _SwitchRow extends StatelessWidget {
+  const _SwitchRow({required this.title, required this.subtitle, required this.value, required this.onChanged});
+
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.text;
+    return MergeSemantics(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: Space.x2),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Group by person', style: t.label.w(700).c(p.ink)),
-                        Text('Keep several items with one person together', style: t.caption),
-                      ],
-                    ),
-                  ),
-                  Switch(
-                    value: _f.groupByPerson,
-                    activeTrackColor: p.ink,
-                    onChanged: (b) => _set(_f.copyWith(groupByPerson: b)),
-                  ),
+                  Text(title, style: t.bodyStrong),
+                  Text(subtitle, style: t.caption),
                 ],
               ),
             ),
+            Switch(value: value, onChanged: onChanged),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Selectable pill used in the options sheet and the quick filter bar.
+class _OptionChip extends StatelessWidget {
+  const _OptionChip({required this.label, required this.selected, required this.onTap, this.icon});
+
+  final String label;
+  final IconData? icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final fg = selected ? c.onPrimary : c.textPrimary;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: Radii.rFull,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onTap();
+          },
+          child: AnimatedContainer(
+            duration: context.motion.fast,
+            constraints: const BoxConstraints(minHeight: 36),
+            padding: const EdgeInsets.symmetric(horizontal: Space.x3),
+            decoration: BoxDecoration(
+              color: selected ? c.primary : c.surface,
+              borderRadius: Radii.rFull,
+              border: Border.all(color: selected ? c.primary : c.border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (selected || icon != null) ...[
+                  Icon(selected ? LucideIcons.check : icon, size: 14, color: fg),
+                  const SizedBox(width: Space.x1_5),
+                ],
+                Text(label, style: context.text.label.copyWith(color: fg, fontWeight: FontWeight.w700)),
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-          Text('Filters apply within the ${_f.tab.label.toLowerCase()} list.', style: t.micro),
-        ],
+        ),
       ),
     );
   }

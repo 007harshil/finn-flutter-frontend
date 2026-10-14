@@ -5,9 +5,9 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../motion/motion.dart';
+import '../theme/finn_theme.dart';
 import '../tokens/tokens.dart';
-import '../vault/vault.dart';
-import 'safe_insets.dart';
+import 'tiles.dart';
 import 'tone.dart';
 
 /// Top-centre overlay toasts. Only one is visible at a time.
@@ -117,7 +117,7 @@ class _ToastViewState extends State<_ToastView> with SingleTickerProviderStateMi
   late final AnimationController _controller =
       AnimationController(vsync: this, duration: Durations2.slow, reverseDuration: Durations2.normal);
   late final CurvedAnimation _curve =
-      CurvedAnimation(parent: _controller, curve: VaultMotion.spring, reverseCurve: Curves2.exit);
+      CurvedAnimation(parent: _controller, curve: Curves2.emphasized, reverseCurve: Curves2.exit);
   Timer? _timer;
   double _drag = 0;
   bool _closing = false;
@@ -155,74 +155,46 @@ class _ToastViewState extends State<_ToastView> with SingleTickerProviderStateMi
 
   @override
   Widget build(BuildContext context) {
-    final p = context.vault;
-    final t = context.vt;
-    final accent = switch (widget.tone) {
-      FinnTone.positive => VaultPalette.dark.positive,
-      FinnTone.negative => VaultPalette.dark.negative,
-      FinnTone.warning => VaultPalette.dark.warning,
-      FinnTone.info => VaultPalette.dark.info,
-    };
+    final c = context.colors;
+    final t = context.text;
+    final accent = widget.tone.color(c);
     final sub = widget.subtitle;
-    // An obsidian capsule in both themes: it reads as system feedback, not
-    // as part of the page, and carries its tone in a lit emblem + a
-    // draining hairline that shows how long it will stay.
     final card = Container(
-      padding: const EdgeInsets.fromLTRB(10, 10, 18, 10),
+      padding: const EdgeInsets.all(Space.x3),
       decoration: BoxDecoration(
-        color: p.toast,
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        boxShadow: const [
-          BoxShadow(color: Color(0x47000000), blurRadius: 30, offset: Offset(0, 14), spreadRadius: -8),
-        ],
+        color: Color.alphaBlend(widget.tone.soft(c), c.surface),
+        borderRadius: Radii.rXxxl,
+        border: Border.all(color: accent.withValues(alpha: 0.35), width: 2),
+        boxShadow: c.isDark ? Elevation.lg : Elevation.xl,
       ),
-      child: Stack(
-        clipBehavior: Clip.none,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: accent.withValues(alpha: 0.16),
-                  border: Border.all(color: accent.withValues(alpha: 0.35)),
-                ),
-                child: Icon(widget.tone.icon, size: 19, color: accent),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.title,
-                      style: t.heading.copyWith(fontSize: 14.5, color: p.onToast),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (sub != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        sub,
-                        style: t.caption.copyWith(color: p.onToastSoft),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
+          IconTile(
+            icon: widget.tone.icon,
+            background: accent,
+            foreground: Colors.white,
+            size: 44,
+            radius: Radii.lg + 2,
+            iconSize: 22,
           ),
-          Positioned(
-            left: 56,
-            right: 0,
-            bottom: -6,
-            child: _Drain(duration: widget.duration, color: accent),
+          const SizedBox(width: Space.x3),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.title,
+                  style: t.bodyStrong.copyWith(fontWeight: FontWeight.w900),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (sub != null) ...[
+                  const SizedBox(height: Space.x0_5),
+                  Text(sub, style: t.caption, maxLines: 3, overflow: TextOverflow.ellipsis),
+                ],
+              ],
+            ),
           ),
         ],
       ),
@@ -232,8 +204,8 @@ class _ToastViewState extends State<_ToastView> with SingleTickerProviderStateMi
       top: 0,
       left: 0,
       right: 0,
-      child: Padding(
-        padding: EdgeInsets.only(top: context.safeTop, left: context.safeInsets.left, right: context.safeInsets.right),
+      child: SafeArea(
+        bottom: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: Space.gutter, vertical: Space.x2),
           child: Align(
@@ -243,13 +215,8 @@ class _ToastViewState extends State<_ToastView> with SingleTickerProviderStateMi
               child: AnimatedBuilder(
                 animation: _curve,
                 builder: (context, child) => Transform.translate(
-                  offset: Offset(0, -28 * (1 - _curve.value) + _drag),
-                  child: Transform.scale(
-                    scaleX: 0.86 + 0.14 * _curve.value,
-                    scaleY: 0.7 + 0.3 * _curve.value,
-                    alignment: Alignment.topCenter,
-                    child: Opacity(opacity: _curve.value.clamp(0.0, 1.0), child: child),
-                  ),
+                  offset: Offset(0, -24 * (1 - _curve.value) + _drag),
+                  child: Opacity(opacity: _curve.value.clamp(0.0, 1.0), child: child),
                 ),
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -269,38 +236,6 @@ class _ToastViewState extends State<_ToastView> with SingleTickerProviderStateMi
                     child: Material(type: MaterialType.transparency, child: card),
                   ),
                 ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Hairline that drains over the toast's lifetime.
-class _Drain extends StatelessWidget {
-  const _Drain({required this.duration, required this.color});
-
-  final Duration duration;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    if (context.reduceMotion) return const SizedBox.shrink();
-    return ExcludeSemantics(
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 1, end: 0),
-        duration: duration,
-        builder: (context, v, _) => Align(
-          alignment: Alignment.centerLeft,
-          child: FractionallySizedBox(
-            widthFactor: v,
-            child: Container(
-              height: 1.5,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(1),
               ),
             ),
           ),

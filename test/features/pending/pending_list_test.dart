@@ -106,17 +106,17 @@ void main() {
 
     testWidgets('over-3-weeks shortcut narrows the list and toggles back', (tester) async {
       await pump(tester);
-      expect(find.text('Priya Nair', skipOffstage: false), findsOneWidget);
+      expect(find.text('Priya Nair'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('pending-attn:long')));
       await tester.pumpAndSettle();
-      expect(find.text('Ananya Iyer', skipOffstage: false), findsOneWidget);
-      expect(find.text('Priya Nair', skipOffstage: false), findsNothing, reason: 'open 20 days');
+      expect(find.text('Ananya Iyer'), findsOneWidget);
+      expect(find.text('Priya Nair'), findsNothing, reason: 'open 20 days');
       expect(find.text('3 ITEMS'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('pending-attn:long')));
       await tester.pumpAndSettle();
-      expect(find.text('Priya Nair', skipOffstage: false), findsOneWidget);
+      expect(find.text('Priya Nair'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -126,16 +126,16 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Name A–Z'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Owed to me'));
+      await tester.tap(find.text('OWED TO ME'));
       await tester.pumpAndSettle();
       expect(find.text('Show 5 items'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('pending-apply')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Rahul Verma', skipOffstage: false), findsNothing);
-      final a = tester.getTopLeft(find.text('Ananya Iyer', skipOffstage: false)).dy;
-      final n = tester.getTopLeft(find.text('Neha Kapoor', skipOffstage: false)).dy;
-      final p = tester.getTopLeft(find.text('Priya Nair', skipOffstage: false)).dy;
+      expect(find.text('Rahul Verma'), findsNothing);
+      final a = tester.getTopLeft(find.text('Ananya Iyer')).dy;
+      final n = tester.getTopLeft(find.text('Neha Kapoor')).dy;
+      final p = tester.getTopLeft(find.text('Priya Nair')).dy;
       expect(a < n && n < p, isTrue, reason: 'name order');
       expect(find.text('Name A–Z'), findsOneWidget, reason: 'current sort shown above the list');
       expect(tester.takeException(), isNull);
@@ -148,14 +148,14 @@ void main() {
       await tester.enterText(find.byType(TextField), 'cab');
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
-      expect(find.text('Cab to airport', skipOffstage: false), findsOneWidget);
-      expect(find.text('Priya Nair', skipOffstage: false), findsNothing);
+      expect(find.text('Cab to airport'), findsOneWidget);
+      expect(find.text('Priya Nair'), findsNothing);
 
       await tester.tap(find.byTooltip('Close search'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Settled'));
+      await tester.tap(find.text('Settled 2', findRichText: true));
       await tester.pumpAndSettle();
-      expect(find.text('Vikram Rao', skipOffstage: false), findsOneWidget);
+      expect(find.text('Vikram Rao'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -163,7 +163,7 @@ void main() {
       await pump(tester, reduceMotion: false, width: 320);
       await tester.tap(find.byKey(const ValueKey('pending-attn:long')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Concert tickets', skipOffstage: false), findsOneWidget);
+      expect(find.textContaining('Concert tickets'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });
@@ -171,7 +171,7 @@ void main() {
   testWidgets('swiping a row right opens the settle sheet', (tester) async {
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
-    await scrollAndTap(tester, find.byKey(const ValueKey('quick-tile:Pending payments')));
+    await scrollAndTap(tester, find.byKey(const ValueKey('quick-tile:Pending')));
     final id = views.firstWhere((v) => v.payment.purpose == 'Goa trip hotel share').payment.id;
     await scrollTo(tester, find.byKey(ValueKey(id)));
     await tester.drag(find.byKey(ValueKey(id)), const Offset(260, 0));

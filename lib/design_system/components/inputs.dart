@@ -9,7 +9,6 @@ import '../../core/money/money_format.dart';
 import '../../core/time/dates.dart';
 import '../theme/finn_theme.dart';
 import '../tokens/tokens.dart';
-import '../vault/vault.dart';
 
 /// Field label rendered above inputs.
 class _FieldLabel extends StatelessWidget {
@@ -86,29 +85,6 @@ class FinnTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (VaultScope.isActive(context)) {
-      return VaultTextField(
-        label: label,
-        hint: hint,
-        controller: controller,
-        errorText: errorText,
-        prefixIcon: prefixIcon,
-        suffix: suffix,
-        keyboardType: keyboardType,
-        maxLines: maxLines,
-        minLines: minLines,
-        maxLength: maxLength,
-        textInputAction: textInputAction,
-        textCapitalization: textCapitalization,
-        inputFormatters: inputFormatters,
-        onChanged: onChanged,
-        onSubmitted: onSubmitted,
-        enabled: enabled,
-        autofocus: autofocus,
-        obscureText: obscureText,
-        focusNode: focusNode,
-      );
-    }
     final icon = prefixIcon;
     return _labelled(
       label,
@@ -181,19 +157,11 @@ class AmountField extends StatelessWidget {
     this.autofocus = false,
     this.enabled = true,
     this.textInputAction,
-    this.prominent = false,
-    this.tone,
   });
 
   final TextEditingController? controller;
   final String? label;
   final String hint;
-
-  /// Inside a sheet: render as the sheet's hero figure (large, centred).
-  final bool prominent;
-
-  /// Colour of the figure inside a sheet (e.g. positive for income).
-  final Color? tone;
   final String? errorText;
 
   /// Parsed value on every edit (null when empty or invalid).
@@ -209,27 +177,10 @@ class AmountField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final change = onChanged;
-    final submit = onSubmitted;
-    if (VaultScope.isActive(context)) {
-      return VaultAmountField(
-        formatters: const [AmountInputFormatter()],
-        controller: controller,
-        label: label,
-        hint: hint,
-        errorText: errorText,
-        onChanged: change == null ? null : (s) => change(parse(s)),
-        onSubmitted: submit == null ? null : (s) => submit(parse(s)),
-        focusNode: focusNode,
-        autofocus: autofocus,
-        enabled: enabled,
-        textInputAction: textInputAction,
-        prominent: prominent,
-        tone: tone,
-      );
-    }
     final c = context.colors;
     final style = context.text.amountLarge.copyWith(fontSize: 28, fontWeight: FontWeight.w900);
+    final change = onChanged;
+    final submit = onSubmitted;
     return _labelled(
       label,
       TextField(
@@ -391,16 +342,6 @@ class DateField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (VaultScope.isActive(context)) {
-      return VaultDateField(
-        value: value,
-        label: label,
-        hint: hint,
-        errorText: errorText,
-        enabled: enabled,
-        onPick: () => _pick(context),
-      );
-    }
     final c = context.colors;
     final v = value;
     final display = v == null ? null : DateFormats.dayMonthYear.format(v);

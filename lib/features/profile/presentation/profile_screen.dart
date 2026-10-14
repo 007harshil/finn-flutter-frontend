@@ -43,7 +43,7 @@ class ProfileScreen extends ConsumerWidget {
         key: const PageStorageKey('profile'),
         slivers: [
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(0, Space.x2, 0, Space.x10 + context.safeBottom),
+            padding: const EdgeInsets.fromLTRB(0, Space.x2, 0, Space.x10),
             sliver: SliverList.separated(
               itemCount: sections.length,
               separatorBuilder: (_, _) => const SizedBox(height: Space.section),

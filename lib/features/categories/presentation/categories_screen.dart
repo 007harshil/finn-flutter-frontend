@@ -139,7 +139,7 @@ class _CategoriesScreenState extends ConsumerState<CategoriesScreen> {
               ),
             ),
         ],
-        SliverToBoxAdapter(child: SizedBox(height: Space.x10 + context.safeBottom)),
+        const SliverToBoxAdapter(child: SizedBox(height: Space.x10)),
       ],
     );
   }

@@ -1,7 +1,6 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -9,9 +8,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/money/money.dart';
 import '../../../design_system/design_system.dart';
-import '../../../design_system/luxe/luxe.dart';
-import '../../../shared/presentation/luxe_async.dart';
-import '../../../shared/presentation/luxe_page.dart';
+import '../../../shared/presentation/async_view.dart';
+import '../../alerts/presentation/alert_visuals.dart' show MaybeAnimate;
 import '../domain/pending_payment.dart';
 import 'pending_split_ui.dart';
 import 'pending_ui.dart';
@@ -19,10 +17,10 @@ import 'pending_ui.dart';
 /// Money owed between the user and other people. Obligations only — the
 /// cash balance changes when an item is settled.
 ///
-/// Top to bottom: the title; an obsidian card with the net position and a
-/// balance scale that tips towards the heavier side (tap a pan to see only
-/// that side); who has waited longest; a pinned bar with status tabs,
-/// search and sort & filter; then people and bills as cards.
+/// Layout, top to bottom: one position card (net figure, a balance beam of
+/// what goes out vs. what comes back, and tappable "needs attention"
+/// shortcuts), a pinned bar with status tabs, search and sort & filter,
+/// then compact two-line rows grouped by person.
 class PendingScreen extends ConsumerStatefulWidget {
   const PendingScreen({super.key});
 
@@ -35,7 +33,7 @@ class _PendingScreenState extends ConsumerState<PendingScreen> {
   bool _searching = false;
 
   /// Rows that already played their entrance, so scrolling back never
-  /// replays it; rows new to a filter still rise in.
+  /// replays it; rows new to a filter still slide in.
   final Set<String> _entered = {};
 
   void _set(PendingFilter f) => setState(() => _filter = f);
@@ -56,207 +54,200 @@ class _PendingScreenState extends ConsumerState<PendingScreen> {
   @override
   Widget build(BuildContext context) {
     final overview = ref.watch(pendingOverviewProvider);
-    final o = overview.value;
-    final entries = ref.watch(pendingEntriesProvider(_filter)).value ?? const <PendingEntry>[];
-    final shown = entries.fold<int>(0, (n, e) => n + pendingEntryCount(e));
-    return LuxeDetailPage(
-      title: 'Money owed',
-      storageKey: 'pending-list',
-      actions: [
-        LuxeIconButton(
-          icon: LucideIcons.plus,
-          tooltip: 'Add money owed',
-          style: LuxeIconStyle.ink,
-          size: 40,
-          onPressed: () => context.push(AppRoutes.newPending(owedToMe: _filter.direction == PendingDirection.owedToMe)),
-        ),
-      ],
-      slivers: [
-        luxeBox(
-          const Reveal(
-            child: LuxePageTitle(eyebrow: 'Between people', title: 'Money owed'),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Money owed'),
+        actions: [
+          FinnIconButton(
+            icon: LucideIcons.plus,
+            tooltip: 'Add money owed',
+            variant: FinnIconButtonVariant.filled,
+            onPressed: () => context.push(AppRoutes.newPending(owedToMe: _filter.direction == PendingDirection.owedToMe)),
           ),
-          top: 4,
-          bottom: 22,
-        ),
-        if (o == null)
-          SliverToBoxAdapter(
-            child: LuxeAsync<PendingOverview>(
-              value: overview,
-              loading: const LuxePageSkeleton(title: false, hero: 280, rows: 3),
-              errorTitle: 'Could not load money owed',
-              builder: (_, _) => const SizedBox.shrink(),
-            ),
-          )
-        else ...[
-          luxeBox(
-            Reveal(
-              index: 1,
-              scale: 0.97,
-              child: _PositionCard(
-                overview: o,
-                selected: _filter.tab == PendingTab.active ? _filter.direction : null,
-                onDirection: _toggleDirection,
-              ),
-            ),
-          ),
-          luxeBox(
-            Reveal(
-              index: 2,
-              child: _WaitingStrip(
-                overview: o,
-                filter: _filter,
-                onLong: _toggleLong,
-                onOpen: (v) => context.push(AppRoutes.pendingItem(v.payment.id)),
-              ),
-            ),
-            top: 18,
-            bottom: 4,
-          ),
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: LuxePinnedBar(
-              height: 64,
-              child: _Controls(
-                overview: o,
-                filter: _filter,
-                searching: _searching,
-                onTab: (t) => _set(_filter.copyWith(tab: t)),
-                onSearch: (q) => _set(_filter.copyWith(query: q)),
-                onSearchToggle: () => setState(() {
-                  _searching = !_searching;
-                  if (!_searching) _filter = _filter.copyWith(query: '');
-                }),
-                onOptions: _openOptions,
-              ),
-            ),
-          ),
-          luxeBox(_ActiveFilters(filter: _filter, count: shown, onChanged: _set, onSort: _openOptions), top: 4),
-          if (entries.isEmpty)
-            luxeBox(_Empty(filter: _filter), top: 8)
-          else
-            SliverList.builder(
-              itemCount: entries.length,
-              itemBuilder: (context, i) => ResponsiveCenter(
-                padding: const EdgeInsets.fromLTRB(LuxeSpace.gutter, 0, LuxeSpace.gutter, 12),
-                child: _EntryCard(entry: entries[i], index: i, entered: _entered),
-              ),
-            ),
+          const SizedBox(width: Space.x3),
         ],
-      ],
+      ),
+      body: AsyncView<PendingOverview>(
+        value: overview,
+        loading: const _PendingSkeleton(),
+        builder: (context, o) {
+          final entries = ref.watch(pendingEntriesProvider(_filter)).value ?? const <PendingEntry>[];
+          final shown = entries.fold<int>(0, (n, e) => n + pendingEntryCount(e));
+          return CustomScrollView(
+            key: const PageStorageKey('pending-list'),
+            slivers: [
+              _boxed(
+                Padding(
+                  padding: const EdgeInsets.only(top: Space.x1, bottom: Space.x3),
+                  child: StaggeredEntrance(
+                    child: _PositionCard(
+                      overview: o,
+                      filter: _filter,
+                      onDirection: _toggleDirection,
+                      onLong: _toggleLong,
+                      onOpen: (v) => context.push(AppRoutes.pendingItem(v.payment.id)),
+                    ),
+                  ),
+                ),
+              ),
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _ControlsDelegate(
+                  child: _Controls(
+                    overview: o,
+                    filter: _filter,
+                    searching: _searching,
+                    onTab: (t) => _set(_filter.copyWith(tab: t)),
+                    onSearch: (q) => _set(_filter.copyWith(query: q)),
+                    onSearchToggle: () => setState(() {
+                      _searching = !_searching;
+                      if (!_searching) _filter = _filter.copyWith(query: '');
+                    }),
+                    onOptions: _openOptions,
+                  ),
+                ),
+              ),
+              _boxed(
+                _ActiveFilters(
+                  filter: _filter,
+                  count: shown,
+                  onChanged: _set,
+                  onSort: _openOptions,
+                ),
+              ),
+              if (entries.isEmpty)
+                _boxed(Padding(padding: const EdgeInsets.only(top: Space.x4), child: _Empty(filter: _filter)))
+              else
+                SliverList.builder(
+                  itemCount: entries.length,
+                  itemBuilder: (context, i) => ResponsiveCenter(
+                    padding: const EdgeInsets.fromLTRB(Space.gutter, 0, Space.gutter, Space.x2),
+                    child: _EntryCard(entry: entries[i], index: i, entered: _entered),
+                  ),
+                ),
+              SliverPadding(padding: EdgeInsets.only(bottom: context.bottomClearance)),
+            ],
+          );
+        },
+      ),
     );
   }
 }
+
+Widget _boxed(Widget child) => SliverToBoxAdapter(
+      child: ResponsiveCenter(padding: const EdgeInsets.symmetric(horizontal: Space.gutter), child: child),
+    );
 
 // ---------------------------------------------------------------------------
 // Position card
 // ---------------------------------------------------------------------------
 
-/// The one-glance answer: who is ahead and by how much, and a scale that
-/// shows it.
+/// The one-glance answer: who is ahead, by how much, and what needs action.
 class _PositionCard extends StatelessWidget {
-  const _PositionCard({required this.overview, required this.selected, required this.onDirection});
+  const _PositionCard({
+    required this.overview,
+    required this.filter,
+    required this.onDirection,
+    required this.onLong,
+    required this.onOpen,
+  });
 
   final PendingOverview overview;
-  final PendingDirection? selected;
+  final PendingFilter filter;
   final ValueChanged<PendingDirection> onDirection;
+  final VoidCallback onLong;
+  final ValueChanged<PendingView> onOpen;
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final c = context.colors;
+    final t = context.text;
     final o = overview;
     final net = o.net;
     final square = o.activeCount == 0;
-    final payTone = p.isDark ? p.negative : const Color(0xFFF0A49B);
-    final collectTone = p.isDark ? p.positive : const Color(0xFF9BD3B5);
     final (String verdict, Color tone) = square
-        ? ('All square', p.onObsidianSoft)
+        ? ('All square', c.textSecondary)
         : net.isNegative
-        ? ('You owe overall', payTone)
-        : net.isZero
-        ? ('Evenly balanced', p.onObsidianSoft)
-        : ('Coming back to you', collectTone);
-    return LuxeObsidian(
+            ? ('You owe overall', c.negative)
+            : net.isZero
+                ? ('Evenly balanced', c.textSecondary)
+                : ('Coming back to you', c.positive);
+    final active = filter.tab == PendingTab.active;
+    return FinnCard(
+      padding: const EdgeInsets.fromLTRB(Space.x4, Space.x4, Space.x4, Space.x3),
+      radius: Radii.xxl,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text('NET POSITION', style: t.eyebrow.copyWith(fontSize: 10, color: p.onObsidianSoft)),
-              ),
+              Expanded(child: Text('NET POSITION', style: t.eyebrow)),
               if (!square) ...[
-                Icon(LucideIcons.users, size: 13, color: p.onObsidianSoft),
-                const SizedBox(width: 6),
-                Text('${o.people} ${o.people == 1 ? 'person' : 'people'}', style: t.micro.c(p.onObsidianSoft)),
+                Icon(LucideIcons.users, size: 13, color: c.textTertiary),
+                const SizedBox(width: Space.x1),
+                Text('${o.people} ${o.people == 1 ? 'person' : 'people'}', style: t.micro),
               ],
             ],
           ),
-          const SizedBox(height: 8),
-          if (square)
-            Text(verdict, style: t.display.copyWith(fontSize: 38, color: p.onObsidian))
-          else
-            LuxeAmount(net.abs(), countFromZero: true, style: t.display.copyWith(fontSize: 40, color: p.onObsidian)),
-          const SizedBox(height: 4),
+          const SizedBox(height: Space.x1),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              if (!square) ...[
-                Icon(net.isNegative ? LucideIcons.arrowUpRight : LucideIcons.arrowDownLeft, size: 14, color: tone),
-                const SizedBox(width: 6),
-              ],
               Flexible(
-                child: Text(
-                  square ? 'Nothing open with anyone.' : '$verdict · not in your balance',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.label.w(700).c(tone),
-                ),
+                child: square
+                    ? Text(verdict, style: t.title)
+                    : AnimatedAmount(
+                        net.abs(),
+                        animateOnMount: true,
+                        fit: true,
+                        style: t.amountLarge.copyWith(color: tone),
+                      ),
               ),
+              if (!square) ...[
+                const SizedBox(width: Space.x2),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(verdict, style: t.caption.copyWith(color: tone, fontWeight: FontWeight.w700)),
+                ),
+              ],
             ],
           ),
+          const SizedBox(height: 2),
+          Text('Not part of your balance until settled.', style: t.micro),
           if (!square) ...[
-            const SizedBox(height: 10),
-            _BalanceScale(
-              overview: o,
-              selected: selected,
-              onSide: onDirection,
-              payTone: payTone,
-              collectTone: collectTone,
-            ),
+            const SizedBox(height: Space.x3),
+            _BalanceBeam(overview: o, selected: active ? filter.direction : null, onSide: onDirection),
           ],
+          const SizedBox(height: Space.x3),
+          const FinnDivider(),
+          const SizedBox(height: Space.x2_5),
+          _WaitingStrip(overview: o, filter: filter, onLong: onLong, onOpen: onOpen),
         ],
       ),
     );
   }
 }
 
-/// A balance scale: what you owe in the left pan, what comes back in the
-/// right. The beam starts level and swings (with a little overshoot) until
-/// it rests tipped towards the heavier side. Tap a pan, or its figure, to
-/// see only that side.
-class _BalanceScale extends StatelessWidget {
-  const _BalanceScale({
-    required this.overview,
-    required this.selected,
-    required this.onSide,
-    required this.payTone,
-    required this.collectTone,
-  });
+/// Two-sided bar: what you owe on the left, what comes back on the right.
+/// The knob settles where the two meet like a balance finding its level;
+/// hatched ends are the part waiting over three weeks. Tap a side (or its
+/// legend) to show only that direction.
+class _BalanceBeam extends StatelessWidget {
+  const _BalanceBeam({required this.overview, required this.selected, required this.onSide});
 
   final PendingOverview overview;
   final PendingDirection? selected;
   final ValueChanged<PendingDirection> onSide;
-  final Color payTone;
-  final Color collectTone;
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
+    final c = context.colors;
     final o = overview;
     final total = o.toPay.paise + o.toCollect.paise;
-    // -1 = all to pay (left heavy), +1 = all to collect (right heavy).
-    final balance = total == 0 ? 0.0 : (o.toCollect.paise - o.toPay.paise) / total;
+    final split = total == 0 ? 0.5 : o.toPay.paise / total;
+    double share(Money part, Money whole) => whole.isPositive ? (part.paise / whole.paise).clamp(0.0, 1.0) : 0;
+    final dimPay = selected == PendingDirection.owedToMe;
+    final dimCollect = selected == PendingDirection.iOwe;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -267,51 +258,50 @@ class _BalanceScale extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               onTapUp: (d) {
                 HapticFeedback.selectionClick();
-                onSide(d.localPosition.dx < box.maxWidth / 2 ? PendingDirection.iOwe : PendingDirection.owedToMe);
+                onSide(d.localPosition.dx < box.maxWidth * split ? PendingDirection.iOwe : PendingDirection.owedToMe);
               },
               child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: balance),
-                duration: context.reduceMotion ? Duration.zero : const Duration(milliseconds: 1500),
+                // Starts level, then tips toward the heavier side.
+                tween: Tween(begin: 0.5, end: split),
+                duration: context.reduceMotion ? Duration.zero : const Duration(milliseconds: 1100),
                 curve: Curves.elasticOut,
-                builder: (context, b, _) => CustomPaint(
-                  size: Size(box.maxWidth, 88),
-                  painter: _ScalePainter(
-                    balance: b,
-                    beam: p.gold,
-                    pivot: p.onObsidian,
-                    chain: p.onObsidian.withValues(alpha: 0.35),
-                    pay: payTone.withValues(alpha: selected == PendingDirection.owedToMe ? 0.25 : 1),
-                    collect: collectTone.withValues(alpha: selected == PendingDirection.iOwe ? 0.25 : 1),
-                    payWeight: total == 0 ? 0.5 : o.toPay.paise / total,
-                    collectWeight: total == 0 ? 0.5 : o.toCollect.paise / total,
+                builder: (context, s, _) => CustomPaint(
+                  size: Size(box.maxWidth, 26),
+                  painter: _BeamPainter(
+                    split: s.clamp(0.0, 1.0),
+                    payLong: share(o.longToPay, o.toPay),
+                    collectLong: share(o.longToCollect, o.toCollect),
+                    pay: c.negative.withValues(alpha: dimPay ? 0.22 : 1),
+                    collect: c.positive.withValues(alpha: dimCollect ? 0.22 : 1),
+                    knob: c.surface,
+                    knobBorder: c.textPrimary,
+                    showKnob: o.toPay.isPositive && o.toCollect.isPositive,
                   ),
                 ),
               ),
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: Space.x1),
         Row(
           children: [
             Expanded(
-              child: _Side(
+              child: _BeamLegend(
                 label: 'To pay',
                 amount: o.toPay,
                 count: o.payCount,
                 direction: PendingDirection.iOwe,
-                color: payTone,
                 selected: selected == PendingDirection.iOwe,
                 onTap: () => onSide(PendingDirection.iOwe),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: Space.x2),
             Expanded(
-              child: _Side(
+              child: _BeamLegend(
                 label: 'To collect',
                 amount: o.toCollect,
                 count: o.collectCount,
                 direction: PendingDirection.owedToMe,
-                color: collectTone,
                 selected: selected == PendingDirection.owedToMe,
                 end: true,
                 onTap: () => onSide(PendingDirection.owedToMe),
@@ -328,102 +318,12 @@ class _BalanceScale extends StatelessWidget {
 String _spoken(BuildContext context, Money m) =>
     AmountVisibility.hiddenOf(context) ? 'an amount' : AmountText.spokenLabel(m);
 
-class _ScalePainter extends CustomPainter {
-  _ScalePainter({
-    required this.balance,
-    required this.beam,
-    required this.pivot,
-    required this.chain,
-    required this.pay,
-    required this.collect,
-    required this.payWeight,
-    required this.collectWeight,
-  });
-
-  final double balance;
-  final Color beam;
-  final Color pivot;
-  final Color chain;
-  final Color pay;
-  final Color collect;
-  final double payWeight;
-  final double collectWeight;
-
-  static const _maxTilt = 0.22; // radians
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final cx = w / 2;
-    const top = 12.0;
-    final half = math.min(w * 0.38, 150.0);
-    final angle = -balance * _maxTilt; // heavier side goes down
-    final dx = math.cos(angle) * half;
-    final dy = math.sin(angle) * half;
-    final left = Offset(cx - dx, top - dy);
-    final right = Offset(cx + dx, top + dy);
-
-    // Stand.
-    final stand = Paint()
-      ..color = pivot.withValues(alpha: 0.18)
-      ..strokeWidth = 1;
-    canvas.drawLine(Offset(cx, top), Offset(cx, size.height - 6), stand);
-    canvas.drawLine(Offset(cx - 22, size.height - 6), Offset(cx + 22, size.height - 6), stand..strokeWidth = 1.4);
-
-    // Beam.
-    canvas.drawLine(
-      left,
-      right,
-      Paint()
-        ..shader = LinearGradient(colors: [beam.withValues(alpha: 0.6), beam, beam.withValues(alpha: 0.6)])
-            .createShader(Rect.fromPoints(left, right))
-        ..strokeWidth = 2.2
-        ..strokeCap = StrokeCap.round,
-    );
-    canvas.drawCircle(Offset(cx, top), 6, Paint()..color = beam.withValues(alpha: 0.25));
-    canvas.drawCircle(Offset(cx, top), 3.2, Paint()..color = pivot);
-
-    void pan(Offset hook, Color color, double weight) {
-      final drop = 36.0;
-      final r = 12 + 12 * weight;
-      final base = hook + Offset(0, drop);
-      final cp = Paint()
-        ..color = chain
-        ..strokeWidth = 0.8;
-      canvas.drawLine(hook, base + Offset(-r, 0), cp);
-      canvas.drawLine(hook, base + Offset(r, 0), cp);
-      canvas.drawCircle(hook, 2.2, Paint()..color = beam);
-      final bowl = Path()
-        ..moveTo(base.dx - r, base.dy)
-        ..quadraticBezierTo(base.dx, base.dy + r * 0.7, base.dx + r, base.dy)
-        ..close();
-      canvas.drawPath(bowl, Paint()..color = color.withValues(alpha: color.a * 0.22));
-      canvas.drawPath(
-        bowl,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.4
-          ..color = color,
-      );
-      // The weight sitting in the pan.
-      canvas.drawCircle(base + Offset(0, -3 - 4 * weight), 3 + 5 * weight, Paint()..color = color);
-    }
-
-    pan(left, pay, payWeight);
-    pan(right, collect, collectWeight);
-  }
-
-  @override
-  bool shouldRepaint(_ScalePainter o) => o.balance != balance || o.pay != pay || o.collect != collect || o.beam != beam;
-}
-
-class _Side extends StatelessWidget {
-  const _Side({
+class _BeamLegend extends StatelessWidget {
+  const _BeamLegend({
     required this.label,
     required this.amount,
     required this.count,
     required this.direction,
-    required this.color,
     required this.selected,
     required this.onTap,
     this.end = false,
@@ -433,63 +333,150 @@ class _Side extends StatelessWidget {
   final Money amount;
   final int count;
   final PendingDirection direction;
-  final Color color;
   final bool selected;
   final bool end;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
-    return Squish(
-      onTap: onTap,
+    final c = context.colors;
+    final t = context.text;
+    final color = direction.color(c);
+    final align = end ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    return Semantics(
+      button: true,
       selected: selected,
-      semanticLabel:
-          '$label, $count ${count == 1 ? 'item' : 'items'}. ${selected ? 'Showing only these' : 'Show only these'}',
+      label: '$label, $count ${count == 1 ? 'item' : 'items'}. ${selected ? 'Showing only these' : 'Show only these'}',
       excludeSemantics: true,
-      child: AnimatedContainer(
-        duration: context.reduceMotion ? Duration.zero : LuxeDurations.quick,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? p.onObsidian.withValues(alpha: 0.08) : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: selected ? color.withValues(alpha: 0.6) : p.onObsidian.withValues(alpha: 0.08)),
-        ),
-        child: Column(
-          crossAxisAlignment: end ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!end) ...[Icon(direction.icon, size: 12, color: color), const SizedBox(width: 5)],
-                Flexible(
-                  child: Text(
-                    '${label.toUpperCase()} · $count',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: t.eyebrow.copyWith(fontSize: 9.5, color: color),
+      child: InkWell(
+        borderRadius: Radii.rMd,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        child: AnimatedContainer(
+          duration: context.motion.fast,
+          padding: const EdgeInsets.symmetric(horizontal: Space.x1_5, vertical: Space.x1),
+          decoration: BoxDecoration(
+            color: selected ? direction.soft(c) : Colors.transparent,
+            borderRadius: Radii.rMd,
+          ),
+          child: Column(
+            crossAxisAlignment: align,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!end) ...[Icon(direction.icon, size: 12, color: color), const SizedBox(width: 3)],
+                  Flexible(
+                    child: Text(
+                      '${label.toUpperCase()} · $count',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.micro.copyWith(color: color, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                    ),
                   ),
-                ),
-                if (end) ...[const SizedBox(width: 5), Icon(direction.icon, size: 12, color: color)],
-              ],
-            ),
-            const SizedBox(height: 4),
-            LuxeAmount(
-              amount,
-              textAlign: end ? TextAlign.end : TextAlign.start,
-              style: t.number.copyWith(fontSize: 17, color: p.onObsidian),
-            ),
-          ],
+                  if (end) ...[const SizedBox(width: 3), Icon(direction.icon, size: 12, color: color)],
+                ],
+              ),
+              AmountText(amount, style: t.amountSmall, fit: true, textAlign: end ? TextAlign.end : TextAlign.start),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
+class _BeamPainter extends CustomPainter {
+  const _BeamPainter({
+    required this.split,
+    required this.payLong,
+    required this.collectLong,
+    required this.pay,
+    required this.collect,
+    required this.knob,
+    required this.knobBorder,
+    required this.showKnob,
+  });
+
+  /// Share of the bar that is money the user owes (0..1).
+  final double split;
+
+  /// Part of each side waiting over three weeks (0..1 of that side).
+  final double payLong;
+  final double collectLong;
+  final Color pay;
+  final Color collect;
+  final Color knob;
+  final Color knobBorder;
+  final bool showKnob;
+
+  static const _bar = 12.0;
+  static const _gap = 3.0;
+
+  void _side(Canvas canvas, Rect rect, Color color, double long, {required bool fromLeft}) {
+    if (rect.width <= 0) return;
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(_bar / 2));
+    canvas.drawRRect(rrect, Paint()..color = color);
+    if (long <= 0) return;
+    // Hatch the long-waiting part at the outer end of the side.
+    final w = rect.width * long;
+    final hatch = fromLeft
+        ? Rect.fromLTWH(rect.left, rect.top, w, rect.height)
+        : Rect.fromLTWH(rect.right - w, rect.top, w, rect.height);
+    canvas.save();
+    canvas.clipRRect(rrect);
+    canvas.clipRect(hatch);
+    final stripe = Paint()
+      ..color = Colors.white.withValues(alpha: 0.45)
+      ..strokeWidth = 2;
+    for (var x = hatch.left - rect.height; x < hatch.right; x += 6) {
+      canvas.drawLine(Offset(x, rect.bottom), Offset(x + rect.height, rect.top), stripe);
+    }
+    canvas.restore();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final top = (size.height - _bar) / 2;
+    final w = size.width;
+    final at = w * split;
+    final gap = showKnob ? _gap : 0.0;
+    _side(canvas, Rect.fromLTRB(0, top, (at - gap).clamp(0, w), top + _bar), pay, payLong, fromLeft: true);
+    _side(canvas, Rect.fromLTRB((at + gap).clamp(0, w), top, w, top + _bar), collect, collectLong, fromLeft: false);
+    if (!showKnob) return;
+    const r = 9.0;
+    final center = Offset(at.clamp(r, w - r), size.height / 2);
+    canvas.drawCircle(center.translate(0, 1.5), r, Paint()..color = Colors.black.withValues(alpha: 0.18));
+    canvas.drawCircle(center, r, Paint()..color = knob);
+    canvas.drawCircle(
+      center,
+      r - 1,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = knobBorder,
+    );
+    canvas.drawCircle(center, 2.5, Paint()..color = knobBorder);
+  }
+
+  @override
+  bool shouldRepaint(_BeamPainter old) =>
+      old.split != split ||
+      old.payLong != payLong ||
+      old.collectLong != collectLong ||
+      old.pay != pay ||
+      old.collect != collect ||
+      old.knob != knob ||
+      old.knobBorder != knobBorder ||
+      old.showKnob != showKnob;
+}
+
 /// Whom to ask (or pay) first. No deadlines exist for money between
-/// people, so priority is how long each item has waited: a shortcut to
-/// every item over three weeks, plus the three oldest as chips.
+/// people, so priority is simply how long each item has waited: the three
+/// oldest open items as chips (tap = open it), plus a shortcut that shows
+/// every item waiting over three weeks.
 class _WaitingStrip extends StatelessWidget {
   const _WaitingStrip({required this.overview, required this.filter, required this.onLong, required this.onOpen});
 
@@ -500,76 +487,133 @@ class _WaitingStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final c = context.colors;
+    final t = context.text;
     final o = overview;
-    final longOn = filter.tab == PendingTab.active && filter.ages.length == 1 && filter.ages.contains(PendingAge.long);
     final chips = <Widget>[
       if (o.longCount > 0)
-        LuxeChip(
+        _AttentionChip(
           key: const ValueKey('pending-attn:long'),
-          icon: longOn ? LucideIcons.check : LucideIcons.hourglass,
+          icon: LucideIcons.hourglass,
           label: '${o.longCount} over 3 weeks',
-          selected: longOn,
-          semanticLabel: '${o.longCount} over 3 weeks. ${longOn ? 'Showing only these' : 'Show only these'}',
+          color: c.warning,
+          selected: filter.tab == PendingTab.active && filter.ages.length == 1 && filter.ages.contains(PendingAge.long),
           onTap: onLong,
         ),
       for (final v in o.oldest)
-        LuxeChip(
+        _AttentionChip(
           key: ValueKey('pending-oldest:${v.payment.id}'),
-          dot: v.payment.direction.tone(p),
+          icon: v.payment.direction.icon,
           label: '${v.payment.counterparty.split(' ').first} · ${pendingDays(v.daysOpen)}',
-          semanticLabel: pendingAgeSentence(v),
-          trailing: LucideIcons.arrowUpRight,
+          semantics: pendingAgeSentence(v),
+          color: v.payment.direction.color(c),
+          selected: false,
           onTap: () => onOpen(v),
         ),
     ];
     if (chips.isEmpty) {
       return Row(
         children: [
-          Icon(LucideIcons.circleCheck, size: 15, color: p.positive),
-          const SizedBox(width: 8),
-          Expanded(child: Text('Nothing open. Add an item when money changes hands.', style: t.caption)),
+          Icon(LucideIcons.circleCheck, size: 14, color: c.positive),
+          const SizedBox(width: Space.x1_5),
+          Expanded(
+            child: Text('Nothing open. Add an item when money changes hands.', style: t.caption),
+          ),
         ],
       );
     }
+    final scroller = SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (var i = 0; i < chips.length; i++) ...[
+            if (i > 0) const SizedBox(width: Space.x2),
+            chips[i].maybeAnimate(
+              context,
+              (a) => a
+                  .fadeIn(delay: 250.ms + 70.ms * i, duration: 300.ms)
+                  .slideX(begin: 0.25, end: 0, delay: 250.ms + 70.ms * i, duration: 420.ms, curve: Curves.easeOutCubic),
+            ),
+          ],
+        ],
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            Container(
-              width: 14,
-              height: 1.5,
-              decoration: BoxDecoration(gradient: p.goldGradient, borderRadius: BorderRadius.circular(1)),
-            ),
-            const SizedBox(width: 8),
-            Semantics(header: true, child: Text('WAITING LONGEST', style: t.eyebrow.c(p.inkSoft))),
-            const SizedBox(width: 10),
+            Text('WAITING LONGEST', style: t.eyebrow),
+            const SizedBox(width: Space.x1_5),
             Expanded(
-              child: Text(
-                'No deadlines — ask the oldest first',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.micro,
-              ),
+              child: Text('No deadlines — ask the oldest first',
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: t.micro),
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          clipBehavior: Clip.none,
-          child: Row(
-            children: [
-              for (var i = 0; i < chips.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
-                Reveal(index: 3 + i, offset: 0, blur: 0, scale: 0.9, child: chips[i]),
+        const SizedBox(height: Space.x2),
+        scroller,
+      ],
+    );
+  }
+}
+
+class _AttentionChip extends StatelessWidget {
+  const _AttentionChip({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+    this.semantics,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  /// Spoken label for chips that open an item instead of filtering.
+  final String? semantics;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final fg = selected ? c.onSolid : color;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: semantics ?? '$label. ${selected ? 'Showing only these' : 'Show only these'}',
+      excludeSemantics: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: Radii.rFull,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onTap();
+          },
+          child: AnimatedContainer(
+            duration: context.motion.fast,
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: Space.x2_5),
+            decoration: BoxDecoration(
+              color: selected ? color : color.withValues(alpha: c.isDark ? 0.18 : 0.1),
+              borderRadius: Radii.rFull,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(selected ? LucideIcons.check : icon, size: 13, color: fg),
+                const SizedBox(width: Space.x1_5),
+                Text(label, style: context.text.label.copyWith(color: fg, fontWeight: FontWeight.w800)),
               ],
-            ],
+            ),
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -577,6 +621,38 @@ class _WaitingStrip extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Pinned controls
 // ---------------------------------------------------------------------------
+
+class _ControlsDelegate extends SliverPersistentHeaderDelegate {
+  const _ControlsDelegate({required this.child});
+
+  final Widget child;
+
+  static const _height = 56.0;
+
+  @override
+  double get minExtent => _height;
+
+  @override
+  double get maxExtent => _height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final c = context.colors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: c.background,
+        border: overlapsContent ? Border(bottom: BorderSide(color: c.border)) : null,
+      ),
+      child: ResponsiveCenter(
+        padding: const EdgeInsets.symmetric(horizontal: Space.gutter, vertical: Space.x2),
+        child: child,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_ControlsDelegate old) => old.child != child;
+}
 
 class _Controls extends StatelessWidget {
   const _Controls({
@@ -599,12 +675,10 @@ class _Controls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final c = context.colors;
     return AnimatedSwitcher(
-      duration: context.reduceMotion ? Duration.zero : LuxeDurations.base,
-      switchInCurve: LuxeCurves.arrive,
-      switchOutCurve: LuxeCurves.leave,
+      duration: context.motion.normal,
+      switchInCurve: Curves2.emphasized,
       transitionBuilder: (child, a) => FadeTransition(
         opacity: a,
         child: SlideTransition(
@@ -617,83 +691,136 @@ class _Controls extends StatelessWidget {
               key: const ValueKey('search'),
               children: [
                 Expanded(
-                  child: Container(
-                    height: 44,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: BoxDecoration(
-                      color: p.paper,
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(color: p.lineStrong),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(LucideIcons.search, size: 16, color: p.inkMute),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            autofocus: true,
-                            onChanged: onSearch,
-                            style: t.body,
-                            cursorColor: p.goldInk,
-                            textInputAction: TextInputAction.search,
-                            decoration: InputDecoration(
-                              isCollapsed: true,
-                              filled: false,
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              hintText: 'Search people or purposes',
-                              hintStyle: t.body.c(p.inkMute),
-                            ),
-                          ),
-                        ),
-                      ],
+                  child: SizedBox(
+                    height: 40,
+                    child: FinnSearchField(
+                      hint: 'Search people or purposes',
+                      autofocus: true,
+                      onChanged: onSearch,
                     ),
                   ),
                 ),
-                const SizedBox(width: 4),
-                LuxeIconButton(
-                  icon: LucideIcons.x,
-                  tooltip: 'Close search',
-                  style: LuxeIconStyle.ghost,
-                  size: 40,
-                  onPressed: onSearchToggle,
-                ),
+                const SizedBox(width: Space.x1),
+                FinnIconButton(icon: LucideIcons.x, tooltip: 'Close search', onPressed: onSearchToggle),
               ],
             )
           : Row(
               key: const ValueKey('tabs'),
               children: [
                 Expanded(
-                  child: LuxeSegmented<PendingTab>(
-                    segments: [
-                      for (final tab in PendingTab.values)
-                        LuxeSegment(tab, tab.label, count: overview.counts[tab] ?? 0),
-                    ],
-                    selected: filter.tab,
-                    onChanged: onTab,
-                  ),
+                  child: _StatusTabs(selected: filter.tab, counts: overview.counts, onChanged: onTab),
                 ),
-                const SizedBox(width: 4),
-                LuxeIconButton(
+                const SizedBox(width: Space.x1),
+                FinnIconButton(
                   key: const ValueKey('pending-search'),
                   icon: LucideIcons.search,
                   tooltip: 'Search',
-                  style: LuxeIconStyle.ghost,
-                  size: 40,
                   onPressed: onSearchToggle,
                 ),
-                LuxeIconButton(
-                  key: const ValueKey('pending-options'),
-                  icon: LucideIcons.slidersHorizontal,
-                  tooltip: 'Sort & filter',
-                  size: 40,
-                  active: filter.activeCount > 0,
-                  badge: filter.activeCount,
-                  onPressed: onOptions,
+                CountBadge(
+                  count: filter.activeCount,
+                  color: c.primary,
+                  semanticsLabel: '${filter.activeCount} filters on',
+                  child: FinnIconButton(
+                    key: const ValueKey('pending-options'),
+                    icon: LucideIcons.slidersHorizontal,
+                    tooltip: 'Sort & filter',
+                    variant: filter.activeCount > 0 ? FinnIconButtonVariant.filled : FinnIconButtonVariant.ghost,
+                    onPressed: onOptions,
+                  ),
                 ),
               ],
             ),
+    );
+  }
+}
+
+/// Compact sliding tabs: sentence-case labels with counts that scale down
+/// instead of clipping on narrow screens.
+class _StatusTabs extends StatelessWidget {
+  const _StatusTabs({required this.selected, required this.counts, required this.onChanged});
+
+  final PendingTab selected;
+  final Map<PendingTab, int> counts;
+  final ValueChanged<PendingTab> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final t = context.text;
+    const tabs = PendingTab.values;
+    final index = tabs.indexOf(selected);
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(color: c.surfaceMuted, borderRadius: Radii.rFull),
+      child: Stack(
+        children: [
+          AnimatedAlign(
+            alignment: Alignment(-1 + 2 * index / (tabs.length - 1), 0),
+            duration: context.motion.normal,
+            curve: Curves2.emphasized,
+            child: FractionallySizedBox(
+              widthFactor: 1 / tabs.length,
+              heightFactor: 1,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: c.isDark ? c.border : c.surface,
+                  borderRadius: Radii.rFull,
+                  boxShadow: c.isDark ? Elevation.none : Elevation.sm,
+                ),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              for (final tab in tabs)
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    selected: tab == selected,
+                    inMutuallyExclusiveGroup: true,
+                    label: '${tab.label}, ${counts[tab] ?? 0}',
+                    excludeSemantics: true,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        if (tab == selected) return;
+                        HapticFeedback.selectionClick();
+                        onChanged(tab);
+                      },
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: Space.x1_5),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text.rich(
+                              TextSpan(children: [
+                                TextSpan(text: tab.label),
+                                TextSpan(
+                                  text: ' ${counts[tab] ?? 0}',
+                                  style: TextStyle(
+                                    color: tab == selected ? c.primary : c.textTertiary,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ]),
+                              maxLines: 1,
+                              style: t.label.copyWith(
+                                color: tab == selected ? c.textPrimary : c.textSecondary,
+                                fontWeight: tab == selected ? FontWeight.w800 : FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -709,46 +836,54 @@ class _ActiveFilters extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.lt;
+    final c = context.colors;
+    final t = context.text;
     final f = filter;
     final removable = <(String, VoidCallback)>[
-      if (f.direction != null)
-        (f.direction!.isOwe ? 'I owe' : 'Owed to me', () => onChanged(f.copyWith(direction: () => null))),
+      if (f.direction != null) (f.direction!.isOwe ? 'I owe' : 'Owed to me', () => onChanged(f.copyWith(direction: () => null))),
       for (final a in f.ages) (a.label, () => onChanged(f.copyWith(ages: {...f.ages}..remove(a)))),
       for (final k in f.kinds) (k.label, () => onChanged(f.copyWith(kinds: {...f.kinds}..remove(k)))),
     ];
     return SizedBox(
-      height: 52,
+      height: 40,
       child: Row(
         children: [
           Text('$count ${count == 1 ? 'ITEM' : 'ITEMS'}', style: t.eyebrow),
-          const SizedBox(width: 10),
+          const SizedBox(width: Space.x2),
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  LuxeChip(
+                  _SmallChip(
                     icon: f.sort.icon,
                     label: f.sort.label,
                     trailing: LucideIcons.chevronDown,
-                    height: 32,
-                    semanticLabel: 'Sorted by ${f.sort.label}. Change',
                     onTap: onSort,
+                    semantics: 'Sorted by ${f.sort.label}. Change',
                   ),
                   for (final (label, remove) in removable) ...[
-                    const SizedBox(width: 6),
-                    LuxeChip(
+                    const SizedBox(width: Space.x1_5),
+                    _SmallChip(
                       label: label,
                       trailing: LucideIcons.x,
-                      selected: true,
-                      height: 32,
-                      semanticLabel: 'Remove filter $label',
+                      color: c.primary,
                       onTap: remove,
+                      semantics: 'Remove filter $label',
                     ),
                   ],
-                  if (removable.length > 1)
-                    LuxeLink(label: 'Clear all', icon: LucideIcons.x, onTap: () => onChanged(f.cleared())),
+                  if (removable.length > 1) ...[
+                    const SizedBox(width: Space.x1),
+                    TextButton(
+                      onPressed: () => onChanged(f.cleared()),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 32),
+                        padding: const EdgeInsets.symmetric(horizontal: Space.x2),
+                        textStyle: t.label.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      child: const Text('Clear all'),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -759,13 +894,65 @@ class _ActiveFilters extends StatelessWidget {
   }
 }
 
+class _SmallChip extends StatelessWidget {
+  const _SmallChip({
+    required this.label,
+    required this.onTap,
+    required this.semantics,
+    this.icon,
+    this.trailing,
+    this.color,
+  });
+
+  final String label;
+  final IconData? icon;
+  final IconData? trailing;
+  final Color? color;
+  final VoidCallback onTap;
+  final String semantics;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final fg = color ?? c.textSecondary;
+    return Semantics(
+      button: true,
+      label: semantics,
+      excludeSemantics: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: Radii.rFull,
+          onTap: onTap,
+          child: Container(
+            height: 28,
+            padding: const EdgeInsets.symmetric(horizontal: Space.x2_5),
+            decoration: BoxDecoration(
+              color: color == null ? c.surfaceMuted : color!.withValues(alpha: c.isDark ? 0.2 : 0.1),
+              borderRadius: Radii.rFull,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[Icon(icon, size: 12, color: fg), const SizedBox(width: Space.x1)],
+                Text(label, style: context.text.micro.copyWith(color: fg, fontWeight: FontWeight.w800)),
+                if (trailing != null) ...[const SizedBox(width: 3), Icon(trailing, size: 12, color: fg)],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // List
 // ---------------------------------------------------------------------------
 
-/// One card in the list: a single item, a person with several items, or a
-/// bill split between several people.
-class _EntryCard extends StatelessWidget {
+/// One card in the list: a single item, a person with several items, or
+/// a bill split between several people.
+class _EntryCard extends ConsumerWidget {
   const _EntryCard({required this.entry, required this.index, required this.entered});
 
   final PendingEntry entry;
@@ -774,16 +961,14 @@ class _EntryCard extends StatelessWidget {
 
   Future<void> _quickActions(BuildContext context, PendingView v) async {
     final owe = v.payment.direction.isOwe;
-    final choice = await showLuxeMenu<int>(
+    final choice = await showFinnActionMenu<int>(
       context,
-      title: v.payment.purpose,
-      eyebrow: v.payment.counterparty,
+      title: '${v.payment.counterparty} · ${v.payment.purpose}',
       items: [
         if (v.status.isActive)
-          LuxeMenuItem(value: 0, label: owe ? 'Settle · I paid' : 'Settle · I received', icon: LucideIcons.circleCheck),
-        const LuxeMenuItem(value: 1, label: 'Open details', icon: LucideIcons.arrowUpRight),
-        if (v.status.isActive && !owe)
-          const LuxeMenuItem(value: 2, label: 'Send a reminder', icon: LucideIcons.send, hint: 'A polite nudge'),
+          FinnMenuItem(value: 0, label: owe ? 'Settle · I paid' : 'Settle · I received', icon: LucideIcons.circleCheck),
+        const FinnMenuItem(value: 1, label: 'Open details', icon: LucideIcons.arrowUpRight),
+        if (v.status.isActive && !owe) const FinnMenuItem(value: 2, label: 'Send a reminder', icon: LucideIcons.send),
       ],
     );
     if (!context.mounted || choice == null) return;
@@ -798,20 +983,20 @@ class _EntryCard extends StatelessWidget {
   }
 
   Widget _row(BuildContext context, PendingView v, {bool grouped = false, bool inSplit = false}) => KeyedSubtree(
-    key: ValueKey(v.payment.id),
-    child: PendingRow(
-      view: v,
-      grouped: grouped,
-      inSplit: inSplit,
-      onTap: () => context.push(AppRoutes.pendingItem(v.payment.id)),
-      onSettle: () => context.push(AppRoutes.settlePending(v.payment.id)),
-      onLongPress: () => _quickActions(context, v),
-    ),
-  );
+        key: ValueKey(v.payment.id),
+        child: PendingRow(
+          view: v,
+          grouped: grouped,
+          inSplit: inSplit,
+          onTap: () => context.push(AppRoutes.pendingItem(v.payment.id)),
+          onSettle: () => context.push(AppRoutes.settlePending(v.payment.id)),
+          onLongPress: () => _quickActions(context, v),
+        ),
+      );
 
   @override
-  Widget build(BuildContext context) {
-    final p = context.luxe;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
     final e = entry;
     final id = switch (e) {
       PendingItemEntry(:final view) => view.payment.id,
@@ -821,36 +1006,48 @@ class _EntryCard extends StatelessWidget {
     final Widget body = switch (e) {
       PendingItemEntry(:final view) => _row(context, view),
       PendingPersonGroup() => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _GroupHeader(group: e),
-          for (final v in e.items) ...[const LuxeHairline(indent: 62), _row(context, v, grouped: true)],
-        ],
-      ),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _GroupHeader(group: e),
+            for (final v in e.items) ...[
+              const FinnDivider(indent: Space.x3 + 30 + Space.x3),
+              _row(context, v, grouped: true),
+            ],
+          ],
+        ),
       PendingSplitEntry() => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          PendingSplitHeader(
-            split: e.split,
-            shown: e.count,
-            onTap: () => context.push(AppRoutes.pendingItem(e.items.first.payment.id)),
-          ),
-          for (final v in e.items) ...[const LuxeHairline(indent: 64), _row(context, v, inSplit: true)],
-        ],
-      ),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PendingSplitHeader(
+              split: e.split,
+              shown: e.count,
+              onTap: () => context.push(AppRoutes.pendingItem(e.items.first.payment.id)),
+            ),
+            for (final v in e.items) ...[
+              const FinnDivider(indent: Space.x3 + 32 + Space.x3),
+              _row(context, v, inSplit: true),
+            ],
+          ],
+        ),
     };
     final card = DecoratedBox(
       decoration: BoxDecoration(
-        color: p.paper,
-        borderRadius: BorderRadius.circular(LuxeSpace.rTile + 2),
-        border: Border.all(color: p.line),
-        boxShadow: p.lift,
+        color: c.surface,
+        borderRadius: Radii.rXl,
+        border: Border.all(color: c.border),
       ),
-      child: ClipRRect(borderRadius: BorderRadius.circular(LuxeSpace.rTile + 2), child: body),
+      child: ClipRRect(borderRadius: Radii.rXl, child: body),
     );
+
     final first = entered.add(id);
     if (!first || index > 10) return card;
-    return Reveal(index: index, child: card);
+    final delay = 40.ms * index;
+    return card.maybeAnimate(
+      context,
+      (a) => a
+          .fadeIn(delay: delay, duration: 260.ms)
+          .slideY(begin: 0.18, end: 0, delay: delay, duration: 380.ms, curve: Curves.easeOutCubic),
+    );
   }
 }
 
@@ -861,28 +1058,27 @@ class _GroupHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final c = context.colors;
+    final t = context.text;
     final g = group;
     final net = g.toCollect - g.toPay;
-    final tone = net.isNegative ? p.negative : (net.isPositive ? p.positive : p.inkMute);
+    final tone = net.isNegative ? c.negative : (net.isPositive ? c.positive : c.textSecondary);
     return Semantics(
       header: true,
       label: '${g.name}, ${g.count} separate items',
       excludeSemantics: true,
-      child: Container(
+      child: Padding(
         key: ValueKey('person-${g.name}'),
-        color: p.canvas.withValues(alpha: 0.5),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+        padding: const EdgeInsets.fromLTRB(Space.x3, Space.x3, Space.x3, Space.x2_5),
         child: Row(
           children: [
-            PendingAvatar(name: g.name, color: tone, size: 42),
-            const SizedBox(width: 14),
+            PendingAvatar(name: g.name, color: tone),
+            const SizedBox(width: Space.x3),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(g.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.heading.copyWith(fontSize: 15)),
+                  Text(g.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.bodyStrong),
                   Text('${g.count} separate items', style: t.caption),
                 ],
               ),
@@ -890,7 +1086,7 @@ class _GroupHeader extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                LuxeAmount(net.abs(), fit: false, style: t.number.copyWith(color: tone)),
+                AmountText(net.abs(), style: t.amountSmall.copyWith(color: tone)),
                 Text(
                   net.isNegative ? 'you owe in total' : (net.isPositive ? 'owes you in total' : 'evens out'),
                   style: t.micro,
@@ -912,33 +1108,57 @@ class _Empty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (filter.query.trim().isNotEmpty || filter.activeCount > 0) {
-      return const LuxeEmpty(
+      return const EmptyState(
         icon: LucideIcons.searchX,
         title: 'No matches',
         message: 'Try a different name or clear the filters.',
       );
     }
     return switch (filter.tab) {
-      PendingTab.active => LuxeEmpty(
-        icon: LucideIcons.handshake,
-        title: 'All square',
-        message:
-            'Track money you owe or are owed — a shared bill, a loan to a friend, a reimbursement. '
-            'Your balance changes only when you settle.',
-        actionLabel: 'Add money owed',
-        actionIcon: LucideIcons.plus,
-        onAction: () => context.push(AppRoutes.newPending()),
-      ),
-      PendingTab.settled => const LuxeEmpty(
-        icon: LucideIcons.circleCheck,
-        title: 'Nothing settled yet',
-        message: 'Items you settle in full appear here with their history.',
-      ),
-      PendingTab.writtenOff => const LuxeEmpty(
-        icon: LucideIcons.ban,
-        title: 'Nothing written off',
-        message: 'Items you no longer expect to be paid appear here.',
-      ),
+      PendingTab.active => EmptyState(
+          icon: LucideIcons.handshake,
+          title: 'All square',
+          message: 'Track money you owe or are owed — a shared bill, a loan to a friend, a reimbursement. '
+              'Your balance changes only when you settle.',
+          actionLabel: 'Add money owed',
+          actionIcon: LucideIcons.plus,
+          onAction: () => context.push(AppRoutes.newPending()),
+        ),
+      PendingTab.settled => const EmptyState(
+          icon: LucideIcons.circleCheck,
+          title: 'Nothing settled yet',
+          message: 'Items you settle in full appear here with their history.',
+        ),
+      PendingTab.writtenOff => const EmptyState(
+          icon: LucideIcons.ban,
+          title: 'Nothing written off',
+          message: 'Items you no longer expect to be paid appear here.',
+        ),
     };
   }
+}
+
+class _PendingSkeleton extends StatelessWidget {
+  const _PendingSkeleton();
+
+  @override
+  Widget build(BuildContext context) => const SkeletonPulse(
+        child: Padding(
+          padding: EdgeInsets.all(Space.gutter),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CardSkeleton(height: 188, radius: Radii.xxl),
+              SizedBox(height: Space.x3),
+              SkeletonBox(height: 40, radius: Radii.full),
+              SizedBox(height: Space.x4),
+              CardSkeleton(height: 64),
+              SizedBox(height: Space.x2),
+              CardSkeleton(height: 64),
+              SizedBox(height: Space.x2),
+              CardSkeleton(height: 64),
+            ],
+          ),
+        ),
+      );
 }

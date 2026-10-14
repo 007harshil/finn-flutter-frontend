@@ -9,7 +9,6 @@ import 'core/time/clock.dart';
 import 'data/local/local_data_store.dart';
 import 'data/remote/api_config.dart';
 import 'data/remote/remote_bootstrap.dart';
-import 'design_system/components/safe_insets.dart';
 
 /// Dataset used on first launch: `--dart-define=FINN_SCENARIO=empty|demo|stressed`.
 const _scenarioName = String.fromEnvironment('FINN_SCENARIO', defaultValue: 'demo');
@@ -19,8 +18,6 @@ const _latencyMs = int.fromEnvironment('FINN_LATENCY_MS', defaultValue: 250);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Draw behind transparent system bars; screens pad from the safe insets.
-  await SystemBars.enableEdgeToEdge();
   final prefs = await SharedPreferences.getInstance();
 
   // Connected mode by default (https://finn-backend.vercel.app); override with

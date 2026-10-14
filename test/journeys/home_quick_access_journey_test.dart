@@ -9,31 +9,28 @@ import 'journey_helpers.dart';
 String _location(WidgetTester tester) => GoRouter.of(tester.element(find.byType(Navigator).first)).state.uri.path;
 
 void main() {
-  testWidgets('home quick-access tiles sit in bento order and open their module', (tester) async {
+  testWidgets('home shortcuts sit in a 3-column grid and open their module', (tester) async {
     final env = await TestEnv.create();
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
 
-    await scrollTo(tester, find.byKey(const ValueKey('quick-tile:Insights')));
-    final pos = {
-      for (final name in ['Loans & EMIs', 'Pending payments', 'Emergency fund', 'Goals', 'Timeline', 'Insights'])
-        name: tester.getCenter(find.byKey(ValueKey('quick-tile:$name'))),
-    };
-    // Tall loans tile on the left, pending above emergency fund on the right,
-    // goals and timeline sharing the bottom row.
-    expect(pos['Loans & EMIs']!.dx, lessThan(pos['Pending payments']!.dx));
-    expect(pos['Pending payments']!.dy, lessThan(pos['Emergency fund']!.dy));
-    expect(pos['Goals']!.dy, greaterThan(pos['Emergency fund']!.dy));
-    expect(pos['Goals']!.dx, lessThan(pos['Timeline']!.dx));
-    expect((pos['Goals']!.dy - pos['Timeline']!.dy).abs(), lessThan(1));
-    expect(pos['Insights']!.dy, greaterThan(pos['Timeline']!.dy), reason: 'insights spans the last row');
+    const names = ['Loans', 'Pending', 'Subscriptions', 'Emergency fund', 'Insights', 'Timeline'];
+    await scrollTo(tester, find.byKey(const ValueKey('quick-tile:Timeline')));
+    final pos = {for (final name in names) name: tester.getCenter(find.byKey(ValueKey('quick-tile:$name')))};
+    // Two rows of three, left to right.
+    for (final (a, b) in [('Loans', 'Pending'), ('Pending', 'Subscriptions'), ('Emergency fund', 'Insights')]) {
+      expect(pos[a]!.dx, lessThan(pos[b]!.dx), reason: '$a before $b');
+      expect((pos[a]!.dy - pos[b]!.dy).abs(), lessThan(1), reason: '$a and $b share a row');
+    }
+    expect(pos['Emergency fund']!.dy, greaterThan(pos['Loans']!.dy));
 
     final routes = {
-      'Loans & EMIs': AppRoutes.loans,
-      'Pending payments': AppRoutes.pending,
+      'Loans': AppRoutes.loans,
+      'Pending': AppRoutes.pending,
+      'Subscriptions': AppRoutes.subscriptions,
       'Emergency fund': AppRoutes.emergencyFund,
-      'Timeline': AppRoutes.timeline,
       'Insights': AppRoutes.analytics,
+      'Timeline': AppRoutes.timeline,
     };
     for (final MapEntry(key: name, value: route) in routes.entries) {
       await scrollAndTap(tester, find.byKey(ValueKey('quick-tile:$name')));
@@ -41,8 +38,5 @@ void main() {
       tester.state<NavigatorState>(find.byType(Navigator).last).pop();
       await tester.pumpAndSettle();
     }
-
-    await scrollAndTap(tester, find.byKey(const ValueKey('quick-tile:Goals')));
-    expect(_location(tester), AppRoutes.goals);
   });
 }

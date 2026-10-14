@@ -7,7 +7,6 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
-import '../../../design_system/luxe/luxe.dart';
 import '../../../finance/finance_snapshot.dart';
 import '../../transactions/domain/transaction.dart';
 import '../domain/loan.dart';
@@ -23,9 +22,6 @@ extension LoanDirectionUi on LoanDirection {
   Color color(FinnColors c) => isBorrowed ? c.negative : c.positive;
 
   Color soft(FinnColors c) => isBorrowed ? c.negativeSoft : c.positiveSoft;
-
-  /// Luxe tone: what you owe reads warm-red, what comes back reads green.
-  Color tone(LuxePalette p) => isBorrowed ? p.negative : p.positive;
 
   /// Short pill label.
   String get pill => isBorrowed ? 'Borrowed · I repay' : 'Lent · I receive';
@@ -97,14 +93,6 @@ class LoansOverview {
   final List<LoanState> closed;
 
   bool get isEmpty => active.isEmpty && closed.isEmpty;
-
-  /// Share of borrowed principal already repaid across active loans (0..1).
-  double get borrowedRepaidShare {
-    final borrowed = active.where((l) => l.loan.isBorrowed);
-    final principal = Money.sum(borrowed.map((l) => l.loan.principal));
-    final repaid = Money.sum(borrowed.map((l) => l.principalRepaid));
-    return ((repaid.ratioBps(principal) ?? 0) / 10000).clamp(0.0, 1.0);
-  }
 }
 
 final loansOverviewProvider = Provider<AsyncValue<LoansOverview>>(
@@ -113,24 +101,24 @@ final loansOverviewProvider = Provider<AsyncValue<LoansOverview>>(
 
 /// Status of a loan's next due item: label, colour and icon together.
 ({String label, Color color, IconData icon}) loanDueLabel(BuildContext context, LoanState s) {
-  final p = context.luxe;
+  final c = context.colors;
   if (s.isClosed) {
-    return (label: s.loan.isBorrowed ? 'Repaid' : 'Fully received', color: p.positive, icon: LucideIcons.circleCheck);
+    return (label: s.loan.isBorrowed ? 'Repaid' : 'Fully received', color: c.positive, icon: LucideIcons.circleCheck);
   }
   final days = s.daysUntilNextDue;
-  if (days == null) return (label: 'Nothing scheduled', color: p.inkMute, icon: LucideIcons.calendar);
+  if (days == null) return (label: 'Nothing scheduled', color: c.textSecondary, icon: LucideIcons.calendar);
   if (days < 0) {
     final n = s.overdueCount;
     return (
       label: n > 1 ? '$n overdue' : 'Overdue · ${-days} ${-days == 1 ? 'day' : 'days'}',
-      color: s.loan.isBorrowed ? p.negative : p.warning,
+      color: s.loan.isBorrowed ? c.negative : c.attention,
       icon: LucideIcons.triangleAlert,
     );
   }
-  if (days == 0) return (label: 'Due today', color: p.warning, icon: LucideIcons.bell);
-  if (days == 1) return (label: 'Due tomorrow', color: p.warning, icon: LucideIcons.clock);
-  if (days <= 7) return (label: 'in $days days', color: p.goldInk, icon: LucideIcons.clock);
-  return (label: 'in $days days', color: p.inkMute, icon: LucideIcons.calendar);
+  if (days == 0) return (label: 'Due today', color: c.attention, icon: LucideIcons.bell);
+  if (days == 1) return (label: 'Due tomorrow', color: c.warning, icon: LucideIcons.clock);
+  if (days <= 7) return (label: 'in $days days', color: c.warning, icon: LucideIcons.clock);
+  return (label: 'in $days days', color: c.textSecondary, icon: LucideIcons.calendar);
 }
 
 /// Amount for inline copy; masked when balances are hidden.
@@ -150,15 +138,14 @@ class LoanDirectionPill extends StatelessWidget {
   final bool onGradient;
 
   @override
-  Widget build(BuildContext context) {
-    final p = context.luxe;
-    return LuxeStatus(label: direction.pill, color: onGradient ? p.gold : direction.tone(p), icon: direction.icon);
-  }
+  Widget build(BuildContext context) => StatusPill(
+    label: direction.pill,
+    color: onGradient ? Colors.white : direction.color(context.colors),
+    icon: direction.icon,
+  );
 }
 
-/// One loan in the list: who and what, what is left, a repayment line that
-/// draws in, the next due item, and — when a payment is due within a week —
-/// a one-tap way to record it.
+/// One loan in the list.
 class LoanCard extends StatelessWidget {
   const LoanCard({super.key, required this.state, required this.onTap, this.onPay});
 
@@ -170,22 +157,20 @@ class LoanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final c = context.colors;
+    final t = context.text;
     final s = state;
     final l = s.loan;
     final due = loanDueLabel(context, s);
     final next = s.nextDue;
-    final closed = s.isClosed;
-    final subtitle = closed
+    final accent = l.direction.color(c);
+    final subtitle = s.isClosed
         ? '${l.counterparty} · ${l.structure.label}'
         : (next == null
               ? '${l.counterparty} · ${l.rate.label} p.a.'
-              : '${l.counterparty} · ${loanDueName(l, next)} ${maskedAmount(context, next.payment)}');
-    final pct = s.repaidBps ~/ 100;
-    return LuxeCard(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-      radius: LuxeSpace.rTile + 2,
+              : '${l.counterparty} · ${loanDueName(l, next)} ${maskedAmount(context, next.payment)} · ${DateFormats.dayMonth.format(next.dueDate)}');
+    return FinnCard(
+      padding: const EdgeInsets.all(Space.x4),
       onTap: onTap,
       semanticLabel:
           '${l.name}, ${l.direction.sentence(l.counterparty)}, '
@@ -195,71 +180,73 @@ class LoanCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              LuxeIconDisc(icon: l.direction.icon, color: closed ? p.inkMute : l.direction.tone(p), size: 42),
-              const SizedBox(width: 14),
+              IconTile(
+                icon: l.direction.icon,
+                background: l.direction.soft(c),
+                foreground: accent,
+                size: 40,
+                iconSize: 20,
+              ),
+              const SizedBox(width: Space.x3),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(l.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.heading),
-                    const SizedBox(height: 3),
+                    Text(l.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.bodyStrong),
+                    const SizedBox(height: 2),
                     Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.caption),
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: Space.x2),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  LuxeAmount(
-                    s.outstanding,
-                    fit: false,
-                    style: t.figure.copyWith(fontSize: 24, color: closed ? p.inkMute : p.ink),
-                  ),
-                  Text(closed ? 'settled' : 'left', style: t.micro),
+                  AmountText(s.outstanding, style: t.amountMedium.copyWith(color: s.isClosed ? c.textSecondary : null)),
+                  Text('outstanding', style: t.micro),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          LuxeProgressLine(value: s.repaidBps / 10000, color: closed ? p.positive : p.gold, height: 5),
-          const SizedBox(height: 8),
+          const SizedBox(height: Space.x3),
+          FinnProgressBar(
+            value: s.repaidBps / 10000,
+            color: accent,
+            height: 6,
+            semanticsLabel: '${l.direction.repaidVerb} ${s.repaidBps ~/ 100}% of principal',
+          ),
+          const SizedBox(height: Space.x2),
           Row(
             children: [
               Expanded(
                 child: Text(
-                  '$pct% ${l.direction.repaidVerb.toLowerCase()} of ${maskedAmount(context, l.principal)}',
+                  '${s.repaidBps ~/ 100}% ${l.direction.repaidVerb.toLowerCase()} of ${maskedAmount(context, l.principal)}',
                   style: t.micro,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 8),
-              LuxeStatus(label: due.label, color: due.color, icon: due.icon),
+              const SizedBox(width: Space.x2),
+              StatusPill(label: due.label, color: due.color, icon: due.icon),
             ],
           ),
           if (onPay != null && next != null) ...[
-            const LuxeHairline(vertical: 14),
+            const SizedBox(height: Space.x3),
             Row(
               children: [
                 Expanded(
-                  child: Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(text: '${loanDueName(l, next)} #${next.number} ', style: t.label.w(700).c(p.ink)),
-                        TextSpan(text: '${DateFormats.dueIn(next.dueDate, s.today)} · not yet recorded'),
-                      ],
-                    ),
-                    style: t.caption,
+                  child: Text(
+                    '${loanDueName(l, next)} #${next.number} ${DateFormats.dueIn(next.dueDate, s.today)} — not yet recorded',
+                    style: t.micro,
                     maxLines: 2,
                   ),
                 ),
-                const SizedBox(width: 10),
-                LuxeButton(
+                const SizedBox(width: Space.x2),
+                FinnButton(
                   label: l.isBorrowed ? 'Record payment' : 'Record receipt',
-                  icon: LucideIcons.check,
-                  compact: true,
-                  variant: s.isOverdue ? LuxeButtonVariant.gold : LuxeButtonVariant.ink,
+                  icon: LucideIcons.circleCheck,
+                  size: FinnButtonSize.sm,
+                  variant: s.isOverdue ? FinnButtonVariant.attention : FinnButtonVariant.secondary,
                   onPressed: onPay,
                 ),
               ],
@@ -279,8 +266,8 @@ class LoanFieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(bottom: VaultScope.isActive(context) ? 10 : Space.x1_5),
-    child: Text(text, style: VaultScope.isActive(context) ? context.vt.label : context.text.label),
+    padding: const EdgeInsets.only(bottom: Space.x1_5),
+    child: Text(text, style: context.text.label),
   );
 }
 
@@ -327,9 +314,6 @@ class LoanSwitchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (VaultScope.isActive(context)) {
-      return VaultSwitchRow(title: title, message: message, value: value, onChanged: onChanged);
-    }
     final t = context.text;
     return FinnCard(
       variant: FinnCardVariant.outlined,

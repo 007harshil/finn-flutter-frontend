@@ -4,23 +4,19 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
-import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../core/time/frequency.dart';
 import '../../../design_system/design_system.dart';
-import '../../../design_system/luxe/luxe.dart';
 import '../../../shared/presentation/action_runner.dart';
-import '../../../shared/presentation/luxe_async.dart';
-import '../../transactions/domain/transaction.dart';
+import '../../../shared/presentation/async_view.dart';
+import '../../../shared/presentation/transaction_row.dart';
 import '../application/subscription_actions.dart';
 import '../domain/subscription.dart';
 import 'subscription_ui.dart';
 
 enum _Menu { edit, skip, pause, resume, cancel, delete }
 
-/// One plan: the price and a countdown ring to the next renewal, the two
-/// things you do with it (mark paid, skip), then details and history.
 class SubscriptionDetailScreen extends ConsumerStatefulWidget {
   const SubscriptionDetailScreen({super.key, required this.id});
 
@@ -34,23 +30,21 @@ class _SubscriptionDetailScreenState extends ConsumerState<SubscriptionDetailScr
   final _key = newIdempotencyKey();
 
   Future<void> _setStatus(Subscription s, SubscriptionStatus status) => runAction(
-    context,
-    ref,
-    action: const SetSubscriptionStatusAction(),
-    input: SubscriptionStatusInput(id: s.id, status: status),
-    idempotencyKey: '$_key-status-${s.version}-${status.name}',
-  );
+        context,
+        ref,
+        action: const SetSubscriptionStatusAction(),
+        input: SubscriptionStatusInput(id: s.id, status: status),
+        idempotencyKey: '$_key-status-${s.version}-${status.name}',
+      );
 
   Future<void> _skip(Subscription s) async {
-    final ok = await showLuxeConfirm(
+    final ok = await showFinnConfirm(
       context,
       title: 'Skip this renewal?',
-      message:
-          'Moves the next due date from ${DateFormats.dayMonthYear.format(s.nextDueDate)} to '
+      message: 'Moves the next due date from ${DateFormats.dayMonthYear.format(s.nextDueDate)} to '
           '${DateFormats.dayMonthYear.format(SubscriptionSchedule.nextCycleAfterCurrent(s))} '
           'without recording a payment — for a free month or a waived charge. Your balance stays the same.',
       confirmLabel: 'Skip renewal',
-      icon: LucideIcons.skipForward,
     );
     if (!ok || !mounted) return;
     await runAction(
@@ -63,35 +57,22 @@ class _SubscriptionDetailScreenState extends ConsumerState<SubscriptionDetailScr
   }
 
   Future<void> _menu(Subscription s) async {
-    final choice = await showLuxeMenu<_Menu>(
+    final choice = await showFinnActionMenu<_Menu>(
       context,
       title: s.name,
-      eyebrow: 'Subscription',
       items: [
-        const LuxeMenuItem(value: _Menu.edit, label: 'Edit details', icon: LucideIcons.pencil),
-        if (s.isActive)
-          const LuxeMenuItem(
-            value: _Menu.skip,
-            label: 'Skip this renewal',
-            icon: LucideIcons.skipForward,
-            hint: 'Free month or waived charge',
-          ),
-        if (s.isActive)
-          const LuxeMenuItem(
-            value: _Menu.pause,
-            label: 'Pause',
-            icon: LucideIcons.pause,
-            hint: 'Stops counting until you resume',
-          ),
+        const FinnMenuItem(value: _Menu.edit, label: 'Edit details', icon: LucideIcons.pencil),
+        if (s.isActive) const FinnMenuItem(value: _Menu.skip, label: 'Skip this renewal', icon: LucideIcons.skipForward),
+        if (s.isActive) const FinnMenuItem(value: _Menu.pause, label: 'Pause', icon: LucideIcons.pause),
         if (!s.isActive)
-          LuxeMenuItem(
+          FinnMenuItem(
             value: _Menu.resume,
             label: s.status == SubscriptionStatus.paused ? 'Resume' : 'Reactivate',
             icon: LucideIcons.play,
           ),
         if (s.status != SubscriptionStatus.cancelled)
-          const LuxeMenuItem(value: _Menu.cancel, label: 'Mark as cancelled', icon: LucideIcons.circleX),
-        const LuxeMenuItem(value: _Menu.delete, label: 'Delete', icon: LucideIcons.trash2, destructive: true),
+          const FinnMenuItem(value: _Menu.cancel, label: 'Mark as cancelled', icon: LucideIcons.circleX),
+        const FinnMenuItem(value: _Menu.delete, label: 'Delete', icon: LucideIcons.trash2, destructive: true),
       ],
     );
     if (!mounted || choice == null) return;
@@ -107,22 +88,8 @@ class _SubscriptionDetailScreenState extends ConsumerState<SubscriptionDetailScr
       case _Menu.cancel:
         await _setStatus(s, SubscriptionStatus.cancelled);
       case _Menu.delete:
-        final ok = await showLuxeConfirm(
-          context,
-          title: 'Delete ${s.name}?',
-          message: 'The plan is removed. Payments already recorded stay in your transactions.',
-          confirmLabel: 'Delete',
-          icon: LucideIcons.trash2,
-          destructive: true,
-        );
-        if (!ok || !mounted) return;
-        final done = await runAction(
-          context,
-          ref,
-          action: const DeleteSubscriptionAction(),
-          input: SubscriptionIdInput(id: s.id),
-          idempotencyKey: '$_key-del',
-        );
+        final done = await runAction(context, ref,
+            action: const DeleteSubscriptionAction(), input: SubscriptionIdInput(id: s.id), idempotencyKey: '$_key-del');
         if (done != null && mounted) context.pop();
     }
   }
@@ -131,45 +98,47 @@ class _SubscriptionDetailScreenState extends ConsumerState<SubscriptionDetailScr
   Widget build(BuildContext context) {
     final value = ref.watch(subscriptionDetailProvider(widget.id));
     final d = value.value;
-    return LuxeDetailPage(
-      title: d?.subscription.name ?? 'Subscription',
-      storageKey: 'subscription-${widget.id}',
-      actions: [
-        if (d != null)
-          LuxeIconButton(
-            icon: LucideIcons.ellipsis,
-            tooltip: 'More actions',
-            style: LuxeIconStyle.ghost,
-            size: 40,
-            onPressed: () => _menu(d.subscription),
-          ),
-      ],
-      slivers: [
-        SliverToBoxAdapter(
-          child: LuxeAsync<SubscriptionDetail?>(
-            value: value,
-            loading: const LuxePageSkeleton(hero: 230, rows: 3, controls: false),
-            errorTitle: 'Could not load this subscription',
-            builder: (context, d) {
-              if (d == null) {
-                return LuxeEmpty(
-                  icon: LucideIcons.searchX,
-                  title: 'This subscription no longer exists',
-                  message: 'It may have been deleted.',
-                  actionLabel: 'Back to subscriptions',
-                  onAction: () => context.go(AppRoutes.subscriptions),
-                );
-              }
-              return _Body(
-                detail: d,
-                onMarkPaid: () => markSubscriptionPaid(context, ref, d.subscription),
-                onSkip: () => _skip(d.subscription),
-                onResume: () => _setStatus(d.subscription, SubscriptionStatus.active),
-              );
-            },
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(d?.subscription.name ?? 'Subscription'),
+        actions: [
+          if (d != null)
+            FinnIconButton(
+              icon: LucideIcons.ellipsisVertical,
+              tooltip: 'More actions',
+              onPressed: () => _menu(d.subscription),
+            ),
+          const SizedBox(width: Space.x2),
+        ],
+      ),
+      body: AsyncView<SubscriptionDetail?>(
+        value: value,
+        loading: const SkeletonPulse(
+          child: Padding(
+            padding: EdgeInsets.all(Space.gutter),
+            child: Column(children: [CardSkeleton(height: 200), SizedBox(height: Space.x4), CardSkeleton(height: 220)]),
           ),
         ),
-      ],
+        builder: (context, d) {
+          if (d == null) {
+            return Center(
+              child: EmptyState(
+                icon: LucideIcons.searchX,
+                title: 'This subscription no longer exists',
+                message: 'It may have been deleted.',
+                actionLabel: 'Back to subscriptions',
+                onAction: () => context.go(AppRoutes.subscriptions),
+              ),
+            );
+          }
+          return _Body(
+            detail: d,
+            onMarkPaid: () => markSubscriptionPaid(context, ref, d.subscription),
+            onSkip: () => _skip(d.subscription),
+            onResume: () => _setStatus(d.subscription, SubscriptionStatus.active),
+          );
+        },
+      ),
     );
   }
 }
@@ -184,151 +153,104 @@ class _Body extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final c = context.colors;
+    final t = context.text;
     final d = detail;
     final s = d.subscription;
-    var i = 0;
-    Widget r(Widget child) => Reveal(index: i++, child: child);
-    final paused = s.status == SubscriptionStatus.paused;
-    final note = s.note?.trim() ?? '';
-    final hidden = AmountVisibility.hiddenOf(context);
-    return ResponsiveCenter(
-      padding: const EdgeInsets.symmetric(horizontal: LuxeSpace.gutter),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          r(
-            Row(
-              children: [
-                SubscriptionAvatar(categoryId: s.categoryId, size: 52),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: LuxeTitle(
-                    eyebrow: d.category?.name ?? 'Uncategorised',
-                    title: s.name,
-                    subtitle: '${s.frequency.label} · ${s.status.label}',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Reveal(
-            index: i++,
-            scale: 0.97,
-            child: _Hero(detail: d),
-          ),
-          const SizedBox(height: 14),
-          if (s.isActive)
-            r(_NextRenewal(detail: d, onMarkPaid: onMarkPaid, onSkip: onSkip))
-          else
-            r(
-              LuxeCard(
+    final sections = <Widget>[
+      _Hero(detail: d),
+      const SizedBox(height: Space.x4),
+      if (s.isActive)
+        _NextRenewal(detail: d, onMarkPaid: onMarkPaid, onSkip: onSkip)
+      else
+        InfoBanner(
+          icon: s.status == SubscriptionStatus.paused ? LucideIcons.pause : LucideIcons.circleX,
+          message: s.status == SubscriptionStatus.paused
+              ? 'Paused: no renewals are expected and it does not count towards your monthly commitment.'
+              : 'Cancelled: no renewals are expected. Past payments stay in your transactions.',
+          actionLabel: s.status == SubscriptionStatus.paused ? 'Resume' : 'Reactivate',
+          onAction: onResume,
+        ),
+      const SizedBox(height: Space.section),
+      SectionHeader(icon: LucideIcons.fileText, title: 'Details', tileColor: c.accentSubscriptions),
+      const SizedBox(height: Space.x2),
+      FinnCard(
+        padding: const EdgeInsets.symmetric(horizontal: Space.x4, vertical: Space.x1),
+        child: Column(
+          children: [
+            KeyValueRow(label: 'Amount', valueWidget: AmountText(s.amount, style: t.bodyStrong)),
+            KeyValueRow(label: 'Billing', value: s.frequency.label),
+            if (s.frequency != Frequency.monthly)
+              KeyValueRow(label: 'Per month', valueWidget: AmountText(s.monthlyEquivalent, style: t.bodyStrong)),
+            KeyValueRow(label: 'Per year', valueWidget: AmountText(s.annualized, style: t.bodyStrong)),
+            KeyValueRow(label: 'Category', value: d.category?.name ?? 'Uncategorised'),
+            KeyValueRow(label: 'Usually paid by', value: s.paymentMethod?.label ?? 'Not set'),
+            KeyValueRow(label: 'Renews automatically', value: s.autoRenews ? 'Yes' : 'No'),
+            if (s.startDate != null) KeyValueRow(label: 'Started', value: DateFormats.dayMonthYear.format(s.startDate!)),
+            KeyValueRow(label: 'Status', valueWidget: SubscriptionDueChip(subscription: s, today: d.today)),
+            if (s.note != null && s.note!.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Space.x2_5),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        LuxeIconDisc(icon: paused ? LucideIcons.pause : LucideIcons.circleX, color: p.inkSoft),
-                        const SizedBox(width: 12),
-                        Expanded(child: Text(paused ? 'Paused' : 'Cancelled', style: t.heading)),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      paused
-                          ? 'No renewals are expected and it does not count towards your monthly commitment.'
-                          : 'No renewals are expected. Past payments stay in your transactions.',
-                      style: t.bodySoft,
-                    ),
-                    const SizedBox(height: 16),
-                    LuxeButton(
-                      label: paused ? 'Resume' : 'Reactivate',
-                      icon: LucideIcons.play,
-                      expand: true,
-                      onPressed: onResume,
-                    ),
+                    Text('NOTES', style: t.eyebrow),
+                    const SizedBox(height: Space.x1),
+                    SizedBox(width: double.infinity, child: Text(s.note!, style: t.body)),
                   ],
                 ),
               ),
-            ),
-          const SizedBox(height: LuxeSpace.section),
-          r(const LuxeEyebrowHeader(label: 'Details')),
-          const SizedBox(height: 12),
-          r(
-            LuxeFacts(
-              facts: [
-                LuxeFact('Amount', child: _amount(context, s.amount)),
-                LuxeFact('Billing', value: s.frequency.label),
-                if (s.frequency != Frequency.monthly)
-                  LuxeFact('Per month', child: _amount(context, s.monthlyEquivalent)),
-                LuxeFact('Per year', child: _amount(context, s.annualized)),
-                LuxeFact('Category', value: d.category?.name ?? 'Uncategorised'),
-                LuxeFact('Usually paid by', value: s.paymentMethod?.label ?? 'Not set'),
-                LuxeFact('Renews automatically', value: s.autoRenews ? 'Yes' : 'No'),
-                if (s.startDate != null) LuxeFact('Started', value: DateFormats.dayMonthYear.format(s.startDate!)),
-                LuxeFact(
-                  'Status',
-                  child: SubscriptionDueChip(subscription: s, today: d.today),
+          ],
+        ),
+      ),
+      const SizedBox(height: Space.section),
+      SectionHeader(
+        icon: LucideIcons.history,
+        title: 'Payment history',
+        subtitle: d.payments.isEmpty
+            ? null
+            : '${d.payments.length} recorded${AmountVisibility.hiddenOf(context) ? '' : ' · ${MoneyFormatter.format(d.paidTotal)}'}',
+        tileColor: c.positive,
+      ),
+      const SizedBox(height: Space.x2),
+      if (d.payments.isEmpty)
+        FinnCard(
+          variant: FinnCardVariant.muted,
+          child: Text(
+            'No payments recorded yet. When a renewal is charged, mark it as paid to record the expense once.',
+            style: t.caption,
+          ),
+        )
+      else
+        FinnCard(
+          padding: const EdgeInsets.symmetric(horizontal: Space.x2, vertical: Space.x1),
+          child: Column(
+            children: [
+              for (var i = 0; i < d.payments.length; i++) ...[
+                if (i > 0) const FinnDivider(),
+                TransactionRow(
+                  key: ValueKey(d.payments[i].id),
+                  transaction: d.payments[i],
+                  showDate: true,
+                  onTap: () => context.push(AppRoutes.transaction(d.payments[i].id)),
                 ),
               ],
-              footer: note.isEmpty
-                  ? null
-                  : Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('NOTES', style: t.eyebrow),
-                          const SizedBox(height: 6),
-                          SizedBox(
-                            width: double.infinity,
-                            child: Text(note, style: t.body),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
+            ],
           ),
-          const SizedBox(height: LuxeSpace.section),
-          LuxeEyebrowHeader(
-            label: 'Payment history',
-            caption: d.payments.isEmpty
-                ? null
-                : '${d.payments.length} recorded${hidden ? '' : ' · ${MoneyFormatter.format(d.paidTotal)}'}',
+        ),
+    ];
+    return ListView(
+      key: PageStorageKey('subscription-${s.id}'),
+      padding: EdgeInsets.fromLTRB(0, Space.x2, 0, context.bottomClearance),
+      children: [
+        for (var i = 0; i < sections.length; i++)
+          ResponsiveCenter(
+            padding: const EdgeInsets.symmetric(horizontal: Space.gutter),
+            child: i == 0 ? StaggeredEntrance(child: sections[i]) : sections[i],
           ),
-          const SizedBox(height: 14),
-          if (d.payments.isEmpty)
-            Text(
-              'No payments recorded yet. When a renewal is charged, mark it as paid to record the expense once.',
-              style: t.bodySoft,
-            )
-          else
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var k = 0; k < d.payments.length; k++)
-                  LuxeRailNode(
-                    key: ValueKey(d.payments[k].id),
-                    color: p.positive,
-                    icon: LucideIcons.check,
-                    first: k == 0,
-                    last: k == d.payments.length - 1,
-                    child: _PaymentRow(transaction: d.payments[k]),
-                  ),
-              ],
-            ),
-        ],
-      ),
+      ],
     );
   }
-
-  static Widget _amount(BuildContext context, Money money) => LuxeAmount(
-    money,
-    fit: false,
-    style: context.lt.label.w(650).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
-  );
 }
 
 class _Hero extends StatelessWidget {
@@ -338,75 +260,64 @@ class _Hero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final t = context.text;
     final d = detail;
     final s = d.subscription;
-    final days = daysBetween(d.today, s.nextDueDate);
-    final progress = s.isActive ? subscriptionCycleProgress(s, d.today) : 0.0;
-    final ringLabel = !s.isActive ? '—' : (days < 0 ? '${-days}d' : (days == 0 ? 'Today' : '$days'));
-    final ringCaption = !s.isActive
-        ? s.status.label.toUpperCase()
-        : (days < 0 ? 'OVERDUE' : (days == 0 ? 'RENEWS' : 'DAYS LEFT'));
-    return LuxeObsidian(
-      semanticLabel:
-          '${s.name}, ${MoneyFormatter.spoken(s.amount)} ${s.frequency.label.toLowerCase()}, ${s.status.label}',
+    final white70 = Colors.white.withValues(alpha: 0.75);
+    return GradientHeroCard(
+      watermark: LucideIcons.repeat,
+      semanticLabel: '${s.name}, ${MoneyFormatter.spoken(s.amount)} ${s.frequency.label.toLowerCase()}, ${s.status.label}',
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
+              SubscriptionAvatar(categoryId: s.categoryId, size: 36),
+              const SizedBox(width: Space.x3),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    LuxeAmount(
-                      s.amount,
-                      countFromZero: true,
-                      style: t.display.copyWith(fontSize: 40, color: p.onObsidian),
-                    ),
-                    const SizedBox(height: 2),
-                    Text('per ${s.frequency.unit}', style: t.caption.c(p.onObsidianSoft)),
+                    Text(s.name,
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: t.bodyStrong.copyWith(color: Colors.white)),
+                    Text(d.category?.name ?? 'Uncategorised', style: t.caption.copyWith(color: white70)),
                   ],
                 ),
               ),
-              LuxeRing(
-                value: progress,
-                color: days < 0 ? p.negative : p.gold,
-                gradient: days < 0 ? null : p.goldGradient.colors,
-                track: p.onObsidian.withValues(alpha: 0.1),
-                size: 86,
-                stroke: 4,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(ringLabel, style: t.figure.copyWith(fontSize: 22, color: p.onObsidian)),
-                    Text(ringCaption, style: t.eyebrow.copyWith(fontSize: 8, color: p.onObsidianSoft)),
-                  ],
-                ),
+              StatusPill(
+                label: s.status.label,
+                color: Colors.white,
+                icon: switch (s.status) {
+                  SubscriptionStatus.active => LucideIcons.repeat,
+                  SubscriptionStatus.paused => LucideIcons.pause,
+                  SubscriptionStatus.cancelled => LucideIcons.circleX,
+                },
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          SizedBox(height: 1, child: ColoredBox(color: p.onObsidian.withValues(alpha: 0.1))),
-          const SizedBox(height: 16),
-          LuxeFigureRow(
-            onDark: true,
+          const SizedBox(height: Space.x4),
+          AnimatedAmount(s.amount, style: t.amountHero.copyWith(color: Colors.white), fit: true),
+          Text('per ${s.frequency.unit}', style: t.caption.copyWith(color: white70)),
+          const SizedBox(height: Space.x4),
+          Row(
             children: [
-              LuxeFigure(
-                label: 'Per month',
-                onDark: true,
-                child: LuxeFigureAmount(s.monthlyEquivalent, onDark: true, size: 15),
+              Expanded(
+                child: _HeroFigure(
+                  label: 'Per month',
+                  value: AmountText(s.monthlyEquivalent, style: t.amountSmall.copyWith(color: Colors.white)),
+                ),
               ),
-              LuxeFigure(
-                label: 'Per year',
-                onDark: true,
-                child: LuxeFigureAmount(s.annualized, onDark: true, size: 15),
+              Expanded(
+                child: _HeroFigure(
+                  label: 'Per year',
+                  value: AmountText(s.annualized, style: t.amountSmall.copyWith(color: Colors.white)),
+                ),
               ),
-              LuxeFigure(
-                label: 'Paid so far',
-                onDark: true,
-                child: LuxeFigureAmount(d.paidTotal, onDark: true, size: 15),
+              Expanded(
+                child: _HeroFigure(
+                  label: 'Paid so far',
+                  value: AmountText(d.paidTotal, style: t.amountSmall.copyWith(color: Colors.white)),
+                ),
               ),
             ],
           ),
@@ -414,6 +325,25 @@ class _Hero extends StatelessWidget {
       ),
     );
   }
+}
+
+class _HeroFigure extends StatelessWidget {
+  const _HeroFigure({required this.label, required this.value});
+
+  final String label;
+  final Widget value;
+
+  @override
+  Widget build(BuildContext context) => MergeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label.toUpperCase(), style: context.text.eyebrow.copyWith(color: Colors.white.withValues(alpha: 0.7))),
+            const SizedBox(height: 2),
+            value,
+          ],
+        ),
+      );
 }
 
 class _NextRenewal extends StatelessWidget {
@@ -425,26 +355,26 @@ class _NextRenewal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final c = context.colors;
+    final t = context.text;
     final d = detail;
     final s = d.subscription;
     final due = subscriptionDueLabel(context, s, d.today);
-    final urgent = d.dueState == DueState.overdue || d.dueState == DueState.dueToday;
     final later = d.expected.where((x) => !x.isAtSameMomentAs(s.nextDueDate)).toList();
-    return LuxeCard(
+    return FinnCard(
+      variant: FinnCardVariant.outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              LuxeIconDisc(icon: LucideIcons.calendarClock, color: due.color),
-              const SizedBox(width: 12),
+              IconTile(icon: LucideIcons.calendarClock, background: c.infoSoft, foreground: c.info, size: 36, iconSize: 18),
+              const SizedBox(width: Space.x3),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Next renewal', style: t.heading),
+                    Text('Next renewal', style: t.bodyStrong),
                     Text(
                       '${DateFormats.dayMonthYear.format(s.nextDueDate)} · ${DateFormats.dueIn(s.nextDueDate, d.today)}',
                       style: t.caption,
@@ -452,37 +382,39 @@ class _NextRenewal extends StatelessWidget {
                   ],
                 ),
               ),
-              LuxeAmount(s.amount, fit: false, style: t.figure.copyWith(fontSize: 22)),
+              AmountText(s.amount, style: t.amountMedium),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
+          const SizedBox(height: Space.x3),
+          Wrap(
+            spacing: Space.x2,
+            runSpacing: Space.x1,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              LuxeStatus(label: due.label, color: due.color, icon: due.icon),
-              const SizedBox(width: 10),
-              Flexible(child: Text('Expected · not paid yet', style: t.micro)),
+              StatusPill(label: due.label, color: due.color, icon: due.icon),
+              Text('Expected · not paid yet', style: t.micro),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: Space.x4),
           Row(
             children: [
               Expanded(
-                flex: 3,
-                child: LuxeButton(
+                child: FinnButton(
                   label: 'Mark paid',
-                  icon: LucideIcons.check,
-                  variant: urgent ? LuxeButtonVariant.gold : LuxeButtonVariant.ink,
+                  icon: LucideIcons.circleCheck,
+                  variant: d.dueState == DueState.overdue || d.dueState == DueState.dueToday
+                      ? FinnButtonVariant.attention
+                      : FinnButtonVariant.primary,
                   expand: true,
                   onPressed: onMarkPaid,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: Space.x2),
               Expanded(
-                flex: 2,
-                child: LuxeButton(
+                child: FinnButton(
                   label: 'Skip',
                   icon: LucideIcons.skipForward,
-                  variant: LuxeButtonVariant.outline,
+                  variant: FinnButtonVariant.outline,
                   expand: true,
                   onPressed: onSkip,
                 ),
@@ -490,78 +422,17 @@ class _NextRenewal extends StatelessWidget {
             ],
           ),
           if (later.isNotEmpty) ...[
-            const LuxeHairline(vertical: 16),
+            const SizedBox(height: Space.x4),
             Text('THEN EXPECTED', style: t.eyebrow),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final x in later)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: p.canvas,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: p.line),
-                    ),
-                    child: Text(DateFormats.dayMonthYear.format(x), style: t.micro.w(700).c(p.inkSoft)),
-                  ),
-              ],
-            ),
+            const SizedBox(height: Space.x1),
+            Text(later.map(DateFormats.dayMonthYear.format).join('  ·  '), style: t.caption),
           ],
-          const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(LucideIcons.info, size: 13, color: p.inkMute),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Marking as paid records one expense and moves the due date forward. Nothing is deducted automatically.',
-                  style: t.micro,
-                ),
-              ),
-            ],
+          const SizedBox(height: Space.x3),
+          Text(
+            'Marking as paid records one expense and moves the due date forward. Nothing is deducted automatically.',
+            style: t.micro,
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _PaymentRow extends StatelessWidget {
-  const _PaymentRow({required this.transaction});
-
-  final Transaction transaction;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
-    final tx = transaction;
-    return Squish(
-      onTap: () => context.push(AppRoutes.transaction(tx.id)),
-      scale: 0.98,
-      semanticLabel: 'Paid ${DateFormats.dayMonthYear.format(tx.date)}, ${AmountText.spokenLabel(tx.amount)}',
-      child: Padding(
-        padding: const EdgeInsets.only(top: 6, bottom: 16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(DateFormats.dayMonthYear.format(tx.date), style: t.label.w(700).c(p.ink)),
-                  Text(tx.paymentMethod?.label ?? 'Paid', style: t.caption),
-                ],
-              ),
-            ),
-            LuxeAmount(tx.amount, fit: false, style: t.number.copyWith(fontSize: 14)),
-            const SizedBox(width: 6),
-            Icon(LucideIcons.chevronRight, size: 15, color: p.inkMute),
-          ],
-        ),
       ),
     );
   }

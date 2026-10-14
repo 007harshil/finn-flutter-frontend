@@ -61,7 +61,7 @@ void main() {
     await env.pumpWidget(tester, SubscriptionDetailScreen(id: sub.id));
     await tester.pumpAndSettle();
     expect(find.text('Mark paid'), findsNothing);
-    expect(find.text('Resume'), findsOneWidget);
+    expect(find.text('RESUME'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

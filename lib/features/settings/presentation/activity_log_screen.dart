@@ -82,7 +82,7 @@ class _Body extends ConsumerWidget {
     final failed = entries.where((e) => !e.succeeded).length;
     return ListView.builder(
       key: const PageStorageKey('activity-log'),
-      padding: EdgeInsets.fromLTRB(0, Space.x2, 0, Space.x10 + context.safeBottom),
+      padding: const EdgeInsets.fromLTRB(0, Space.x2, 0, Space.x10),
       itemCount: items.length + 1,
       itemBuilder: (context, i) {
         if (i == 0) {

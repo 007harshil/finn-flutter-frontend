@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../theme/finn_theme.dart';
 import '../tokens/finn_colors.dart';
 import '../tokens/tokens.dart';
-import '../vault/vault.dart';
 import 'cards.dart';
 import 'tone.dart';
 
@@ -55,29 +54,6 @@ class FinnButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (VaultScope.isActive(context)) {
-      return VaultButton(
-        label: label,
-        onPressed: onPressed,
-        icon: icon,
-        loading: loading,
-        expand: expand,
-        height: switch (size) {
-          FinnButtonSize.sm => 40,
-          FinnButtonSize.md => 54,
-          FinnButtonSize.lg => 58,
-        },
-        tone: switch (variant) {
-          FinnButtonVariant.primary => VaultButtonTone.ink,
-          FinnButtonVariant.secondary => VaultButtonTone.quiet,
-          FinnButtonVariant.outline => VaultButtonTone.outline,
-          FinnButtonVariant.ghost => VaultButtonTone.ghost,
-          FinnButtonVariant.destructive => VaultButtonTone.negative,
-          FinnButtonVariant.positive => VaultButtonTone.positive,
-          FinnButtonVariant.attention => VaultButtonTone.accent,
-        },
-      );
-    }
     final c = context.colors;
     final colors = _colorsFor(variant, c);
     final (double height, double padH, double fontSize, double iconSize) = switch (size) {
@@ -209,9 +185,7 @@ class FinnIconButton extends StatelessWidget {
         fixedSize: Size.square(dim),
         minimumSize: Size.square(dim),
         padding: EdgeInsets.zero,
-        shape: VaultScope.isActive(context)
-            ? const CircleBorder()
-            : RoundedRectangleBorder(borderRadius: BorderRadius.circular(dim * 0.32)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(dim * 0.32)),
         tapTargetSize: MaterialTapTargetSize.padded,
       ),
     );

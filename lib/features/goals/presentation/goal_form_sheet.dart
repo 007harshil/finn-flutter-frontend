@@ -194,7 +194,6 @@ class _GoalFormSheetState extends ConsumerState<GoalFormSheet> {
         ),
         const SizedBox(height: Space.x5),
         AmountField(
-            prominent: true,
           controller: _target,
           label: 'Target amount',
           errorText: _errors['target'],

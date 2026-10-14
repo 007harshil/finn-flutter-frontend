@@ -1,37 +1,31 @@
-import 'dart:math' as math;
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
-import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
-import '../../../core/money/money.dart';
-import '../../../core/money/money_format.dart';
-import '../../../core/result/result.dart';
+import '../../../app/shell/app_drawer.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
-import '../../../design_system/luxe/luxe.dart';
+import '../../../shared/presentation/async_view.dart';
 import '../../../shared/presentation/category_icons.dart';
-import '../../../shared/presentation/luxe_page.dart';
+import '../../alerts/presentation/alert_visuals.dart' show MaybeAnimate;
 import '../../emergency_fund/domain/emergency_fund.dart';
 import '../application/goal_view.dart';
 import '../domain/goal.dart';
 import 'savings_visuals.dart';
 import 'savings_widgets.dart';
 
-/// "Your vision": every goal as an orbit around what you have saved, the
-/// emergency fund as one line, then the goals themselves with one-tap
-/// "add money".
+/// "Your vision": every goal in one board, the emergency fund as a single
+/// line, then compact goal rows with one-tap "add money".
 ///
-/// Top to bottom: title and "New goal"; the orbit board (saved vs targets,
-/// one ring per goal that you can spin, the monthly effort needed vs
-/// planned, status shortcuts); the emergency fund; a pinned Active /
-/// Completed / Archived switch with sort & filter; the goals.
+/// Top to bottom: board (saved vs. targets, a mosaic bar where each goal's
+/// width is its target and its fill is what is saved, monthly effort needed
+/// vs. planned, status shortcuts), emergency fund line, a pinned bar with
+/// Active / Completed / Archived tabs plus sort & filter, then rows.
 class GoalsScreen extends ConsumerStatefulWidget {
   const GoalsScreen({super.key});
 
@@ -41,6 +35,7 @@ class GoalsScreen extends ConsumerStatefulWidget {
 
 class _GoalsScreenState extends ConsumerState<GoalsScreen> {
   GoalListFilter _filter = const GoalListFilter();
+  final Set<String> _entered = {};
 
   void _set(GoalListFilter f) => setState(() => _filter = f);
 
@@ -50,27 +45,20 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
   }
 
   Future<void> _openOptions() async {
-    final next = await showLuxeSheet<GoalListFilter>(context, builder: (_) => _OptionsSheet(initial: _filter));
+    final next = await showFinnSheet<GoalListFilter>(context, builder: (_) => _OptionsSheet(initial: _filter));
     if (next != null && mounted) _set(next);
   }
 
   Future<void> _quickActions(GoalProgress g) async {
     final active = g.goal.status == GoalStatus.active;
-    final choice = await showLuxeMenu<int>(
+    final choice = await showFinnActionMenu<int>(
       context,
-      eyebrow: 'Goal',
       title: g.goal.name,
       items: [
-        if (active) const LuxeMenuItem(value: 0, label: 'Add money', icon: LucideIcons.plus, hint: 'Set money aside'),
-        if (active && g.saved.isPositive)
-          const LuxeMenuItem(value: 1, label: 'Withdraw', icon: LucideIcons.minus, hint: 'Release money back'),
-        const LuxeMenuItem(
-          value: 2,
-          label: 'Open details',
-          icon: LucideIcons.arrowUpRight,
-          hint: 'Path, history, what-if',
-        ),
-        const LuxeMenuItem(value: 3, label: 'Edit goal', icon: LucideIcons.pencil),
+        if (active) const FinnMenuItem(value: 0, label: 'Add money', icon: LucideIcons.plus),
+        if (active && g.saved.isPositive) const FinnMenuItem(value: 1, label: 'Withdraw', icon: LucideIcons.minus),
+        const FinnMenuItem(value: 2, label: 'Open details', icon: LucideIcons.arrowUpRight),
+        const FinnMenuItem(value: 3, label: 'Edit goal', icon: LucideIcons.pencil),
       ],
     );
     if (!mounted || choice == null) return;
@@ -84,103 +72,100 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final value = ref.watch(goalsBoardProvider);
-    final b = value.value;
-    final List<Widget> body;
-    if (b == null) {
-      if (value.hasError) {
-        final e = value.error;
-        body = [
-          luxeBox(
-            LuxeError(
-              title: 'Could not load your goals',
-              message: e is AppFailure ? e.message : null,
-              onRetry: () => refreshFinanceData(ref),
-            ),
-            top: 24,
-          ),
-        ];
-      } else {
-        body = [luxeBox(const _GoalsSkeleton(), top: 18)];
-      }
-    } else {
-      body = _content(context, b);
-    }
-    return LuxePage(
-      storageKey: 'goals',
-      compactTitle: 'Your vision',
-      slivers: [
-        luxeBox(const Reveal(child: _Header()), top: 4),
-        ...body,
-      ],
+    final board = ref.watch(goalsBoardProvider);
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: AsyncView<GoalsBoard>(
+          value: board,
+          loading: const _GoalsSkeleton(),
+          builder: (context, b) {
+            final shown = filterGoals(b.all, _filter);
+            return CustomScrollView(
+              key: const PageStorageKey('goals'),
+              slivers: [
+                _boxed(const _Header(), top: Space.x4),
+                if (b.active.isNotEmpty)
+                  _boxed(
+                    StaggeredEntrance(
+                      child: _BoardCard(board: b, filter: _filter, onPace: _togglePace),
+                    ),
+                    top: Space.x3,
+                  ),
+                _boxed(const StaggeredEntrance(index: 1, child: _EmergencyLine()), top: Space.x3),
+                if (b.all.isEmpty)
+                  _boxed(
+                    EmptyState(
+                      icon: LucideIcons.target,
+                      title: 'Start your first goal',
+                      message:
+                          'A trip, a new laptop, a home down payment — give it a name and a target, '
+                          'and set money aside at your own pace.',
+                      actionLabel: 'Create a goal',
+                      actionIcon: LucideIcons.plus,
+                      onAction: () => context.push(AppRoutes.newGoal),
+                    ),
+                    top: Space.x5,
+                  )
+                else ...[
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _BarDelegate(
+                      child: _Controls(
+                        counts: b.tabCounts,
+                        filter: _filter,
+                        onTab: (t) => _set(_filter.copyWith(tab: t)),
+                        onOptions: _openOptions,
+                      ),
+                    ),
+                  ),
+                  _boxed(_ResultLine(count: shown.length, filter: _filter, onChanged: _set, onSort: _openOptions)),
+                  if (shown.isEmpty)
+                    _boxed(_emptyFor(context), top: Space.x2)
+                  else
+                    SliverList.builder(
+                      itemCount: shown.length,
+                      itemBuilder: (context, i) {
+                        final g = shown[i];
+                        final row = GoalRow(
+                          key: ValueKey(g.goal.id),
+                          progress: g,
+                          today: b.today,
+                          onLongPress: () => _quickActions(g),
+                        );
+                        final first = _entered.add(g.goal.id);
+                        return ResponsiveCenter(
+                          padding: const EdgeInsets.fromLTRB(Space.gutter, 0, Space.gutter, Space.x2),
+                          child: !first || i > 10
+                              ? row
+                              : row.maybeAnimate(
+                                  context,
+                                  (a) => a
+                                      .fadeIn(delay: 40.ms * i, duration: 260.ms)
+                                      .slideY(
+                                        begin: 0.2,
+                                        end: 0,
+                                        delay: 40.ms * i,
+                                        duration: 380.ms,
+                                        curve: Curves.easeOutCubic,
+                                      ),
+                                ),
+                        );
+                      },
+                    ),
+                ],
+                SliverToBoxAdapter(child: SizedBox(height: context.bottomClearance)),
+              ],
+            );
+          },
+        ),
+      ),
     );
-  }
-
-  List<Widget> _content(BuildContext context, GoalsBoard b) {
-    final shown = filterGoals(b.all, _filter);
-    return [
-      if (b.active.isNotEmpty)
-        luxeBox(
-          Reveal(
-            index: 1,
-            child: _OrbitBoard(board: b, filter: _filter, onPace: _togglePace),
-          ),
-          top: 22,
-        ),
-      luxeBox(const Reveal(index: 2, child: _EmergencyLine()), top: 12),
-      if (b.all.isEmpty)
-        luxeBox(
-          LuxeEmpty(
-            icon: LucideIcons.target,
-            title: 'Start your first goal',
-            message:
-                'A trip, a new laptop, a home down payment — give it a name and a target, '
-                'and set money aside at your own pace.',
-            actionLabel: 'Create a goal',
-            actionIcon: LucideIcons.plus,
-            onAction: () => context.push(AppRoutes.newGoal),
-          ),
-          top: 12,
-        )
-      else ...[
-        luxeBox(const SizedBox.shrink(), top: 10),
-        PinnedHeaderSliver(
-          child: _Controls(
-            counts: b.tabCounts,
-            filter: _filter,
-            onTab: (t) => _set(_filter.copyWith(tab: t)),
-            onOptions: _openOptions,
-          ),
-        ),
-        luxeBox(_ResultLine(count: shown.length, filter: _filter, onChanged: _set, onSort: _openOptions), top: 4),
-        if (shown.isEmpty)
-          luxeBox(_emptyFor(context), top: 4)
-        else
-          SliverList.builder(
-            itemCount: shown.length,
-            itemBuilder: (context, i) {
-              final g = shown[i];
-              final row = GoalRow(
-                key: ValueKey(g.goal.id),
-                progress: g,
-                today: b.today,
-                onLongPress: () => _quickActions(g),
-              );
-              return ResponsiveCenter(
-                padding: const EdgeInsets.fromLTRB(LuxeSpace.gutter, 0, LuxeSpace.gutter, 10),
-                child: i < 10
-                    ? Reveal(key: ValueKey('r-${g.goal.id}-${_filter.tab}'), index: i, offset: 14, blur: 0, child: row)
-                    : row,
-              );
-            },
-          ),
-      ],
-    ];
   }
 
   Widget _emptyFor(BuildContext context) {
     if (_filter.paces.isNotEmpty || _filter.categories.isNotEmpty) {
-      return LuxeEmpty(
+      return EmptyState(
         icon: LucideIcons.searchX,
         title: 'No matches',
         message: 'No goal fits these filters.',
@@ -189,7 +174,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
       );
     }
     return switch (_filter.tab) {
-      GoalTab.active => LuxeEmpty(
+      GoalTab.active => EmptyState(
         icon: LucideIcons.target,
         title: 'No active goals',
         message: 'Every goal is done or archived. Start a new one when you are ready.',
@@ -197,12 +182,12 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
         actionIcon: LucideIcons.plus,
         onAction: () => context.push(AppRoutes.newGoal),
       ),
-      GoalTab.completed => const LuxeEmpty(
+      GoalTab.completed => const EmptyState(
         icon: LucideIcons.partyPopper,
         title: 'Nothing completed yet',
         message: 'Goals you fully fund will appear here.',
       ),
-      GoalTab.archived => const LuxeEmpty(
+      GoalTab.archived => const EmptyState(
         icon: LucideIcons.archive,
         title: 'No archived goals',
         message: 'Archive a goal to hide it without losing its history.',
@@ -211,59 +196,56 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
   }
 }
 
+Widget _boxed(Widget child, {double top = 0}) => SliverToBoxAdapter(
+  child: ResponsiveCenter(padding: EdgeInsets.fromLTRB(Space.gutter, top, Space.gutter, 0), child: child),
+);
+
 class _Header extends StatelessWidget {
   const _Header();
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final t = context.text;
+    return Row(
       children: [
-        LuxeTopBar(
-          actions: [
-            LuxeButton(
-              label: 'New goal',
-              icon: LucideIcons.plus,
-              compact: true,
-              onPressed: () => context.push(AppRoutes.newGoal),
+        const AppMenuButton(),
+        if (AppDrawerScope.maybeOf(context) != null) const SizedBox(width: Space.x3),
+        Expanded(
+          child: Semantics(
+            header: true,
+            label: 'Your vision',
+            excludeSemantics: true,
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  const TextSpan(text: 'Your '),
+                  TextSpan(
+                    text: 'vision',
+                    style: TextStyle(color: context.colors.accentGoals),
+                  ),
+                ],
+              ),
+              style: t.pageTitle,
             ),
-          ],
+          ),
         ),
-        const SizedBox(height: 18),
-        LuxeTitle(
-          eyebrow: 'Savings goals',
-          semanticsLabel: 'Your vision',
-          title: <InlineSpan>[
-            const TextSpan(text: 'Your '),
-            TextSpan(
-              text: 'vision',
-              style: TextStyle(fontStyle: FontStyle.italic, color: p.goldInk),
-            ),
-          ],
+        FinnButton(
+          label: 'New goal',
+          icon: LucideIcons.plus,
+          size: FinnButtonSize.sm,
+          onPressed: () => context.push(AppRoutes.newGoal),
         ),
       ],
     );
   }
 }
 
-/// Muted gradient pair for a goal's swatch.
-/// Whole rupees for monthly figures.
-String _whole(BuildContext context, Money m) => AmountVisibility.hiddenOf(context)
-    ? MoneyFormatter.masked
-    : MoneyFormatter.format(m, decimals: DecimalDisplay.none);
-
-(Color, Color) _goalColors(LuxePalette p, int index) {
-  final (a, b) = AccentSwatches.of(index);
-  return (p.mute(a), p.mute(b));
-}
-
 // ---------------------------------------------------------------------------
-// Orbit board
+// Board
 // ---------------------------------------------------------------------------
 
-class _OrbitBoard extends StatelessWidget {
-  const _OrbitBoard({required this.board, required this.filter, required this.onPace});
+class _BoardCard extends StatelessWidget {
+  const _BoardCard({required this.board, required this.filter, required this.onPace});
 
   final GoalsBoard board;
   final GoalListFilter filter;
@@ -271,136 +253,96 @@ class _OrbitBoard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final c = context.colors;
+    final t = context.text;
     final b = board;
     final need = b.neededMonthly;
     final plan = b.plannedMonthly;
     final short = need.isPositive && plan < need;
     final shortcuts = [
-      for (final pace in [GoalPace.behind, GoalPace.onTrack, GoalPace.noPlan])
-        if (b.count(pace) > 0) pace,
+      for (final p in [GoalPace.behind, GoalPace.onTrack, GoalPace.noPlan])
+        if (b.count(p) > 0) p,
     ];
-    final orbiting = b.active.take(5).toList();
-    return LuxeCard(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
+    return FinnCard(
+      radius: Radii.xxl,
+      padding: const EdgeInsets.fromLTRB(Space.x4, Space.x4, Space.x4, Space.x3),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Expanded(child: Text('SAVED FOR YOUR GOALS', style: t.eyebrow, maxLines: 1)),
+              Expanded(child: Text('SAVED FOR YOUR GOALS', style: t.eyebrow)),
               Text('${b.active.length} active', style: t.micro),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: Space.x1),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    LuxeAmount(b.saved, style: t.display.copyWith(fontSize: 42), countFromZero: true),
-                    const SizedBox(height: 2),
-                    Text(
-                      'of ${savingsMoney(context, b.target)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: t.caption,
-                    ),
-                  ],
+              Flexible(child: AnimatedAmount(b.saved, animateOnMount: true, fit: true, style: t.amountLarge)),
+              const SizedBox(width: Space.x2),
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    'of ${savingsMoney(context, b.target)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.caption,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  formatPct(b.progress),
+                  style: t.bodyStrong.copyWith(color: c.accentGoals, fontWeight: FontWeight.w900),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          _Orbit(goals: orbiting, total: b.progress),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 4,
-            runSpacing: 0,
-            children: [
-              for (final g in orbiting)
-                Squish(
-                  onTap: () => context.push(AppRoutes.goal(g.goal.id)),
-                  scale: 0.94,
-                  semanticLabel: 'Open ${g.goal.name}, ${formatPct(g.progress)}',
-                  excludeSemantics: true,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 40),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: BoxDecoration(
-                              color: _goalColors(p, g.goal.colorIndex).$2,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 120),
-                            child: Text(
-                              g.goal.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: t.micro.w(650).c(p.ink),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(formatPct(g.progress), style: t.micro),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          const SizedBox(height: Space.x3),
+          GoalMosaic(goals: b.active, onOpen: (g) => context.push(AppRoutes.goal(g.goal.id))),
+          const SizedBox(height: Space.x1),
+          Text('Each block is a goal — wider = bigger target. Tap one to open it.', style: t.micro),
           if (need.isPositive || plan.isPositive) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: Space.x3),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: Space.x3, vertical: Space.x2_5),
               decoration: BoxDecoration(
-                color: short ? p.tint(p.warning, 0.1) : p.goldSoft,
-                borderRadius: BorderRadius.circular(16),
+                color: (short ? c.warning : c.positive).withValues(alpha: c.isDark ? 0.16 : 0.09),
+                borderRadius: Radii.rLg,
               ),
               child: Row(
                 children: [
                   Icon(
                     short ? LucideIcons.trendingDown : LucideIcons.trendingUp,
                     size: 16,
-                    color: short ? p.warning : p.goldInk,
+                    color: short ? c.warning : c.positive,
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: Space.x2),
                   Expanded(
                     child: Text.rich(
                       TextSpan(
                         children: [
                           if (need.isPositive) ...[
                             TextSpan(
-                              text: '${_whole(context, need)}/month',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontVariations: [FontVariation('wght', 800)],
-                              ),
+                              text: '${savingsMoney(context, need)}/month',
+                              style: const TextStyle(fontWeight: FontWeight.w900),
                             ),
                             const TextSpan(text: ' keeps every dated goal on time'),
                           ] else
                             const TextSpan(text: 'No target dates set'),
                           TextSpan(
                             text: plan.isPositive
-                                ? ' · you put in ~${_whole(context, plan)}'
+                                ? ' · you put in ~${savingsMoney(context, plan)}'
                                 : ' · no monthly plan yet',
-                            style: TextStyle(color: p.inkSoft),
+                            style: TextStyle(color: c.textSecondary),
                           ),
                         ],
                       ),
-                      style: t.caption.c(p.ink),
+                      style: t.label.copyWith(color: c.textPrimary),
                     ),
                   ),
                 ],
@@ -408,30 +350,35 @@ class _OrbitBoard extends StatelessWidget {
             ),
           ],
           if (shortcuts.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: Space.x3),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
                   for (var i = 0; i < shortcuts.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 8),
-                    Reveal(
-                      index: i + 4,
-                      offset: 0,
-                      blur: 0,
-                      scale: 0.8,
-                      duration: LuxeDurations.base,
-                      child: LuxeChip(
-                        key: ValueKey('goal-attn:${shortcuts[i].name}'),
-                        label: shortcuts[i].countLabel(b.count(shortcuts[i])),
-                        dot: _paceColor(p, shortcuts[i]),
-                        height: 34,
-                        selected:
-                            filter.tab == GoalTab.active &&
-                            filter.paces.length == 1 &&
-                            filter.paces.contains(shortcuts[i]),
-                        onTap: () => onPace(shortcuts[i]),
-                      ),
+                    if (i > 0) const SizedBox(width: Space.x2),
+                    FinnTapChip(
+                      key: ValueKey('goal-attn:${shortcuts[i].name}'),
+                      label: shortcuts[i].countLabel(b.count(shortcuts[i])),
+                      icon: shortcuts[i].icon,
+                      color: shortcuts[i] == GoalPace.noPlan ? c.textSecondary : shortcuts[i].color(c),
+                      selected:
+                          filter.tab == GoalTab.active &&
+                          filter.paces.length == 1 &&
+                          filter.paces.contains(shortcuts[i]),
+                      height: 32,
+                      onTap: () => onPace(shortcuts[i]),
+                    ).maybeAnimate(
+                      context,
+                      (a) => a
+                          .fadeIn(delay: 300.ms + 70.ms * i, duration: 280.ms)
+                          .slideX(
+                            begin: 0.3,
+                            end: 0,
+                            delay: 300.ms + 70.ms * i,
+                            duration: 420.ms,
+                            curve: Curves.easeOutCubic,
+                          ),
                     ),
                   ],
                 ],
@@ -444,238 +391,23 @@ class _OrbitBoard extends StatelessWidget {
   }
 }
 
-Color _paceColor(LuxePalette p, GoalPace pace) => switch (pace) {
-  GoalPace.behind => p.warning,
-  GoalPace.onTrack || GoalPace.done => p.positive,
-  GoalPace.noPlan || GoalPace.archived => p.inkMute,
-};
-
-/// Goals as rings on a tilted plane (perspective 3D), each ring's arc the
-/// share saved, a bright "planet" where it ends. Drag sideways to spin the
-/// system; it glides to rest with friction.
-class _Orbit extends StatefulWidget {
-  const _Orbit({required this.goals, required this.total});
-
-  final List<GoalProgress> goals;
-  final double total;
-
-  @override
-  State<_Orbit> createState() => _OrbitState();
-}
-
-class _OrbitState extends State<_Orbit> with TickerProviderStateMixin {
-  /// Spin angle in radians (unbounded).
-  late final AnimationController _spin = AnimationController.unbounded(vsync: this);
-  late final AnimationController _intro = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1800),
-  );
-  bool _started = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_started) return;
-    _started = true;
-    if (context.reduceMotion) {
-      _intro.value = 1;
-    } else {
-      _intro.forward();
-      // A gentle quarter turn on arrival, coming to rest by itself.
-      _spin.animateWith(FrictionSimulation(0.35, 0, 1.6));
-    }
-  }
-
-  @override
-  void dispose() {
-    _spin.dispose();
-    _intro.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
-    final rings = [
-      for (final g in widget.goals)
-        _Ring(progress: g.progress, colors: _goalColors(p, g.goal.colorIndex), seed: g.goal.id.hashCode),
-    ];
-    return Semantics(
-      label: 'Goals orbit: ${[for (final g in widget.goals) '${g.goal.name} ${formatPct(g.progress)}'].join(', ')}',
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: context.reduceMotion
-            ? null
-            : (d) {
-                _spin.stop();
-                _spin.value += d.delta.dx / 90;
-              },
-        onHorizontalDragEnd: context.reduceMotion
-            ? null
-            : (d) {
-                HapticFeedback.selectionClick();
-                _spin.animateWith(FrictionSimulation(0.2, _spin.value, (d.primaryVelocity ?? 0) / 90));
-              },
-        child: SizedBox(
-          height: 176,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Positioned.fill(
-                child: AnimatedBuilder(
-                  animation: Listenable.merge([_spin, _intro]),
-                  builder: (context, _) => CustomPaint(
-                    painter: _OrbitPainter(
-                      rings: rings,
-                      spin: _spin.value,
-                      intro: Curves.easeOutCubic.transform(_intro.value),
-                      track: p.line,
-                      core: p.gold,
-                      glow: p.auroraA,
-                    ),
-                  ),
-                ),
-              ),
-              IgnorePointer(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(formatPct(widget.total), style: t.figure.copyWith(fontSize: 24)),
-                    Text('overall', style: t.micro),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-@immutable
-class _Ring {
-  const _Ring({required this.progress, required this.colors, required this.seed});
-  final double progress;
-  final (Color, Color) colors;
-  final int seed;
-}
-
-class _OrbitPainter extends CustomPainter {
-  _OrbitPainter({
-    required this.rings,
-    required this.spin,
-    required this.intro,
-    required this.track,
-    required this.core,
-    required this.glow,
-  });
-
-  final List<_Ring> rings;
-  final double spin;
-  final double intro;
-  final Color track;
-  final Color core;
-  final Color glow;
-
-  /// Perspective: the orbital plane is tilted towards the viewer.
-  static const _tilt = 0.46;
-
-  Offset _project(Offset c, double r, double a) {
-    // Point on a circle in the plane, squashed vertically, with a touch of
-    // depth scaling so the near side reads larger.
-    final x = math.cos(a) * r;
-    final y = math.sin(a) * r * _tilt;
-    final depth = 1 + math.sin(a) * 0.06;
-    return c + Offset(x * depth, y);
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final maxR = math.min(size.width / 2 - 8, size.height / 2 / _tilt - 10);
-    final n = rings.length;
-    if (n == 0) return;
-    final step = (maxR - 46) / math.max(1, n);
-
-    // Core glow and sun.
-    canvas.drawCircle(
-      c,
-      58,
-      Paint()
-        ..shader = RadialGradient(colors: [glow.withValues(alpha: 0.9), glow.withValues(alpha: 0)])
-            .createShader(Rect.fromCircle(center: c, radius: 58)),
-    );
-
-    for (var i = 0; i < n; i++) {
-      final ring = rings[i];
-      final r = 52 + step * (i + 0.6);
-      final local = ((intro * (n + 2) - i) / 3).clamp(0.0, 1.0);
-      final rect = Rect.fromCenter(center: c, width: r * 2, height: r * 2 * _tilt);
-      canvas.drawOval(
-        rect,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1
-          ..color = track,
-      );
-      if (ring.progress <= 0.002 || local <= 0) continue;
-      final start = spin * (1 + i * 0.18) + ring.seed % 7 * 0.6;
-      final sweep = math.pi * 2 * ring.progress.clamp(0.0, 1.0) * Curves.easeOutCubic.transform(local);
-      final path = Path();
-      const segs = 72;
-      for (var s = 0; s <= segs; s++) {
-        final a = start + sweep * s / segs;
-        final pt = _project(c, r, a);
-        if (s == 0) {
-          path.moveTo(pt.dx, pt.dy);
-        } else {
-          path.lineTo(pt.dx, pt.dy);
-        }
-      }
-      final (a, b) = ring.colors;
-      canvas.drawPath(
-        path,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..strokeCap = StrokeCap.round
-          ..shader = LinearGradient(colors: [a.withValues(alpha: 0.35), b]).createShader(rect),
-      );
-      final end = _project(c, r, start + sweep);
-      canvas.drawCircle(end, 7, Paint()..color = b.withValues(alpha: 0.18));
-      canvas.drawCircle(end, 3.6, Paint()..color = b);
-    }
-    canvas.drawCircle(c, 3, Paint()..color = core.withValues(alpha: 0.0));
-  }
-
-  @override
-  bool shouldRepaint(_OrbitPainter o) => o.spin != spin || o.intro != intro || o.rings != rings || o.track != track;
-}
-
-// ---------------------------------------------------------------------------
-// Emergency fund
-// ---------------------------------------------------------------------------
-
-/// The safety net in one tappable line: a shield filling with its level,
-/// months covered and the level word.
+/// Emergency fund in one tappable line: a shield filling with its level,
+/// months covered, and the level word.
 class _EmergencyLine extends ConsumerWidget {
   const _EmergencyLine();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(emergencyStatusProvider).value;
-    if (s == null) return const LuxeShimmer(child: LuxeBone(height: 76, radius: LuxeSpace.rTile));
-    final p = context.luxe;
-    final t = context.lt;
+    if (s == null) return const CardSkeleton(height: 68);
+    final c = context.colors;
+    final t = context.text;
     final configured = s.level != EmergencyFundLevel.notConfigured;
     final color = switch (s.level) {
-      EmergencyFundLevel.critical => p.negative,
-      EmergencyFundLevel.building => p.warning,
-      EmergencyFundLevel.funded => p.positive,
-      EmergencyFundLevel.notConfigured => p.goldInk,
+      EmergencyFundLevel.critical => c.negative,
+      EmergencyFundLevel.building => c.attention,
+      EmergencyFundLevel.funded => c.positive,
+      EmergencyFundLevel.notConfigured => c.accentEmergency,
     };
     final coverage = s.coverageMonths;
     final sub = !configured
@@ -684,46 +416,42 @@ class _EmergencyLine extends ConsumerWidget {
             if (coverage != null) '${coverageLabel(coverage)} of ${s.plan!.targetMonths} covered',
             '${formatPct(s.progress)} of ${savingsMoney(context, s.target)}',
           ].join(' · ');
-    return LuxeCard(
+    return FinnCard(
       key: const ValueKey('goals-emergency-line'),
-      radius: LuxeSpace.rTile,
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      padding: const EdgeInsets.fromLTRB(Space.x3, Space.x2_5, Space.x3, Space.x2_5),
       onTap: () => context.push(AppRoutes.emergencyFund),
       semanticLabel: configured
           ? 'Emergency fund, ${s.level.label}. ${savingsMoney(context, s.saved)} saved. $sub.'
           : 'Emergency fund not set up. Tap to set it up.',
       child: Row(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(color: p.tint(color, 0.1), shape: BoxShape.circle),
-            child: Center(
-              child: ShieldFill(progress: configured ? s.progress : 0, color: color, size: 30),
-            ),
-          ),
-          const SizedBox(width: 14),
+          ShieldFill(progress: configured ? s.progress : 0, color: color, size: 40),
+          const SizedBox(width: Space.x3),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Emergency fund',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.heading.copyWith(fontSize: 15),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text('Emergency fund', maxLines: 1, overflow: TextOverflow.ellipsis, style: t.bodyStrong),
+                    ),
+                    const SizedBox(width: Space.x2),
+                    if (configured)
+                      Flexible(
+                        child: AmountText(s.saved, fit: true, style: t.label.copyWith(fontWeight: FontWeight.w800)),
+                      ),
+                  ],
                 ),
-                if (configured) AmountText(s.saved, style: t.number),
                 const SizedBox(height: 2),
                 Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.caption),
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Flexible(
-            flex: 0,
-            child: LuxeStatus(label: s.level.label, color: color, icon: emergencyLevelIcon(s.level)),
-          ),
+          const SizedBox(width: Space.x2),
+          StatusPill(label: s.level.label, color: color, icon: emergencyLevelIcon(s.level)),
+          const SizedBox(width: Space.x1),
+          Icon(LucideIcons.chevronRight, size: 16, color: c.textTertiary),
         ],
       ),
     );
@@ -734,9 +462,8 @@ class _EmergencyLine extends ConsumerWidget {
 // Goal row
 // ---------------------------------------------------------------------------
 
-/// One goal: icon in a progress ring, name and share saved, a line with a
-/// "should be here by now" tick for dated goals, one line of advice, and
-/// "+" to add money.
+/// Compact goal: icon in a progress ring, name, %, a bar with a "should be
+/// here by now" tick for dated goals, one hint line, and "+" to add money.
 class GoalRow extends StatelessWidget {
   const GoalRow({super.key, required this.progress, required this.today, this.onLongPress});
 
@@ -746,105 +473,178 @@ class GoalRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final c = context.colors;
+    final t = context.text;
     final g = progress;
     final pace = goalPaceOf(g);
-    final (a, b) = _goalColors(p, g.goal.colorIndex);
+    final accent = AccentSwatches.solid(g.goal.colorIndex);
     final active = g.goal.status == GoalStatus.active && !g.isAchieved;
     final expected = active ? expectedShare(g, today) : null;
     final date = g.goal.targetDate;
     final hint = [
       if (g.isAchieved) 'Target reached' else '${savingsMoney(context, g.remaining)} to go',
       if (date != null && !g.isAchieved) 'by ${DateFormats.shortMonthYear.format(date)}',
-      if (pace == GoalPace.behind && g.requiredMonthly != null) 'needs ${_whole(context, g.requiredMonthly!)}/mo',
+      if (pace == GoalPace.behind && g.requiredMonthly != null) 'needs ${savingsMoney(context, g.requiredMonthly!)}/mo',
     ].join(' · ');
     final archived = g.goal.status == GoalStatus.archived;
-    final paceColor = _paceColor(p, pace);
     return Semantics(
       container: true,
       label:
           '${g.goal.name}. ${savingsMoney(context, g.saved)} saved of ${savingsMoney(context, g.goal.target)}, '
           '${formatPct(g.progress)}. ${pace.label}. $hint.',
-      child: LuxeCard(
-        radius: LuxeSpace.rTile,
-        padding: const EdgeInsets.fromLTRB(14, 14, 6, 12),
-        color: archived ? p.sunk : null,
-        elevated: !archived,
-        onTap: () => context.push(AppRoutes.goal(g.goal.id)),
-        onLongPress: onLongPress,
-        child: Row(
-          children: [
-            Opacity(
-              opacity: archived ? 0.55 : 1,
-              child: LuxeRing(
-                value: g.progress,
-                color: b,
-                gradient: [a.withValues(alpha: 0.5), b, b],
-                size: 50,
-                stroke: 2.5,
-                child: Icon(CategoryIcons.of(g.goal.category.iconKey), size: 19, color: b),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: PressableScale(
+        child: Material(
+          color: archived ? c.surfaceMuted : c.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: Radii.rXl,
+            side: BorderSide(color: c.border),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              context.push(AppRoutes.goal(g.goal.id));
+            },
+            onLongPress: onLongPress == null
+                ? null
+                : () {
+                    HapticFeedback.mediumImpact();
+                    onLongPress!();
+                  },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(Space.x3, Space.x3, Space.x1, Space.x2_5),
+              child: Row(
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          g.goal.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: t.heading.copyWith(fontSize: 15),
+                  Opacity(
+                    opacity: archived ? 0.55 : 1,
+                    child: GoalRing(
+                      progress: g.progress,
+                      colors: AccentSwatches.of(g.goal.colorIndex),
+                      size: 46,
+                      stroke: 4.5,
+                      milestones: false,
+                      child: Icon(CategoryIcons.of(g.goal.category.iconKey), size: 22, color: accent),
+                    ),
+                  ),
+                  const SizedBox(width: Space.x3),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                g.goal.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: t.bodyStrong,
+                              ),
+                            ),
+                            const SizedBox(width: Space.x2),
+                            Text(
+                              formatPct(g.progress),
+                              style: t.label.copyWith(fontWeight: FontWeight.w900, color: c.textPrimary),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(formatPct(g.progress), style: t.figure.copyWith(fontSize: 20)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  LuxeProgressLine(
-                    value: g.progress,
-                    tick: expected,
-                    tickColor: p.ink,
-                    color: pace == GoalPace.done ? p.positive : b,
-                    height: 4,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(pace.icon, size: 12, color: paceColor),
-                      const SizedBox(width: 5),
-                      Expanded(
-                        child: Text(
-                          hint,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: t.caption.w(600).c(pace == GoalPace.behind ? p.warning : p.inkSoft),
+                        const SizedBox(height: Space.x1_5),
+                        _GoalBar(progress: g.progress, expected: expected, color: accent, pace: pace),
+                        const SizedBox(height: Space.x1_5),
+                        Row(
+                          children: [
+                            Icon(pace.icon, size: 12, color: pace.color(c)),
+                            const SizedBox(width: Space.x1),
+                            Expanded(
+                              child: Text(
+                                hint,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: t.caption.copyWith(
+                                  color: pace == GoalPace.behind ? c.warning : c.textSecondary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                  if (active)
+                    FinnIconButton(
+                      key: ValueKey('goal-add:${g.goal.id}'),
+                      icon: LucideIcons.plus,
+                      tooltip: 'Add money to ${g.goal.name}',
+                      size: FinnButtonSize.sm,
+                      color: accent,
+                      onPressed: () => context.push(AppRoutes.goalContribute(g.goal.id)),
+                    )
+                  else
+                    const SizedBox(width: Space.x3),
                 ],
               ),
             ),
-            if (active)
-              LuxeIconButton(
-                key: ValueKey('goal-add:${g.goal.id}'),
-                icon: LucideIcons.plus,
-                tooltip: 'Add money to ${g.goal.name}',
-                size: 38,
-                onPressed: () => context.push(AppRoutes.goalContribute(g.goal.id)),
-              )
-            else
-              const SizedBox(width: 10),
-          ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+/// Saved bar with a tick where a dated goal should be by now.
+class _GoalBar extends StatelessWidget {
+  const _GoalBar({required this.progress, required this.expected, required this.color, required this.pace});
+
+  final double progress;
+  final double? expected;
+  final Color color;
+  final GoalPace pace;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return SizedBox(
+      height: 12,
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final w = box.maxWidth;
+          return Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              Container(
+                height: 6,
+                decoration: BoxDecoration(color: c.surfaceMuted, borderRadius: Radii.rFull),
+              ),
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: progress.clamp(0.0, 1.0)),
+                duration: context.reduceMotion ? Duration.zero : const Duration(milliseconds: 900),
+                curve: Curves2.emphasized,
+                builder: (context, v, _) => Container(
+                  width: w * v,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: pace == GoalPace.done ? c.positive : color,
+                    borderRadius: Radii.rFull,
+                  ),
+                ),
+              ),
+              if (expected != null && expected! > 0 && expected! < 1)
+                Positioned(
+                  left: (w * expected!).clamp(1.0, w - 2),
+                  top: 0,
+                  bottom: 0,
+                  child: Tooltip(
+                    message: 'Where you should be by now',
+                    child: Container(
+                      width: 2,
+                      decoration: BoxDecoration(color: c.textPrimary, borderRadius: Radii.rFull),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -853,6 +653,38 @@ class GoalRow extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Pinned controls
 // ---------------------------------------------------------------------------
+
+class _BarDelegate extends SliverPersistentHeaderDelegate {
+  const _BarDelegate({required this.child});
+
+  final Widget child;
+
+  static const _height = 56.0;
+
+  @override
+  double get minExtent => _height;
+
+  @override
+  double get maxExtent => _height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final c = context.colors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: c.background,
+        border: overlapsContent ? Border(bottom: BorderSide(color: c.border)) : null,
+      ),
+      child: ResponsiveCenter(
+        padding: const EdgeInsets.symmetric(horizontal: Space.gutter, vertical: Space.x2),
+        child: child,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_BarDelegate old) => old.child != child;
+}
 
 class _Controls extends StatelessWidget {
   const _Controls({required this.counts, required this.filter, required this.onTab, required this.onOptions});
@@ -864,43 +696,103 @@ class _Controls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: DecoratedBox(
-          decoration: BoxDecoration(color: p.canvas.withValues(alpha: 0.86)),
-          child: ResponsiveCenter(
-            padding: const EdgeInsets.fromLTRB(LuxeSpace.gutter, 8, LuxeSpace.gutter - 4, 6),
-            child: Row(
+    final c = context.colors;
+    final t = context.text;
+    const tabs = GoalTab.values;
+    final index = tabs.indexOf(filter.tab);
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            height: 40,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(color: c.surfaceMuted, borderRadius: Radii.rFull),
+            child: Stack(
               children: [
-                Expanded(
-                  child: LuxeSegmented<GoalTab>(
-                    selected: filter.tab,
-                    onChanged: onTab,
-                    segments: [
-                      for (final tab in GoalTab.values)
-                        LuxeSegment(tab, tab.label, count: counts[tab] ?? 0, key: ValueKey('goal-tab:${tab.name}')),
-                    ],
+                AnimatedAlign(
+                  alignment: Alignment(-1 + 2 * index / (tabs.length - 1), 0),
+                  duration: context.motion.normal,
+                  curve: Curves2.emphasized,
+                  child: FractionallySizedBox(
+                    widthFactor: 1 / tabs.length,
+                    heightFactor: 1,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: c.isDark ? c.border : c.surface,
+                        borderRadius: Radii.rFull,
+                        boxShadow: c.isDark ? Elevation.none : Elevation.sm,
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 4),
-                LuxeIconButton(
-                  key: const ValueKey('goal-options'),
-                  icon: LucideIcons.slidersHorizontal,
-                  tooltip: 'Sort & filter',
-                  semanticLabel: filter.activeCount == 0
-                      ? 'Sort & filter'
-                      : 'Sort & filter, ${filter.activeCount} filters on',
-                  active: filter.activeCount > 0,
-                  badge: filter.activeCount,
-                  onPressed: onOptions,
+                Row(
+                  children: [
+                    for (final tab in tabs)
+                      Expanded(
+                        child: Semantics(
+                          button: true,
+                          selected: tab == filter.tab,
+                          inMutuallyExclusiveGroup: true,
+                          label: '${tab.label}, ${counts[tab] ?? 0}',
+                          excludeSemantics: true,
+                          child: GestureDetector(
+                            key: ValueKey('goal-tab:${tab.name}'),
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              if (tab == filter.tab) return;
+                              HapticFeedback.selectionClick();
+                              onTab(tab);
+                            },
+                            child: Center(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: Space.x1_5),
+                                  child: Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(text: tab.label),
+                                        TextSpan(
+                                          text: ' ${counts[tab] ?? 0}',
+                                          style: TextStyle(
+                                            color: tab == filter.tab ? c.accentGoals : c.textTertiary,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    maxLines: 1,
+                                    style: t.label.copyWith(
+                                      color: tab == filter.tab ? c.textPrimary : c.textSecondary,
+                                      fontWeight: tab == filter.tab ? FontWeight.w800 : FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),
           ),
         ),
-      ),
+        const SizedBox(width: Space.x1),
+        CountBadge(
+          count: filter.activeCount,
+          color: c.primary,
+          semanticsLabel: '${filter.activeCount} filters on',
+          child: FinnIconButton(
+            key: const ValueKey('goal-options'),
+            icon: LucideIcons.slidersHorizontal,
+            tooltip: 'Sort & filter',
+            variant: filter.activeCount > 0 ? FinnIconButtonVariant.filled : FinnIconButtonVariant.ghost,
+            onPressed: onOptions,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -915,19 +807,19 @@ class _ResultLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final c = context.colors;
+    final t = context.text;
     final f = filter;
     final removable = <(String, VoidCallback)>[
-      for (final pace in f.paces) (pace.label, () => onChanged(f.copyWith(paces: {...f.paces}..remove(pace)))),
+      for (final p in f.paces) (p.label, () => onChanged(f.copyWith(paces: {...f.paces}..remove(p)))),
       for (final k in f.categories) (k.label, () => onChanged(f.copyWith(categories: {...f.categories}..remove(k)))),
     ];
     return SizedBox(
-      height: 46,
+      height: 36,
       child: Row(
         children: [
           Text('$count ${count == 1 ? 'GOAL' : 'GOALS'}', style: t.eyebrow),
-          const SizedBox(width: 10),
+          const SizedBox(width: Space.x2),
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -935,33 +827,23 @@ class _ResultLine extends StatelessWidget {
               child: Row(
                 children: [
                   for (final (label, remove) in removable) ...[
-                    LuxeChip(
+                    FinnTapChip(
                       label: label,
                       trailing: LucideIcons.x,
-                      selected: true,
-                      height: 32,
-                      semanticLabel: 'Remove filter $label',
+                      color: c.primary,
+                      height: 28,
+                      semantics: 'Remove filter $label',
                       onTap: remove,
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: Space.x1_5),
                   ],
-                  Squish(
+                  FinnTapChip(
+                    label: f.sort.label,
+                    icon: LucideIcons.arrowDownUp,
+                    trailing: LucideIcons.chevronDown,
+                    height: 28,
+                    semantics: 'Sorted by ${f.sort.label}. Change',
                     onTap: onSort,
-                    semanticLabel: 'Sorted by ${f.sort.label}. Change',
-                    excludeSemantics: true,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 44),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(LucideIcons.arrowDownUp, size: 13, color: p.inkSoft),
-                          const SizedBox(width: 6),
-                          Text(f.sort.label, style: t.label.w(650)),
-                          const SizedBox(width: 2),
-                          Icon(LucideIcons.chevronDown, size: 14, color: p.inkSoft),
-                        ],
-                      ),
-                    ),
                   ),
                 ],
               ),
@@ -991,35 +873,34 @@ class _OptionsSheetState extends State<_OptionsSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.luxe;
-    final t = context.lt;
+    final c = context.colors;
+    final t = context.text;
     Widget section(String title, List<Widget> chips) => Padding(
-      padding: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.only(bottom: Space.x5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(title, style: t.eyebrow),
-          const SizedBox(height: 6),
-          Wrap(spacing: 8, runSpacing: 2, children: chips),
+          const SizedBox(height: Space.x2),
+          Wrap(spacing: Space.x2, runSpacing: Space.x2, children: chips),
         ],
       ),
     );
-    return LuxeSheet(
-      eyebrow: 'Goals',
+    return FinnSheetScaffold(
       title: 'Sort & filter',
       footer: Row(
         children: [
           Expanded(
-            child: LuxeButton(
+            child: FinnButton(
               label: 'Reset',
-              variant: LuxeButtonVariant.outline,
+              variant: FinnButtonVariant.outline,
               expand: true,
               onPressed: () => setState(() => _f = _f.cleared()),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: Space.x3),
           Expanded(
-            child: LuxeButton(
+            child: FinnButton(
               key: const ValueKey('goal-apply'),
               label: 'Apply',
               expand: true,
@@ -1033,34 +914,40 @@ class _OptionsSheetState extends State<_OptionsSheet> {
         children: [
           section('SORT BY', [
             for (final s in GoalSort.values)
-              LuxeChip(
+              FinnTapChip(
                 key: ValueKey('goal-sort:${s.name}'),
                 label: s.label,
                 selected: _f.sort == s,
+                color: c.primary,
+                height: 36,
                 onTap: () => setState(() => _f = _f.copyWith(sort: s)),
               ),
           ]),
           if (_f.tab == GoalTab.active)
             section('STATUS', [
-              for (final pace in [GoalPace.behind, GoalPace.onTrack, GoalPace.noPlan])
-                LuxeChip(
-                  key: ValueKey('goal-pace:${pace.name}'),
-                  label: pace.label,
-                  dot: _paceColor(p, pace),
-                  selected: _f.paces.contains(pace),
+              for (final p in [GoalPace.behind, GoalPace.onTrack, GoalPace.noPlan])
+                FinnTapChip(
+                  key: ValueKey('goal-pace:${p.name}'),
+                  label: p.label,
+                  icon: p.icon,
+                  selected: _f.paces.contains(p),
+                  color: p.color(c),
+                  height: 36,
                   onTap: () => setState(() {
                     final next = {..._f.paces};
-                    if (!next.remove(pace)) next.add(pace);
+                    if (!next.remove(p)) next.add(p);
                     _f = _f.copyWith(paces: next);
                   }),
                 ),
             ]),
           section('CATEGORY', [
             for (final k in GoalCategory.values)
-              LuxeChip(
+              FinnTapChip(
                 label: k.label,
                 icon: CategoryIcons.of(k.iconKey),
                 selected: _f.categories.contains(k),
+                color: c.accentGoals,
+                height: 36,
                 onTap: () => setState(() {
                   final next = {..._f.categories};
                   if (!next.remove(k)) next.add(k);
@@ -1078,20 +965,26 @@ class _GoalsSkeleton extends StatelessWidget {
   const _GoalsSkeleton();
 
   @override
-  Widget build(BuildContext context) => const LuxeShimmer(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        LuxeBone(height: 420, radius: LuxeSpace.rCard),
-        SizedBox(height: 12),
-        LuxeBone(height: 76, radius: LuxeSpace.rTile),
-        SizedBox(height: 18),
-        LuxeBone(height: 44, radius: 22),
-        SizedBox(height: 14),
-        LuxeBone(height: 88, radius: LuxeSpace.rTile),
-        SizedBox(height: 10),
-        LuxeBone(height: 88, radius: LuxeSpace.rTile),
-      ],
+  Widget build(BuildContext context) => const SkeletonPulse(
+    child: ResponsiveCenter(
+      padding: EdgeInsets.symmetric(horizontal: Space.gutter),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(height: Space.x4),
+          SkeletonBox(width: 160, height: 28),
+          SizedBox(height: Space.x4),
+          CardSkeleton(height: 200, radius: Radii.xxl),
+          SizedBox(height: Space.x3),
+          CardSkeleton(height: 64),
+          SizedBox(height: Space.x3),
+          SkeletonBox(height: 40, radius: Radii.full),
+          SizedBox(height: Space.x4),
+          CardSkeleton(height: 76),
+          SizedBox(height: Space.x2),
+          CardSkeleton(height: 76),
+        ],
+      ),
     ),
   );
 }
