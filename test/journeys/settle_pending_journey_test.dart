@@ -19,7 +19,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Home quick access → Pending payments → the item → Settle.
-    await scrollAndTap(tester, find.byKey(const ValueKey('quick-tile:Pending')));
+    await scrollAndTap(tester, find.byKey(const ValueKey('quick-tile:Pending payments')));
     final item = find.byKey(ValueKey(id));
     await scrollTo(tester, item);
     expect(item, findsOneWidget, reason: 'listed under Active before settling');
