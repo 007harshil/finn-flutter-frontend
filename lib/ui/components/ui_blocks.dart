@@ -11,17 +11,13 @@ import '../foundation/ui_type.dart';
 import 'ui_controls.dart';
 import 'ui_surfaces.dart';
 
-/// Screen top bar: back (when the route can be popped) or a [leading]
-/// control, a title and up to three icon actions. Flat on the page
-/// background.
+/// Screen top bar: back (when the route can be popped), a title and up to
+/// three icon actions. Flat on the page background.
 class UiTopBar extends StatelessWidget {
-  const UiTopBar({super.key, required this.title, this.actions = const [], this.leading});
+  const UiTopBar({super.key, required this.title, this.actions = const []});
 
   final String title;
   final List<Widget> actions;
-
-  /// Replaces the back button (e.g. the app menu on a tab root).
-  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -33,9 +29,7 @@ class UiTopBar extends StatelessWidget {
         height: 52,
         child: Row(
           children: [
-            if (leading != null)
-              leading!
-            else if (canPop)
+            if (canPop)
               UiIconButton(
                 icon: LucideIcons.chevronLeft,
                 tooltip: 'Back',
@@ -61,11 +55,10 @@ class UiTopBar extends StatelessWidget {
 /// Page scaffold for the kit: page colour, safe top, a [UiTopBar] and a
 /// scrolling body below it.
 class UiPage extends StatelessWidget {
-  const UiPage({super.key, required this.title, required this.body, this.actions = const [], this.leading});
+  const UiPage({super.key, required this.title, required this.body, this.actions = const []});
 
   final String title;
   final List<Widget> actions;
-  final Widget? leading;
   final Widget body;
 
   @override
@@ -77,7 +70,7 @@ class UiPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            UiTopBar(title: title, actions: actions, leading: leading),
+            UiTopBar(title: title, actions: actions),
             Expanded(child: body),
           ],
         ),
@@ -273,14 +266,11 @@ class UiProgress extends StatelessWidget {
 /// One option of a [UiSegmented].
 @immutable
 class UiSegment<T> {
-  const UiSegment(this.value, this.label, {this.count, this.key});
+  const UiSegment(this.value, this.label, {this.count});
 
   final T value;
   final String label;
   final int? count;
-
-  /// Key for the tappable segment (finders, analytics).
-  final Key? key;
 }
 
 /// Quiet segmented control: equal segments on a muted track; the chosen
@@ -312,7 +302,6 @@ class UiSegmented<T> extends StatelessWidget {
                 label: s.count == null ? s.label : '${s.label}, ${s.count}',
                 excludeSemantics: true,
                 child: GestureDetector(
-                  key: s.key,
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
                     if (s.value == selected) return;
@@ -564,14 +553,10 @@ class UiChipButton extends StatelessWidget {
     this.color,
     this.semanticLabel,
     this.trailingIcon,
-    this.selected = false,
   });
 
   final String label;
   final VoidCallback onTap;
-
-  /// Solid ink pill: the filter this chip stands for is on.
-  final bool selected;
 
   /// Small icon after the label (e.g. a cross on a removable filter).
   final IconData? trailingIcon;
@@ -584,13 +569,10 @@ class UiChipButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = UiColors.of(context);
     final t = UiType.of(context);
-    final fg = selected ? c.page : (color ?? c.ink);
-    final bg = selected
-        ? c.ink
-        : (color == null ? c.muted : Color.alphaBlend(fg.withValues(alpha: c.dark ? 0.18 : 0.10), c.surface));
+    final fg = color ?? c.ink;
+    final bg = color == null ? c.muted : Color.alphaBlend(fg.withValues(alpha: c.dark ? 0.18 : 0.10), c.surface);
     return Semantics(
       button: true,
-      selected: selected,
       label: semanticLabel,
       excludeSemantics: semanticLabel != null,
       child: InkResponse(
@@ -678,15 +660,11 @@ class UiSearchField extends StatefulWidget {
     required this.hint,
     required this.onChanged,
     required this.onClose,
-    this.initialValue = '',
     this.autofocus = true,
     this.debounce = const Duration(milliseconds: 250),
   });
 
   final String hint;
-
-  /// Text already searched for when the field opens.
-  final String initialValue;
   final ValueChanged<String> onChanged;
   final VoidCallback onClose;
   final bool autofocus;
@@ -698,12 +676,10 @@ class UiSearchField extends StatefulWidget {
 
 class _UiSearchFieldState extends State<UiSearchField> {
   Timer? _timer;
-  late final TextEditingController _text = TextEditingController(text: widget.initialValue);
 
   @override
   void dispose() {
     _timer?.cancel();
-    _text.dispose();
     super.dispose();
   }
 
@@ -729,7 +705,6 @@ class _UiSearchFieldState extends State<UiSearchField> {
                 const SizedBox(width: UiSpace.sm),
                 Expanded(
                   child: TextField(
-                    controller: _text,
                     autofocus: widget.autofocus,
                     onChanged: _changed,
                     style: t.body,
@@ -871,65 +846,6 @@ class UiProgressFooter extends StatelessWidget {
           ],
         ),
       ],
-    );
-  }
-}
-
-/// "‹ October 2026 ›": steps through periods. A null [onPrevious] or
-/// [onNext] keeps the arrow in place but disabled; [onLabel] makes the
-/// label itself a button (e.g. to pick a custom range). [trailing] sits at
-/// the far end (a calendar or clear button).
-class UiPeriodStepper extends StatelessWidget {
-  const UiPeriodStepper({
-    super.key,
-    required this.label,
-    required this.onPrevious,
-    required this.onNext,
-    this.onLabel,
-    this.labelHint,
-    this.trailing,
-  });
-
-  final String label;
-  final VoidCallback? onPrevious;
-  final VoidCallback? onNext;
-  final VoidCallback? onLabel;
-  final String? labelHint;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = UiType.of(context);
-    final tap = onLabel;
-    final text = Text(label, style: t.body.copyWith(fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis);
-    final end = trailing;
-    return SizedBox(
-      height: UiSpace.touch,
-      child: Row(
-        children: [
-          UiStepButton(icon: LucideIcons.chevronLeft, tooltip: 'Previous', onPressed: onPrevious),
-          Flexible(
-            child: tap == null
-                ? Semantics(liveRegion: true, child: text)
-                : Semantics(
-                    button: true,
-                    liveRegion: true,
-                    hint: labelHint,
-                    child: InkWell(
-                      onTap: tap,
-                      borderRadius: UiRadius.chip,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: UiSpace.xs, vertical: UiSpace.sm),
-                        child: text,
-                      ),
-                    ),
-                  ),
-          ),
-          UiStepButton(icon: LucideIcons.chevronRight, tooltip: 'Next', onPressed: onNext),
-          const Spacer(),
-          ?end,
-        ],
-      ),
     );
   }
 }

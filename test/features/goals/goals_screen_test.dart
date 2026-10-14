@@ -20,14 +20,14 @@ Future<void> _settle(WidgetTester tester) async {
 
 void main() {
   group('GoalsScreen', () {
-    testWidgets('summary, emergency line, tabs and status chips', (tester) async {
+    testWidgets('board, emergency line, tabs and status shortcuts', (tester) async {
       _tallView(tester);
       final env = await TestEnv.create();
       final board = buildGoalsBoard(await env.snapshot());
       await env.pumpWidget(tester, const GoalsScreen());
       await tester.pumpAndSettle();
 
-      expect(find.text('Saved for goals'), findsOneWidget);
+      expect(find.text('SAVED FOR YOUR GOALS'), findsOneWidget);
       expect(find.byKey(const ValueKey('goals-emergency-line')), findsOneWidget);
       for (final g in board.active) {
         expect(find.byKey(ValueKey(g.goal.id)), findsOneWidget);
@@ -43,14 +43,12 @@ void main() {
         expect(find.byKey(ValueKey('goal-add:${g.goal.id}')), findsNothing);
       }
 
-      // Back on active goals, a status chip narrows the list to that status.
-      await tester.tap(find.byKey(const ValueKey('goal-tab:active')));
-      await tester.pumpAndSettle();
+      // A status shortcut jumps back to active goals with that status.
       final pace = [GoalPace.behind, GoalPace.onTrack, GoalPace.noPlan].firstWhere((p) => board.count(p) > 0);
       await tester.tap(find.byKey(ValueKey('goal-attn:${pace.name}')));
       await tester.pumpAndSettle();
       final n = board.count(pace);
-      expect(find.text('$n ${n == 1 ? 'goal' : 'goals'}'), findsOneWidget);
+      expect(find.text('$n ${n == 1 ? 'GOAL' : 'GOALS'}'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -72,8 +70,8 @@ void main() {
       await env.pumpWidget(tester, const GoalDetailScreen(id: id));
       await tester.pumpAndSettle();
 
-      expect(find.text('Plan'), findsWidgets);
-      expect(find.text('If I put in'), findsOneWidget);
+      expect(find.text('PATH TO YOUR GOAL'), findsOneWidget);
+      expect(find.text('WHAT IF I PUT IN'), findsOneWidget);
       expect(find.text('Add money'), findsOneWidget);
       expect(find.byKey(const ValueKey('goal-use-plan')), findsNothing, reason: 'slider starts at the current plan');
 

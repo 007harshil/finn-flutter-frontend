@@ -6,8 +6,11 @@ import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
+import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
 import '../../../shared/presentation/action_runner.dart';
+import '../../emergency_fund/domain/emergency_fund.dart';
+import '../domain/goal.dart';
 
 /// Shared presentation pieces for earmarked savings (goals and the
 /// emergency fund).
@@ -20,6 +23,114 @@ String savingsMoney(BuildContext context, Money m, {SignDisplay sign = SignDispl
 String coverageLabel(double months) {
   final s = months.toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '');
   return '$s month${months == 1 ? '' : 's'}';
+}
+
+/// Hero gradient for an emergency-fund level, derived from semantic tokens.
+Gradient emergencyGradient(FinnColors c, EmergencyFundLevel level) {
+  Color base;
+  switch (level) {
+    case EmergencyFundLevel.notConfigured:
+      return c.heroGradient;
+    case EmergencyFundLevel.critical:
+      base = c.negative;
+    case EmergencyFundLevel.building:
+      base = c.attention;
+    case EmergencyFundLevel.funded:
+      base = c.positive;
+  }
+  return LinearGradient(
+    colors: [base, Color.lerp(base, c.heroEnd, 0.6)!],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+}
+
+IconData emergencyLevelIcon(EmergencyFundLevel level) => switch (level) {
+      EmergencyFundLevel.notConfigured => LucideIcons.shieldCheck,
+      EmergencyFundLevel.critical => LucideIcons.shieldAlert,
+      EmergencyFundLevel.building => LucideIcons.shieldCheck,
+      EmergencyFundLevel.funded => LucideIcons.circleCheck,
+    };
+
+/// Translucent pill for use on gradient cards.
+class OnGradientPill extends StatelessWidget {
+  const OnGradientPill({super.key, required this.label, this.icon});
+
+  final String label;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: Space.x2, vertical: Space.x1),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: Radii.rFull),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 12, color: Colors.white),
+              const SizedBox(width: Space.x1),
+            ],
+            Text(
+              label,
+              style: context.text.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 0.4),
+            ),
+          ],
+        ),
+      );
+}
+
+/// One contribution or withdrawal.
+class SavingsMovementTile extends StatelessWidget {
+  const SavingsMovementTile({super.key, required this.movement});
+
+  final SavingsMovement movement;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final t = context.text;
+    final m = movement;
+    final contribution = m.kind == SavingsMovementKind.contribution;
+    final title = contribution ? 'Added' : 'Withdrawn';
+    final subtitle = [
+      DateFormats.dayMonthYear.format(m.date),
+      if (m.note != null && m.note!.isNotEmpty) m.note!,
+    ].join(' · ');
+    return MergeSemantics(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: Space.x2_5),
+        child: Row(
+          children: [
+            IconTile(
+              icon: contribution ? LucideIcons.arrowDownLeft : LucideIcons.arrowUpRight,
+              background: contribution ? c.positiveSoft : c.surfaceMuted,
+              foreground: contribution ? c.positive : c.textSecondary,
+              size: 36,
+              radius: Radii.lg,
+              iconSize: 16,
+            ),
+            const SizedBox(width: Space.x3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: t.bodyStrong),
+                  const SizedBox(height: 2),
+                  Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.caption),
+                ],
+              ),
+            ),
+            const SizedBox(width: Space.x3),
+            AmountText(
+              m.signedAmount,
+              sign: SignDisplay.always,
+              style: t.amountSmall.copyWith(color: contribution ? c.positive : c.textPrimary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Values captured by [SavingsMovementForm].

@@ -124,7 +124,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('Review this change'), findsOneWidget);
-      expect(find.text('Transactions · New'), findsOneWidget);
+      expect(find.text('TRANSACTIONS · NEW'), findsOneWidget);
       expect(find.textContaining('450'), findsWidgets);
       expect(find.byTooltip('Stop'), findsOneWidget);
 
@@ -135,15 +135,15 @@ void main() {
 
       // The card stays with its outcome; no second summary card repeats it.
       expect(find.text('Change saved'), findsOneWidget);
-      expect(find.text('Transactions · New'), findsOneWidget);
+      expect(find.text('TRANSACTIONS · NEW'), findsOneWidget);
       expect(find.text('₹450 on Food & Dining added as an expense.'), findsNothing);
-      expect(find.text('Saved'), findsOneWidget);
+      expect(find.text('SAVED'), findsOneWidget);
       // The saved record links to its detail screen.
       expect(find.text('View'), findsOneWidget);
       expect(find.byTooltip('Send'), findsOneWidget);
     });
 
-    testWidgets('a declined card stays marked; Retry regenerates it in place', (tester) async {
+    testWidgets('a declined card stays stamped; Retry regenerates it in place in its own colours', (tester) async {
       final env = await TestEnv.create();
       final provider = ScriptedProvider([
         plan([lunch()]),
@@ -161,15 +161,15 @@ void main() {
       await tester.pump();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.text('Declined'), findsOneWidget, reason: 'the card stays, marked declined');
-      expect(find.text('Transactions · New'), findsOneWidget);
+      expect(find.text('DECLINED'), findsOneWidget, reason: 'the card stays, stamped');
+      expect(find.text('TRANSACTIONS · NEW'), findsOneWidget);
       expect(find.text('No changes made'), findsNothing, reason: 'no separate outcome card');
       expect(find.text('Retry'), findsOneWidget);
 
       await tester.tap(find.text('Retry'));
       await tester.pump();
       await tester.pump();
-      expect(find.text('Regenerated · try 2'), findsOneWidget);
+      expect(find.text('REGENERATED · TRY 2'), findsOneWidget);
       expect(find.text('Review this change'), findsOneWidget);
       expect(provider.requests.last.messages.first.content, contains('Redo: the user declined'));
 
@@ -178,8 +178,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('Change saved'), findsOneWidget);
-      expect(find.text('Saved'), findsOneWidget);
-      expect(find.text('Regenerated · try 2'), findsOneWidget, reason: 'still marked as regenerated');
+      expect(find.text('SAVED'), findsOneWidget);
+      expect(find.text('REGENERATED · TRY 2'), findsOneWidget, reason: 'still marked as regenerated');
       final saved = (await env.snapshot()).transactions.where((t) => t.note == 'lunch').single;
       expect(saved.categoryId, 'cat_groceries');
     });
@@ -223,7 +223,7 @@ void main() {
       expect((await env.snapshot()).transactions.length, before + 2);
     });
 
-    testWidgets('while the agent works, a working line says what is happening (full motion)', (tester) async {
+    testWidgets('while the agent works, the animated FiNN canvas says what is happening (full motion)', (tester) async {
       final env = await TestEnv.create();
       final reply = Completer<LlmResponse>();
       final provider = ScriptedProvider(const []);

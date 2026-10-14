@@ -1,6 +1,5 @@
 import 'package:finn/data/local/local_data_store.dart';
 import 'package:finn/features/transactions/application/transaction_filter.dart';
-import 'package:finn/features/transactions/domain/transaction.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,7 +8,7 @@ import '../helpers/test_app.dart';
 import 'journey_helpers.dart';
 
 void main() {
-  testWidgets('activity totals, search and filters narrow the list', (tester) async {
+  testWidgets('activity summary explains the month and filters narrow the list', (tester) async {
     final env = await TestEnv.create();
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
@@ -18,27 +17,33 @@ void main() {
     ProviderContainer container() => ProviderScope.containerOf(tester.element(find.byKey(const ValueKey('activity-filters'))));
     TransactionFilter filter() => container().read(transactionFilterProvider);
 
-    // In / out figures double as the type filter.
+    // One-line verdict plus in/out figures.
+    expect(find.textContaining(RegExp(r'^(Kept|Overspent|Spent|Earned)')), findsWidgets);
     expect(find.text('In'), findsOneWidget);
     expect(find.text('Out'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('activity-in')));
-    await tester.pumpAndSettle();
-    expect(filter().type, TransactionType.income);
-    await tester.tap(find.byKey(const ValueKey('activity-in')));
-    await tester.pumpAndSettle();
-    expect(filter().type, isNull);
 
-    // Search opens in place and narrows by text; closing clears it.
-    await tester.tap(find.byKey(const ValueKey('activity-search')));
+    // Daily details open and close.
+    await tester.tap(find.byKey(const ValueKey('pulse-details')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'zzzz-no-match');
-    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('No-spend days'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('pulse-details')));
     await tester.pumpAndSettle();
-    expect(filter().query, 'zzzz-no-match');
-    expect(find.text('No matches'), findsOneWidget);
-    await tester.tap(find.byTooltip('Close search').first);
-    await tester.pumpAndSettle();
-    expect(filter().query, isEmpty);
+    expect(find.text('No-spend days'), findsNothing);
+
+    // Tapping a legend chip filters to that category; its chip appears up top.
+    final legend = find.byWidgetPredicate((w) => w.key is ValueKey<String> &&
+        (w.key! as ValueKey<String>).value.startsWith('pulse-legend:') &&
+        !(w.key! as ValueKey<String>).value.endsWith('_other'));
+    if (legend.evaluate().isNotEmpty) {
+      await tester.tap(legend.first);
+      await tester.pumpAndSettle();
+      expect(filter().categoryIds, hasLength(1));
+      final chip = find.byKey(ValueKey('active-filter:cat:${filter().categoryIds.single}'));
+      expect(chip, findsOneWidget);
+      await tester.tap(chip);
+      await tester.pumpAndSettle();
+      expect(filter().categoryIds, isEmpty);
+    }
 
     // Filter sheet: amount preset, payment method, live count, apply.
     await tester.tap(find.byKey(const ValueKey('activity-filters')));
@@ -65,11 +70,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  // Small phone + heavy data: summary, list and filter sheet must not overflow.
+  // Small phone + heavy data: summary, details and filter sheet must not overflow.
   testWidgets('activity lays out at 320 px wide (stressed data)', (tester) async {
     tester.view.physicalSize = const Size(320, 640) * tester.view.devicePixelRatio;
     addTearDown(tester.view.resetPhysicalSize);
-    // Full motion: entrance animations must also finish and settle.
+    // Full motion: the bar/chart animations must also finish and settle.
     final env = await TestEnv.create(
       scenario: DataScenario.stressed,
       prefsValues: {'finn.settings.v1': '{"onboardingComplete":true,"motion":"full"}'},
@@ -77,6 +82,8 @@ void main() {
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
     await tapTab(tester, 'Activity');
+    await tester.tap(find.byKey(const ValueKey('pulse-details')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('activity-filters')));
     await tester.pumpAndSettle();
     final more = find.byKey(const ValueKey('filter-category-more'));
