@@ -25,7 +25,7 @@ void main() {
         .signIn(AuthSession(email: 'aarav@example.com', signedInAt: testNow));
     await settle(tester);
     expect(find.byType(LoginScreen), findsNothing);
-    expect(find.text('Available to spend'), findsOneWidget);
+    expect(find.text('AVAILABLE TO SPEND'), findsOneWidget);
   });
 
   testWidgets('signed in but not set up: onboarding comes next', (tester) async {

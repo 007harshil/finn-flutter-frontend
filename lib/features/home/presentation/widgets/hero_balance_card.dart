@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,12 +11,11 @@ import '../../../../core/money/money_format.dart';
 import '../../../../design_system/design_system.dart';
 import '../../../../finance/ledger.dart';
 import '../../../../shared/presentation/async_view.dart';
-import '../../../../ui/ui.dart';
 
-/// The one number that matters: what is free to spend. Below it, a thin bar
-/// of all cash with the set-aside part beside the free part, and the two
-/// totals. Tapping the totals swaps "set aside" for its goals / emergency
-/// split; the info button explains the maths.
+/// "Available to spend" hero: one number, and a bar that is your cash with
+/// the set-aside part hatched out, so the gap between the two reads at a
+/// glance. Tap the bar to split set-aside money into goals and emergencies;
+/// tap anywhere else for the full maths.
 class HeroBalanceCard extends ConsumerWidget {
   const HeroBalanceCard({super.key});
 
@@ -22,270 +23,249 @@ class HeroBalanceCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return AsyncView<BalanceSnapshot>(
       value: ref.watch(balanceProvider),
-      loading: const _HeroPlaceholder(),
-      builder: (context, b) => _Hero(balance: b),
+      loading: const SkeletonPulse(child: CardSkeleton(height: 168, radius: Radii.xxxl)),
+      builder: (context, b) => _HeroContent(balance: b),
     );
   }
 }
 
-class _Hero extends StatefulWidget {
-  const _Hero({required this.balance});
-
-  final BalanceSnapshot balance;
-
-  @override
-  State<_Hero> createState() => _HeroState();
-}
-
-class _HeroState extends State<_Hero> {
-  bool _split = false;
-
-  void _openBreakdown() => showFinnSheet<void>(context, builder: (_) => BalanceBreakdownSheet(balance: widget.balance));
-
-  @override
-  Widget build(BuildContext context) {
-    final c = UiColors.of(context);
-    final t = UiType.of(context);
-    final b = widget.balance;
-    final over = b.available.isNegative;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: UiSpace.xs),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Text('Available to spend', style: t.label),
-              const Spacer(),
-              _InfoButton(onTap: _openBreakdown),
-            ],
-          ),
-          Semantics(
-            button: true,
-            hint: 'Shows how this is calculated',
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _openBreakdown,
-              child: AnimatedAmount(
-                b.available,
-                style: t.amount.copyWith(color: over ? c.negative : c.ink),
-                decimals: DecimalDisplay.none,
-                fit: true,
-                animateOnMount: true,
-              ),
-            ),
-          ),
-          if (over) ...[
-            const SizedBox(height: UiSpace.xs),
-            Text('More is set aside than you have in cash', style: t.small.copyWith(color: c.negative)),
-          ],
-          const SizedBox(height: UiSpace.lg),
-          _CashBar(shares: _Shares.of(b), split: _split),
-          const SizedBox(height: UiSpace.xs),
-          _Totals(
-            balance: b,
-            split: _split,
-            onToggle: () {
-              HapticFeedback.selectionClick();
-              setState(() => _split = !_split);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoButton extends StatelessWidget {
-  const _InfoButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'How this is calculated',
-      child: InkResponse(
-        radius: 22,
-        onTap: onTap,
-        child: SizedBox.square(
-          dimension: 44,
-          child: Icon(LucideIcons.info, size: 18, color: UiColors.of(context).inkSoft),
-        ),
-      ),
-    );
-  }
-}
-
-/// "Cash · Set aside", or "Goals · Emergency fund" once split. The whole
-/// row is one toggle.
-class _Totals extends StatelessWidget {
-  const _Totals({required this.balance, required this.split, required this.onToggle});
-
-  final BalanceSnapshot balance;
-  final bool split;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = UiColors.of(context);
-    final b = balance;
-    final (left, right) = split
-        ? (
-            _Stat(label: 'Goals', amount: b.earmarkedGoals, dot: c.goals),
-            _Stat(label: 'Emergency fund', amount: b.earmarkedEmergency, dot: c.emergency, end: true),
-          )
-        : (
-            _Stat(label: 'Cash', amount: b.cash, dot: c.ink),
-            _Stat(label: 'Set aside', amount: b.earmarked, dot: c.inkFaint, end: true),
-          );
-    return Semantics(
-      button: true,
-      toggled: split,
-      hint: split ? 'Shows cash and set aside' : 'Splits set aside into goals and emergency fund',
-      child: InkWell(
-        onTap: onToggle,
-        borderRadius: UiRadius.control,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: UiSpace.sm),
-          child: AnimatedSwitcher(
-            duration: UiMotion.of(context).normal,
-            switchInCurve: Curves.easeOutCubic,
-            transitionBuilder: (child, a) => FadeTransition(opacity: a, child: child),
-            child: Row(
-              key: ValueKey(split),
-              children: [
-                Expanded(child: left),
-                const SizedBox(width: UiSpace.md),
-                Expanded(child: right),
-                const SizedBox(width: UiSpace.xs),
-                ExcludeSemantics(
-                  child: Icon(split ? LucideIcons.chevronUp : LucideIcons.chevronDown, size: 16, color: c.inkSoft),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.amount, required this.dot, this.end = false});
-
-  final String label;
-  final Money amount;
-  final Color dot;
-  final bool end;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = UiType.of(context);
-    return MergeSemantics(
-      child: Column(
-        crossAxisAlignment: end ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(label, style: t.small, maxLines: 1, overflow: TextOverflow.ellipsis),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          AmountText(
-            amount,
-            style: t.figureSmall,
-            decimals: DecimalDisplay.none,
-            fit: true,
-            textAlign: end ? TextAlign.end : null,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Shares of all cash, each 0..1. When more is set aside than there is
-/// cash, the set-aside parts fill the bar.
+/// Shares of the bar, each 0..1. The bar is cash; when more is set aside
+/// than there is cash, the set-aside parts fill it and [over] is true.
 @immutable
 class _Shares {
-  const _Shares(this.free, this.goals, this.emergency);
+  const _Shares({required this.free, required this.goals, required this.emergency, required this.over});
 
   factory _Shares.of(BalanceSnapshot b) {
     final over = b.available.isNegative;
     final base = over ? b.earmarked.paise : b.cash.paise;
-    if (base <= 0) return const _Shares(0, 0, 0);
+    if (base <= 0) return const _Shares(free: 0, goals: 0, emergency: 0, over: false);
     double share(int paise) => (paise / base).clamp(0.0, 1.0);
     return _Shares(
-      over ? 0 : share(b.available.paise),
-      share(b.earmarkedGoals.paise),
-      share(b.earmarkedEmergency.paise),
+      free: over ? 0 : share(b.available.paise),
+      goals: share(b.earmarkedGoals.paise),
+      emergency: share(b.earmarkedEmergency.paise),
+      over: over,
     );
   }
 
   final double free;
   final double goals;
   final double emergency;
+  final bool over;
 
-  _Shares lerpTo(_Shares o, double t) =>
-      _Shares(free + (o.free - free) * t, goals + (o.goals - goals) * t, emergency + (o.emergency - emergency) * t);
+  static _Shares lerp(_Shares a, _Shares b, double t) => _Shares(
+        free: a.free + (b.free - a.free) * t,
+        goals: a.goals + (b.goals - a.goals) * t,
+        emergency: a.emergency + (b.emergency - a.emergency) * t,
+        over: t < 0.5 ? a.over : b.over,
+      );
+
+  /// "11%", "<1%" for a sliver, "0%".
+  String get freeLabel {
+    final pct = free * 100;
+    if (pct > 0 && pct < 1) return '<1%';
+    return '${pct.round()}%';
+  }
 
   @override
   bool operator ==(Object other) =>
-      other is _Shares && other.free == free && other.goals == goals && other.emergency == emergency;
+      other is _Shares &&
+      other.free == free &&
+      other.goals == goals &&
+      other.emergency == emergency &&
+      other.over == over;
 
   @override
-  int get hashCode => Object.hash(free, goals, emergency);
+  int get hashCode => Object.hash(free, goals, emergency, over);
 }
 
 class _SharesTween extends Tween<_Shares> {
-  _SharesTween(_Shares end) : super(begin: const _Shares(0, 0, 0), end: end);
+  _SharesTween({required _Shares super.end}) : super(begin: end);
 
   @override
-  _Shares lerp(double t) => begin!.lerpTo(end!, t);
+  _Shares lerp(double t) => _Shares.lerp(begin!, end!, t);
 }
 
-/// Whole width = cash. Ink = free to spend; the rest = set aside, neutral
-/// until split, then coloured by purpose.
-class _CashBar extends StatelessWidget {
-  const _CashBar({required this.shares, required this.split});
+class _HeroContent extends StatefulWidget {
+  const _HeroContent({required this.balance});
 
-  final _Shares shares;
-  final bool split;
+  final BalanceSnapshot balance;
+
+  @override
+  State<_HeroContent> createState() => _HeroContentState();
+}
+
+class _HeroContentState extends State<_HeroContent> {
+  bool _split = false;
+
+  void _toggle() {
+    HapticFeedback.selectionClick();
+    setState(() => _split = !_split);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final c = UiColors.of(context);
-    final m = UiMotion.of(context);
-    return ExcludeSemantics(
-      child: TweenAnimationBuilder<_Shares>(
-        tween: _SharesTween(shares),
-        duration: m.settle,
-        curve: UiMotion.ease,
-        builder: (context, s, _) => TweenAnimationBuilder<double>(
-          tween: Tween(end: split ? 1 : 0),
-          duration: m.normal,
-          curve: Curves.easeOutCubic,
-          builder: (context, k, _) => CustomPaint(
-            size: const Size.fromHeight(6),
-            painter: _BarPainter(
-              shares: s,
-              split: k,
-              track: c.muted,
-              free: c.ink,
-              aside: c.inkFaint.withValues(alpha: 0.55),
-              goals: c.goals,
-              emergency: c.emergency,
+    final t = context.text;
+    final b = widget.balance;
+    final shares = _Shares.of(b);
+    final hidden = AmountVisibility.hiddenOf(context);
+    const soft = Colors.white70;
+    return GradientHeroCard(
+      watermark: LucideIcons.wallet,
+      padding: const EdgeInsets.fromLTRB(Space.x5, Space.x4, Space.x5, Space.x4),
+      semanticLabel: 'Available to spend. Double tap for the full breakdown.',
+      onTap: () => showFinnSheet<void>(context, builder: (_) => BalanceBreakdownSheet(balance: b)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('AVAILABLE TO SPEND', style: t.eyebrow.copyWith(color: soft)),
+              ),
+              const Icon(LucideIcons.info, size: 16, color: soft),
+            ],
+          ),
+          const SizedBox(height: Space.x1),
+          Row(
+            children: [
+              Expanded(
+                child: AnimatedAmount(
+                  b.available,
+                  style: t.amountHero.copyWith(color: Colors.white),
+                  decimals: DecimalDisplay.none,
+                  fit: true,
+                  animateOnMount: true,
+                ),
+              ),
+              if (!hidden && (b.cash.isPositive || shares.over)) ...[
+                const SizedBox(width: Space.x3),
+                _FreeChip(shares: shares),
+              ],
+            ],
+          ),
+          const SizedBox(height: Space.x3),
+          _AllocationPanel(balance: b, shares: shares, split: _split, onToggle: _toggle),
+        ],
+      ),
+    );
+  }
+}
+
+/// "11% free", or a warning when set-aside money exceeds cash.
+class _FreeChip extends StatelessWidget {
+  const _FreeChip({required this.shares});
+
+  final _Shares shares;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final t = context.text;
+    final over = shares.over;
+    final fg = over ? c.warning : Colors.white;
+    return Semantics(
+      label: over ? 'More is set aside than you have in cash' : '${shares.freeLabel} of your cash is free to spend',
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: Space.x2_5, vertical: Space.x1),
+        decoration: BoxDecoration(
+          color: fg.withValues(alpha: over ? 0.18 : 0.1),
+          borderRadius: Radii.rFull,
+          border: Border.all(color: fg.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(over ? LucideIcons.triangleAlert : LucideIcons.sparkles, size: 12, color: fg),
+            const SizedBox(width: Space.x1),
+            Text(
+              over ? 'Over-committed' : '${shares.freeLabel} of cash',
+              style: t.micro.copyWith(color: fg, fontWeight: FontWeight.w800),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The cash bar plus its legend. Tapping toggles the goals / emergency split.
+class _AllocationPanel extends StatelessWidget {
+  const _AllocationPanel({required this.balance, required this.shares, required this.split, required this.onToggle});
+
+  final BalanceSnapshot balance;
+  final _Shares shares;
+  final bool split;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final motion = context.motion;
+    final legend = split
+        ? Row(
+            key: const ValueKey('split'),
+            children: [
+              Expanded(
+                child: _HeroStat(label: 'For goals', amount: balance.earmarkedGoals, dot: c.accentGoals),
+              ),
+              const SizedBox(width: Space.x3),
+              Expanded(
+                child: _HeroStat(
+                  label: 'Emergency fund',
+                  amount: balance.earmarkedEmergency,
+                  dot: c.accentEmergency,
+                  end: true,
+                  expanded: true,
+                ),
+              ),
+            ],
+          )
+        : Row(
+            key: const ValueKey('cash'),
+            children: [
+              Expanded(
+                child: _HeroStat(label: 'Cash · bank & wallet', amount: balance.cash),
+              ),
+              const SizedBox(width: Space.x3),
+              Expanded(
+                child: _HeroStat(label: 'Set aside', amount: balance.earmarked, icon: LucideIcons.lock, end: true),
+              ),
+            ],
+          );
+    return Semantics(
+      button: true,
+      toggled: split,
+      label: 'Split set-aside money into goals and emergencies',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onToggle,
+        child: Padding(
+          padding: const EdgeInsets.only(top: Space.x1),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TweenAnimationBuilder<_Shares>(
+                tween: _SharesTween(end: shares),
+                duration: motion.slow,
+                curve: motion.standard,
+                builder: (context, s, _) => _AllocationBar(shares: s, split: split),
+              ),
+              const SizedBox(height: Space.x2_5),
+              AnimatedSwitcher(
+                duration: motion.normal,
+                switchInCurve: motion.standard,
+                transitionBuilder: (child, a) => FadeTransition(
+                  opacity: a,
+                  child: SlideTransition(
+                    position: Tween(begin: const Offset(0, 0.25), end: Offset.zero).animate(a),
+                    child: child,
+                  ),
+                ),
+                child: legend,
+              ),
+            ],
           ),
         ),
       ),
@@ -293,75 +273,252 @@ class _CashBar extends StatelessWidget {
   }
 }
 
-class _BarPainter extends CustomPainter {
-  _BarPainter({
-    required this.shares,
-    required this.split,
-    required this.track,
-    required this.free,
-    required this.aside,
-    required this.goals,
-    required this.emergency,
-  });
+/// Whole width = cash. Bright part = free to spend; hatched part = set
+/// aside (locked). Sweeps in once, then a single highlight crosses the free
+/// part. In split mode the hatched part separates into goals / emergency.
+class _AllocationBar extends StatefulWidget {
+  const _AllocationBar({required this.shares, required this.split});
 
   final _Shares shares;
-  final double split;
-  final Color track;
+  final bool split;
+
+  @override
+  State<_AllocationBar> createState() => _AllocationBarState();
+}
+
+class _AllocationBarState extends State<_AllocationBar> with TickerProviderStateMixin {
+  // Sweep-in then one highlight pass, both on [_intro]. Finite, so
+  // pumpAndSettle and battery are unaffected.
+  late final AnimationController _intro =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
+  late final AnimationController _split = AnimationController(vsync: this, value: widget.split ? 1 : 0);
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final m = context.motion;
+    _split.duration = m.slow;
+    if (!_started) {
+      _started = true;
+      if (m.reduced) {
+        _intro.value = 1;
+      } else {
+        _intro.forward();
+      }
+    } else if (m.reduced) {
+      _intro.value = 1;
+    }
+  }
+
+  @override
+  void didUpdateWidget(_AllocationBar old) {
+    super.didUpdateWidget(old);
+    if (old.split != widget.split) {
+      _split.animateTo(widget.split ? 1 : 0, curve: Curves2.emphasized);
+    }
+  }
+
+  @override
+  void dispose() {
+    _intro.dispose();
+    _split.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return RepaintBoundary(
+      child: SizedBox(
+        height: 12,
+        width: double.infinity,
+        child: CustomPaint(
+          painter: _AllocationPainter(
+            intro: _intro,
+            split: _split,
+            shares: widget.shares,
+            free: c.positive,
+            goals: c.accentGoals,
+            emergency: c.accentEmergency,
+            warning: c.warning,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AllocationPainter extends CustomPainter {
+  _AllocationPainter({
+    required this.intro,
+    required this.split,
+    required this.shares,
+    required this.free,
+    required this.goals,
+    required this.emergency,
+    required this.warning,
+  }) : super(repaint: Listenable.merge([intro, split]));
+
+  final Animation<double> intro;
+  final Animation<double> split;
+  final _Shares shares;
   final Color free;
-  final Color aside;
   final Color goals;
   final Color emergency;
+  final Color warning;
+
+  static const _sweep = Interval(0, 0.6, curve: Curves2.emphasized);
+  static const _shine = Interval(0.55, 1, curve: Curves.easeInOut);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final r = Radius.circular(size.height / 2);
-    final whole = RRect.fromRectAndRadius(Offset.zero & size, r);
-    canvas.drawRRect(whole, Paint()..color = track);
+    final w = size.width;
+    final h = size.height;
+    final track = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(h / 2));
+    canvas.drawRRect(track, Paint()..color = Colors.white.withValues(alpha: 0.1));
+
+    final reveal = _sweep.transform(intro.value);
+    if (reveal <= 0) return;
     canvas.save();
-    canvas.clipRRect(whole);
-    const gap = 2.0;
-    var x = 0.0;
-    for (final (share, color) in [
-      (shares.free, free),
-      (shares.goals, Color.lerp(aside, goals, split)!),
-      (shares.emergency, Color.lerp(aside, emergency, split)!),
-    ]) {
-      final w = share * size.width;
-      if (w <= 0.5) continue;
-      canvas.drawRect(Rect.fromLTWH(x, 0, w - (x + w < size.width ? gap : 0), size.height), Paint()..color = color);
-      x += w;
+    canvas.clipRRect(track);
+    canvas.clipRect(Rect.fromLTWH(0, 0, w * reveal, h));
+
+    final s = split.value;
+    final gap = 2.0 * s;
+    final freeW = shares.free * w;
+
+    if (freeW > 0) {
+      final rect = Rect.fromLTWH(0, 0, freeW, h);
+      canvas.drawRect(
+        rect,
+        Paint()..shader = LinearGradient(colors: [Color.lerp(free, Colors.white, 0.35)!, free]).createShader(rect),
+      );
+    }
+
+    // Set-aside money: hatched (locked) as one block, coloured by purpose
+    // once split.
+    final locked = shares.over ? warning.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.2);
+    var x = freeW + (freeW > 0 ? gap : 0);
+    for (final (share, color) in [(shares.goals, goals), (shares.emergency, emergency)]) {
+      final width = share * w;
+      if (width <= 0) continue;
+      final rect = Rect.fromLTWH(x, 0, math.max(0, width - gap), h);
+      canvas.drawRect(rect, Paint()..color = Color.lerp(locked, color, s)!);
+      _hatch(canvas, rect, Colors.white.withValues(alpha: 0.16 * (1 - s)));
+      x += width;
+    }
+
+    final shine = _shine.transform(intro.value);
+    if (freeW > 0 && shine > 0 && shine < 1) {
+      final band = h * 4;
+      final cx = -band + (freeW + band * 2) * shine;
+      final rect = Rect.fromLTWH(cx - band, 0, band * 2, h);
+      canvas.save();
+      canvas.clipRect(Rect.fromLTWH(0, 0, freeW, h));
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..shader = LinearGradient(
+            colors: [
+              Colors.white.withValues(alpha: 0),
+              Colors.white.withValues(alpha: 0.55),
+              Colors.white.withValues(alpha: 0),
+            ],
+          ).createShader(rect),
+      );
+      canvas.restore();
+    }
+    canvas.restore();
+  }
+
+  void _hatch(Canvas canvas, Rect rect, Color color) {
+    if (color.a <= 0.01) return;
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = 2;
+    canvas.save();
+    canvas.clipRect(rect);
+    for (var x = rect.left - rect.height; x < rect.right; x += 6) {
+      canvas.drawLine(Offset(x, rect.bottom), Offset(x + rect.height, rect.top), p);
     }
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(_BarPainter o) =>
-      o.shares != shares ||
-      o.split != split ||
-      o.track != track ||
-      o.free != free ||
-      o.aside != aside ||
-      o.goals != goals ||
-      o.emergency != emergency;
+  bool shouldRepaint(_AllocationPainter old) =>
+      old.shares != shares ||
+      old.free != free ||
+      old.goals != goals ||
+      old.emergency != emergency ||
+      old.warning != warning;
 }
 
-class _HeroPlaceholder extends StatelessWidget {
-  const _HeroPlaceholder();
+class _HeroStat extends StatelessWidget {
+  const _HeroStat({
+    required this.label,
+    required this.amount,
+    this.icon,
+    this.dot,
+    this.end = false,
+    this.expanded = false,
+  });
+
+  final String label;
+  final Money amount;
+  final IconData? icon;
+  final Color? dot;
+
+  /// Right-aligned, with the split / unsplit chevron.
+  final bool end;
+  final bool expanded;
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: UiSpace.xs, vertical: UiSpace.md),
+    final t = context.text;
+    const soft = Colors.white70;
+    final ic = icon;
+    final d = dot;
+    return MergeSemantics(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: end ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          UiPlaceholder(width: 120, height: 12),
-          SizedBox(height: UiSpace.md),
-          UiPlaceholder(width: 200, height: 40),
-          SizedBox(height: 20),
-          UiPlaceholder(height: 6),
-          SizedBox(height: UiSpace.lg),
-          UiPlaceholder(height: 36),
+          Row(
+            mainAxisAlignment: end ? MainAxisAlignment.end : MainAxisAlignment.start,
+            children: [
+              if (d != null) ...[
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(color: d, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: Space.x1_5),
+              ],
+              if (ic != null) ...[Icon(ic, size: 11, color: soft), const SizedBox(width: Space.x1)],
+              Flexible(
+                child: Text(
+                  label.toUpperCase(),
+                  style: t.micro.copyWith(color: soft, fontWeight: FontWeight.w800),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (end) ...[
+                const SizedBox(width: Space.x0_5),
+                ExcludeSemantics(
+                  child: Icon(expanded ? LucideIcons.chevronUp : LucideIcons.chevronDown, size: 12, color: soft),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: Space.x0_5),
+          AmountText(
+            amount,
+            style: t.amountMedium.copyWith(color: Colors.white, fontSize: 17),
+            decimals: DecimalDisplay.none,
+            fit: true,
+            textAlign: end ? TextAlign.end : null,
+          ),
         ],
       ),
     );
@@ -401,7 +558,7 @@ class BalanceBreakdownSheet extends StatelessWidget {
           line('Set aside for emergencies', -balance.earmarkedEmergency, sign: SignDisplay.always),
           const FinnDivider(),
           line('Available to spend', balance.available, strong: true),
-          const SizedBox(height: UiSpace.lg),
+          const SizedBox(height: Space.x4),
           const InfoBanner(
             message:
                 'Upcoming EMIs, subscriptions and pending payments are not deducted until you record them as paid.',
