@@ -5,8 +5,11 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../actions/action.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../core/money/money.dart';
+import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
+import '../../../core/time/frequency.dart';
 import '../../../design_system/design_system.dart';
+import '../../../design_system/luxe/luxe.dart';
 import '../../../finance/finance_snapshot.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/category_icons.dart';
@@ -115,6 +118,13 @@ enum IncomeImpact {
     IncomeImpact.critical => c.negative,
   };
 
+  Color tone(LuxePalette p) => switch (this) {
+    IncomeImpact.healthy => p.positive,
+    IncomeImpact.moderate => p.goldInk,
+    IncomeImpact.high => p.warning,
+    IncomeImpact.critical => p.negative,
+  };
+
   IconData get icon => switch (this) {
     IncomeImpact.healthy => LucideIcons.circleCheck,
     IncomeImpact.moderate => LucideIcons.gauge,
@@ -179,24 +189,24 @@ final subscriptionDetailProvider = Provider.family<AsyncValue<SubscriptionDetail
   Subscription s,
   DateTime today,
 ) {
-  final c = context.colors;
+  final p = context.luxe;
   if (!s.isActive) {
     return s.status == SubscriptionStatus.paused
-        ? (label: 'Paused', color: c.textSecondary, icon: LucideIcons.pause)
-        : (label: 'Cancelled', color: c.textSecondary, icon: LucideIcons.circleX);
+        ? (label: 'Paused', color: p.inkMute, icon: LucideIcons.pause)
+        : (label: 'Cancelled', color: p.inkMute, icon: LucideIcons.circleX);
   }
   final days = daysBetween(today, s.nextDueDate);
   if (days < 0) {
     return (
       label: 'Overdue · ${-days} ${-days == 1 ? 'day' : 'days'}',
-      color: c.negative,
+      color: p.negative,
       icon: LucideIcons.triangleAlert,
     );
   }
-  if (days == 0) return (label: 'Due today', color: c.attention, icon: LucideIcons.bell);
-  if (days == 1) return (label: 'Tomorrow', color: c.warning, icon: LucideIcons.clock);
-  if (days <= 7) return (label: 'in $days days', color: c.warning, icon: LucideIcons.clock);
-  return (label: 'in $days days', color: c.textSecondary, icon: LucideIcons.calendar);
+  if (days == 0) return (label: 'Due today', color: p.warning, icon: LucideIcons.bell);
+  if (days == 1) return (label: 'Tomorrow', color: p.warning, icon: LucideIcons.clock);
+  if (days <= 7) return (label: 'in $days days', color: p.goldInk, icon: LucideIcons.clock);
+  return (label: 'in $days days', color: p.inkMute, icon: LucideIcons.calendar);
 }
 
 class SubscriptionDueChip extends StatelessWidget {
@@ -208,8 +218,18 @@ class SubscriptionDueChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = subscriptionDueLabel(context, subscription, today);
-    return StatusPill(label: d.label, color: d.color, icon: d.icon);
+    return LuxeStatus(label: d.label, color: d.color, icon: d.icon);
   }
+}
+
+/// How far through its current billing cycle a plan is (0..1): 1 means the
+/// renewal is due today.
+double subscriptionCycleProgress(Subscription s, DateTime today) {
+  final previous = s.frequency.nth(s.nextDueDate, -1);
+  final cycle = daysBetween(previous, s.nextDueDate);
+  if (cycle <= 0) return 0;
+  final left = daysBetween(today, s.nextDueDate);
+  return (1 - left / cycle).clamp(0.0, 1.0);
 }
 
 /// Records the current renewal as paid (review sheet confirms details).
@@ -237,7 +257,14 @@ class SubscriptionAvatar extends ConsumerWidget {
       CategoryAvatar(category: ref.watch(categoryProvider(categoryId)), size: size);
 }
 
-/// One subscription row.
+/// Money in inline copy; masked when balances are hidden.
+String maskedMoney(BuildContext context, Money m) => AmountVisibility.hiddenOf(context)
+    ? MoneyFormatter.masked
+    : MoneyFormatter.format(m, decimals: DecimalDisplay.none);
+
+/// One subscription: its mark, name and cadence, the price, a hairline
+/// that fills as the cycle runs towards renewal, and — when the renewal is
+/// due — a one-tap "Mark paid".
 class SubscriptionTile extends StatelessWidget {
   const SubscriptionTile({
     super.key,
@@ -254,13 +281,15 @@ class SubscriptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final p = context.luxe;
+    final t = context.lt;
     final s = subscription;
     final inactive = !s.isActive;
     final due = subscriptionDueLabel(context, s, today);
-    return FinnCard(
-      padding: const EdgeInsets.all(Space.x3),
+    final perMonth = s.frequency == Frequency.monthly ? null : '${maskedMoney(context, s.monthlyEquivalent)} a month';
+    return LuxeCard(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+      radius: LuxeSpace.rTile + 2,
       onTap: onTap,
       semanticLabel: '${s.name}, ${AmountText.spokenLabel(s.amount)} ${s.frequency.label}, ${due.label}',
       child: Column(
@@ -269,10 +298,10 @@ class SubscriptionTile extends StatelessWidget {
           Row(
             children: [
               Opacity(
-                opacity: inactive ? 0.5 : 1,
-                child: SubscriptionAvatar(categoryId: s.categoryId),
+                opacity: inactive ? 0.45 : 1,
+                child: SubscriptionAvatar(categoryId: s.categoryId, size: 42),
               ),
-              const SizedBox(width: Space.x3),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -281,56 +310,74 @@ class SubscriptionTile extends StatelessWidget {
                       s.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: t.bodyStrong.copyWith(color: inactive ? c.textSecondary : null),
+                      style: t.heading.c(inactive ? p.inkSoft : p.ink),
                     ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Icon(LucideIcons.repeat, size: 11, color: c.textTertiary),
-                        const SizedBox(width: Space.x1),
-                        Flexible(
-                          child: Text(
-                            s.isActive
-                                ? '${s.frequency.label} · next ${DateFormats.dayMonth.format(s.nextDueDate)}'
-                                : s.frequency.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: t.caption,
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 3),
+                    Text(
+                      s.isActive
+                          ? '${s.frequency.label} · next ${DateFormats.dayMonth.format(s.nextDueDate)}'
+                          : s.frequency.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.caption,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: Space.x2),
+              const SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  AmountText(s.amount, style: t.amountMedium.copyWith(color: inactive ? c.textSecondary : null)),
-                  const SizedBox(height: Space.x1),
-                  StatusPill(label: due.label, color: due.color, icon: due.icon),
+                  LuxeAmount(
+                    s.amount,
+                    fit: false,
+                    style: t.figure.copyWith(fontSize: 22, color: inactive ? p.inkMute : p.ink),
+                  ),
+                  Text('per ${s.frequency.unit}', style: t.micro),
                 ],
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          if (s.isActive) ...[
+            LuxeProgressLine(
+              value: subscriptionCycleProgress(s, today),
+              color: due.color == p.inkMute ? p.lineStrong : due.color,
+              height: 3,
+            ),
+            const SizedBox(height: 6),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  s.isActive ? (perMonth ?? 'Renews every month') : s.status.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.micro,
+                ),
+              ),
+              const SizedBox(width: 8),
+              LuxeStatus(label: due.label, color: due.color, icon: due.icon),
+            ],
+          ),
           if (onMarkPaid != null) ...[
-            const SizedBox(height: Space.x2_5),
+            const LuxeHairline(vertical: 12),
             Row(
               children: [
                 Expanded(
                   child: Text(
-                    'Renewal due ${DateFormats.relativeDay(s.nextDueDate, today).toLowerCase()} — not yet paid',
-                    style: t.micro,
+                    'Renewal due ${_relative(s.nextDueDate, today)} — not yet paid',
+                    style: t.caption,
                     maxLines: 2,
                   ),
                 ),
-                const SizedBox(width: Space.x2),
-                FinnButton(
+                const SizedBox(width: 10),
+                LuxeButton(
                   label: 'Mark paid',
-                  icon: LucideIcons.circleCheck,
-                  size: FinnButtonSize.sm,
-                  variant: FinnButtonVariant.attention,
+                  icon: LucideIcons.check,
+                  compact: true,
+                  variant: LuxeButtonVariant.gold,
                   onPressed: onMarkPaid,
                 ),
               ],
@@ -353,4 +400,10 @@ class SubscriptionFieldLabel extends StatelessWidget {
     padding: const EdgeInsets.only(bottom: Space.x1_5),
     child: Text(text, style: context.text.label),
   );
+}
+
+/// "today" / "yesterday" in a sentence, but dates keep their capitals.
+String _relative(DateTime date, DateTime today) {
+  final r = DateFormats.relativeDay(date, today);
+  return const {'Today', 'Yesterday', 'Tomorrow'}.contains(r) ? r.toLowerCase() : r;
 }

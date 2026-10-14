@@ -1,48 +1,60 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/di/data_providers.dart';
+import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
-import '../../../shared/presentation/async_view.dart';
+import '../../../design_system/luxe/luxe.dart';
+import '../../../shared/presentation/luxe_async.dart';
+import '../../../shared/presentation/luxe_page.dart';
 import '../domain/timeline.dart';
 
-/// Story colour for a theme (light and dark aware).
-Color storyThemeColor(StoryTheme theme, FinnColors c) {
-  final d = c.isDark;
-  return switch (theme) {
-    StoryTheme.celebration => d ? Palette.amber400 : Palette.amber600,
-    StoryTheme.success => c.positive,
-    StoryTheme.warning => c.negative,
-    StoryTheme.fun => d ? Palette.pink400 : Palette.pink600,
-    StoryTheme.adventurous => d ? Palette.orange400 : Palette.orange600,
-    StoryTheme.growth => d ? Palette.indigo400 : Palette.indigo600,
-    StoryTheme.neutral => c.textSecondary,
-    StoryTheme.vision => d ? Palette.violet400 : Palette.violet600,
-    StoryTheme.victory => d ? Palette.amber400 : Palette.amber700,
-    StoryTheme.asset => c.accentEmergency,
-    StoryTheme.freedom => Palette.sky500,
-  };
-}
+/// Story colour for a theme: quiet tones that sit in the Luxe palette.
+Color storyThemeColor(StoryTheme theme, LuxePalette p) => switch (theme) {
+  StoryTheme.celebration || StoryTheme.victory => p.goldInk,
+  StoryTheme.success || StoryTheme.asset => p.positive,
+  StoryTheme.warning => p.negative,
+  StoryTheme.fun => p.mute(const Color(0xFFB0567A)),
+  StoryTheme.adventurous => p.warning,
+  StoryTheme.growth || StoryTheme.freedom => p.info,
+  StoryTheme.vision => p.mute(const Color(0xFF7A62B0)),
+  StoryTheme.neutral => p.inkSoft,
+};
 
 IconData storyThemeIcon(StoryTheme theme) => switch (theme) {
-      StoryTheme.adventurous => LucideIcons.scale,
-      StoryTheme.vision => LucideIcons.target,
-      StoryTheme.success => LucideIcons.trendingUp,
-      StoryTheme.fun => LucideIcons.sparkles,
-      StoryTheme.celebration || StoryTheme.victory => LucideIcons.partyPopper,
-      StoryTheme.growth => LucideIcons.sprout,
-      StoryTheme.asset => LucideIcons.shieldCheck,
-      StoryTheme.freedom => LucideIcons.rocket,
-      StoryTheme.warning => LucideIcons.triangleAlert,
-      StoryTheme.neutral => LucideIcons.bookOpen,
-    };
+  StoryTheme.adventurous => LucideIcons.scale,
+  StoryTheme.vision => LucideIcons.target,
+  StoryTheme.success => LucideIcons.trendingUp,
+  StoryTheme.fun => LucideIcons.sparkles,
+  StoryTheme.celebration || StoryTheme.victory => LucideIcons.partyPopper,
+  StoryTheme.growth => LucideIcons.sprout,
+  StoryTheme.asset => LucideIcons.shieldCheck,
+  StoryTheme.freedom => LucideIcons.rocket,
+  StoryTheme.warning => LucideIcons.triangleAlert,
+  StoryTheme.neutral => LucideIcons.bookOpen,
+};
 
-/// The monthly financial story: a chapter per month with key moments on a
-/// vertical spine.
+/// One vector mark per kind of moment (no emoji).
+IconData timelineKindIcon(TimelineEventKind kind) => switch (kind) {
+  TimelineEventKind.income => LucideIcons.banknote,
+  TimelineEventKind.majorExpense => LucideIcons.shoppingBag,
+  TimelineEventKind.loanPayment => LucideIcons.landmark,
+  TimelineEventKind.goalContribution => LucideIcons.target,
+  TimelineEventKind.goalWithdrawal => LucideIcons.undo2,
+  TimelineEventKind.emergencyContribution => LucideIcons.shieldCheck,
+  TimelineEventKind.settlement => LucideIcons.handshake,
+  TimelineEventKind.subscriptionPaid => LucideIcons.repeat,
+};
+
+/// The monthly financial story: a chapter per month — a cover with the
+/// month's name and a strip of every moment across its days — then each
+/// moment hung on a rail.
 class TimelineScreen extends ConsumerStatefulWidget {
   const TimelineScreen({super.key});
 
@@ -55,32 +67,39 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    return Scaffold(
-      backgroundColor: c.background,
-      appBar: AppBar(title: const Text('Timeline')),
-      body: AsyncView<List<MonthKey>>(
-        value: ref.watch(timelineMonthsProvider),
-        loading: const _TimelineSkeleton(),
-        builder: (context, months) {
-          // months: newest first, always includes the current month.
-          final selected = _month != null && months.contains(_month) ? _month! : months.first;
-          final idx = months.indexOf(selected);
-          return CustomScrollView(
-            key: const PageStorageKey<String>('timeline'),
-            slivers: [
-              SliverToBoxAdapter(
-                child: ResponsiveCenter(
-                  padding: const EdgeInsets.fromLTRB(Space.gutter, Space.x1, Space.gutter, Space.x4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('YOUR FINANCIAL STORY', style: context.text.eyebrow),
-                      const SizedBox(height: Space.x3),
-                      MonthSwitcher(
+    final months = ref.watch(timelineMonthsProvider);
+    return LuxeDetailPage(
+      title: 'Timeline',
+      storageKey: 'timeline',
+      slivers: [
+        luxeBox(
+          const Reveal(
+            child: LuxePageTitle(eyebrow: 'Your financial story', title: 'Timeline'),
+          ),
+          top: 4,
+          bottom: 16,
+        ),
+        SliverToBoxAdapter(
+          child: LuxeAsync<List<MonthKey>>(
+            value: months,
+            loading: const LuxePageSkeleton(title: false, hero: 240, rows: 3),
+            errorTitle: 'Could not load your story',
+            builder: (context, months) {
+              // months: newest first, always includes the current month.
+              final selected = _month != null && months.contains(_month) ? _month! : months.first;
+              final idx = months.indexOf(selected);
+              return ResponsiveCenter(
+                padding: const EdgeInsets.symmetric(horizontal: LuxeSpace.gutter),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Reveal(
+                      index: 1,
+                      child: LuxeMonthStepper(
                         month: selected,
                         min: months.last,
                         max: months.first,
+                        subtitle: '${months.length - idx} of ${months.length} chapters',
                         onChanged: (m) {
                           // Step through months that have a story (skip gaps).
                           final next = m < selected
@@ -89,215 +108,323 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                           setState(() => _month = next);
                         },
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 16),
+                    AnimatedSwitcher(
+                      duration: context.reduceMotion ? Duration.zero : LuxeDurations.base,
+                      switchInCurve: LuxeCurves.arrive,
+                      switchOutCurve: LuxeCurves.leave,
+                      layoutBuilder: (current, previous) =>
+                          Stack(alignment: Alignment.topCenter, children: [...previous, ?current]),
+                      child: _Chapter(key: ValueKey(selected), month: selected),
+                    ),
+                  ],
                 ),
-              ),
-              _ChapterSliver(key: ValueKey(selected), month: selected),
-            ],
-          );
-        },
-      ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _ChapterSliver extends ConsumerWidget {
-  const _ChapterSliver({super.key, required this.month});
+class _Chapter extends ConsumerWidget {
+  const _Chapter({super.key, required this.month});
 
   final MonthKey month;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final value = ref.watch(storyChapterProvider(month));
-    final chapter = value.value;
-    if (chapter == null) {
-      return SliverToBoxAdapter(
-        child: AsyncView<StoryChapter>(value: value, loading: const _TimelineSkeleton(), builder: (_, _) => const SizedBox()),
-      );
-    }
-    if (chapter.events.isEmpty) {
-      return SliverFillRemaining(
-        hasScrollBody: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(Space.gutter, Space.x6, Space.gutter, Space.x10),
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: EmptyState(
-              icon: LucideIcons.bookOpen,
-              title: 'A quiet chapter',
-              message:
-                  'No key moments in ${DateFormats.monthYear.format(month.start)} yet. Income, larger spends, loan payments and savings will appear here.',
-            ),
-          ),
-        ),
-      );
-    }
-    final events = chapter.events;
-    return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(Space.gutter, 0, Space.gutter, Space.x12),
-      sliver: SliverList.builder(
-        itemCount: events.length + 2,
-        itemBuilder: (context, i) {
-          if (i == 0) return ResponsiveCenter(child: _ChapterHeader(chapter: chapter));
-          if (i == events.length + 1) return const ResponsiveCenter(child: _SpineEnd());
-          final e = events[i - 1];
-          return ResponsiveCenter(
-            key: ValueKey(e.id),
-            child: StaggeredEntrance(
-              index: i - 1,
-              child: _EventTile(event: e, isFirst: i == 1),
-            ),
-          );
-        },
-      ),
+    return LuxeAsync<StoryChapter>(
+      value: value,
+      loading: const LuxePageSkeleton(title: false, controls: false, hero: 240, rows: 3),
+      errorTitle: 'Could not load this chapter',
+      builder: (context, chapter) {
+        final events = chapter.events;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Reveal(index: 2, scale: 0.97, child: _Cover(chapter: chapter)),
+            const SizedBox(height: 26),
+            if (events.isEmpty)
+              LuxeEmpty(
+                icon: LucideIcons.bookOpen,
+                title: 'A quiet chapter',
+                message:
+                    'No key moments in ${DateFormats.monthYear.format(month.start)} yet. Income, larger spends, '
+                    'loan payments and savings will appear here.',
+              )
+            else ...[
+              LuxeEyebrowHeader(
+                label: events.length == 1 ? '1 key moment' : '${events.length} key moments',
+                caption: 'Newest first · tap a moment for the full story',
+              ),
+              const SizedBox(height: 16),
+              for (var i = 0; i < events.length; i++)
+                Reveal(
+                  key: ValueKey(events[i].id),
+                  index: 3 + i,
+                  child: LuxeRailNode(
+                    color: storyThemeColor(events[i].theme, context.luxe),
+                    icon: timelineKindIcon(events[i].kind),
+                    first: i == 0,
+                    nodeTop: 26,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _EventCard(event: events[i]),
+                    ),
+                  ),
+                ),
+              Reveal(index: 3 + events.length, child: const _SpineEnd()),
+            ],
+          ],
+        );
+      },
     );
   }
 }
 
-class _ChapterHeader extends StatelessWidget {
-  const _ChapterHeader({required this.chapter});
+/// The chapter cover: theme mark, month, serif chapter name, the summary,
+/// money in / out, and every moment placed on the month's days.
+class _Cover extends StatelessWidget {
+  const _Cover({required this.chapter});
 
   final StoryChapter chapter;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final color = storyThemeColor(chapter.theme, c);
-    final n = chapter.events.length;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Space.x5),
-      child: FinnCard(
-        padding: const EdgeInsets.all(Space.x5),
-        child: Column(
-          children: [
-            IconTile(
-              icon: storyThemeIcon(chapter.theme),
-              background: color.withValues(alpha: c.isDark ? 0.18 : 0.12),
-              foreground: color,
-              size: 48,
-              radius: Radii.xl,
-              iconSize: 24,
-            ),
-            const SizedBox(height: Space.x3),
-            Text(DateFormats.monthYear.format(chapter.month.start).toUpperCase(), style: t.eyebrow),
-            const SizedBox(height: Space.x1),
-            Semantics(
-              header: true,
-              child: Text(chapter.name, style: t.title.copyWith(color: color, fontSize: 22), textAlign: TextAlign.center),
-            ),
-            const SizedBox(height: Space.x1_5),
-            Text(chapter.summary, style: t.body.copyWith(color: c.textSecondary), textAlign: TextAlign.center),
-            const SizedBox(height: Space.x4),
-            Row(
-              children: [
-                Expanded(child: Container(height: 1, color: c.border)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: Space.x3),
-                  child: Text(n == 1 ? '1 KEY MOMENT' : '$n KEY MOMENTS', style: t.micro),
+    final p = context.luxe;
+    final t = context.lt;
+    final c = chapter;
+    final tone = storyThemeColor(c.theme, LuxePalette.dark);
+    final inflow = Money.sum(c.events.where((e) => e.isInflow).map((e) => e.amount));
+    final outflow = Money.sum(c.events.where((e) => !e.isInflow).map((e) => e.amount));
+    return LuxeObsidian(
+      glow: tone,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              LuxeIconDisc(icon: storyThemeIcon(c.theme), color: tone, onDark: true, size: 44),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  DateFormats.monthYear.format(c.month.start).toUpperCase(),
+                  style: t.eyebrow.copyWith(fontSize: 10, color: p.onObsidianSoft),
                 ),
-                Expanded(child: Container(height: 1, color: c.border)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Semantics(
+            header: true,
+            child: Text(c.name, style: t.headline.copyWith(fontSize: 32, color: p.onObsidian)),
+          ),
+          const SizedBox(height: 8),
+          Text(c.summary, style: t.body.c(p.onObsidianSoft)),
+          if (c.events.isNotEmpty) ...[
+            const SizedBox(height: 22),
+            _MonthStrip(chapter: c, inTone: tone),
+            const SizedBox(height: 18),
+            SizedBox(height: 1, child: ColoredBox(color: p.onObsidian.withValues(alpha: 0.1))),
+            const SizedBox(height: 14),
+            LuxeFigureRow(
+              onDark: true,
+              children: [
+                LuxeFigure(
+                  label: 'Moments',
+                  onDark: true,
+                  child: Text('${c.events.length}', style: t.number.copyWith(fontSize: 17, color: p.onObsidian)),
+                ),
+                LuxeFigure(label: 'In', onDark: true, child: LuxeFigureAmount(inflow, onDark: true, size: 15)),
+                LuxeFigure(label: 'Out', onDark: true, child: LuxeFigureAmount(outflow, onDark: true, size: 15)),
               ],
             ),
           ],
-        ),
+        ],
       ),
     );
   }
 }
 
-const double _spineX = 17;
-const double _dotSize = 14;
+/// The month as a hairline from day 1 to its last day: money in rises
+/// above the line, money out hangs below, sized by amount. Draws in from
+/// the left.
+class _MonthStrip extends StatelessWidget {
+  const _MonthStrip({required this.chapter, required this.inTone});
 
-/// One moment hung on the spine.
-class _EventTile extends StatelessWidget {
-  const _EventTile({required this.event, required this.isFirst});
+  final StoryChapter chapter;
+  final Color inTone;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.luxe;
+    final t = context.lt;
+    final c = chapter;
+    final days = DateUtils.getDaysInMonth(c.month.year, c.month.month);
+    final maxPaise = c.events.fold<int>(1, (m, e) => math.max(m, e.amount.paise));
+    final marks = [
+      for (final e in c.events)
+        (
+          at: ((e.date.day - 1) / math.max(1, days - 1)).clamp(0.0, 1.0),
+          size: 0.3 + 0.7 * math.sqrt(e.amount.paise / maxPaise),
+          inflow: e.isInflow,
+          color: storyThemeColor(e.theme, LuxePalette.dark),
+        ),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          label: '${c.events.length} moments across ${DateFormats.monthYear.format(c.month.start)}',
+          excludeSemantics: true,
+          child: SizedBox(
+            height: 56,
+            child: DrawIn(
+              value: 1,
+              delay: const Duration(milliseconds: 300),
+              duration: const Duration(milliseconds: 1500),
+              builder: (context, v) => CustomPaint(
+                painter: _StripPainter(
+                  marks: marks,
+                  progress: v,
+                  line: p.onObsidian.withValues(alpha: 0.2),
+                  tick: p.onObsidian.withValues(alpha: 0.12),
+                  inColor: inTone,
+                  outColor: p.onObsidian.withValues(alpha: 0.75),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Text('1', style: t.micro.c(p.onObsidianSoft)),
+            const Spacer(),
+            Text('IN ABOVE · OUT BELOW', style: t.eyebrow.copyWith(fontSize: 8, color: p.onObsidianSoft)),
+            const Spacer(),
+            Text('$days', style: t.micro.c(p.onObsidianSoft)),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _StripPainter extends CustomPainter {
+  _StripPainter({
+    required this.marks,
+    required this.progress,
+    required this.line,
+    required this.tick,
+    required this.inColor,
+    required this.outColor,
+  });
+
+  final List<({double at, double size, bool inflow, Color color})> marks;
+  final double progress;
+  final Color line;
+  final Color tick;
+  final Color inColor;
+  final Color outColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final mid = size.height / 2;
+    final w = size.width;
+    canvas.drawLine(
+      Offset(0, mid),
+      Offset(w * progress, mid),
+      Paint()
+        ..color = line
+        ..strokeWidth = 1,
+    );
+    final tp = Paint()
+      ..color = tick
+      ..strokeWidth = 1;
+    for (var i = 0; i <= 4; i++) {
+      final x = w * i / 4;
+      if (x > w * progress) break;
+      canvas.drawLine(Offset(x, mid - 3), Offset(x, mid + 3), tp);
+    }
+    for (final m in marks) {
+      if (m.at > progress) continue;
+      final land = ((progress - m.at) * 6).clamp(0.0, 1.0);
+      final x = w * m.at;
+      final len = (mid - 6) * m.size * Curves.easeOutBack.transform(land);
+      final color = m.inflow ? inColor : outColor;
+      final end = Offset(x, m.inflow ? mid - len : mid + len);
+      canvas.drawLine(
+        Offset(x, mid),
+        end,
+        Paint()
+          ..color = color.withValues(alpha: 0.6)
+          ..strokeWidth = 1.2
+          ..strokeCap = StrokeCap.round,
+      );
+      canvas.drawCircle(end, 2.6 + 1.6 * m.size, Paint()..color = color);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_StripPainter o) => o.progress != progress || o.marks.length != marks.length;
+}
+
+/// One moment: when and what kind, its title in the story tone, what
+/// happened, and the money that moved.
+class _EventCard extends StatelessWidget {
+  const _EventCard({required this.event});
 
   final TimelineEvent event;
-  final bool isFirst;
 
   void _open(BuildContext context) {
     final route = event.route;
     if (route != null) {
       context.push(route);
     } else {
-      showFinnSheet<void>(context, builder: (_) => _EventDetailSheet(event: event));
+      showLuxeSheet<void>(context, builder: (_) => _EventDetailSheet(event: event));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final p = context.luxe;
+    final t = context.lt;
     final e = event;
-    final color = storyThemeColor(e.theme, c);
-    return Stack(
-      children: [
-        Positioned(
-          left: _spineX - 1,
-          top: isFirst ? 26 : 0,
-          bottom: 0,
-          child: Container(width: 2, color: c.border),
-        ),
-        Positioned(
-          left: _spineX - _dotSize / 2,
-          top: 26 - _dotSize / 2,
-          child: Container(
-            width: _dotSize,
-            height: _dotSize,
-            decoration: BoxDecoration(
-              color: c.background,
-              shape: BoxShape.circle,
-              border: Border.all(color: color, width: 3),
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(left: _spineX * 2 + Space.x2, bottom: Space.x3),
-          child: FinnCard(
-            onTap: () => _open(context),
-            semanticLabel: '${e.title}, ${DateFormats.dayMonth.format(e.date)}',
-            border: BorderSide(color: color.withValues(alpha: 0.35)),
-            padding: const EdgeInsets.all(Space.x4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: c.isDark ? 0.16 : 0.1),
-                    borderRadius: Radii.rLg,
-                  ),
-                  child: ExcludeSemantics(child: Text(e.emoji, style: const TextStyle(fontSize: 22))),
+    final color = storyThemeColor(e.theme, p);
+    return LuxeCard(
+      onTap: () => _open(context),
+      semanticLabel: '${e.title}, ${DateFormats.dayMonth.format(e.date)}',
+      radius: LuxeSpace.rTile,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${DateFormats.dayMonth.format(e.date).toUpperCase()} · ${e.kind.label.toUpperCase()}',
+                  style: t.eyebrow.copyWith(fontSize: 9.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(width: Space.x3),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${DateFormats.dayMonth.format(e.date).toUpperCase()} · ${e.kind.label.toUpperCase()}',
-                        style: t.eyebrow,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: Space.x1),
-                      Text(e.title, style: t.bodyStrong.copyWith(color: color)),
-                      const SizedBox(height: Space.x0_5),
-                      Text(e.description, style: t.caption, maxLines: 3, overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: Space.x2),
-                      _AmountPill(event: e),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+              Icon(e.route == null ? LucideIcons.chevronRight : LucideIcons.arrowUpRight, size: 14, color: p.inkMute),
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          Text(e.title, style: t.title.copyWith(fontSize: 20, color: color)),
+          const SizedBox(height: 4),
+          Text(e.description, style: t.caption, maxLines: 3, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 12),
+          _AmountPill(event: e),
+        ],
+      ),
     );
   }
 }
@@ -309,30 +436,27 @@ class _AmountPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final p = context.luxe;
     final e = event;
-    final fg = e.isInflow ? c.positive : c.textPrimary;
-    return DecoratedBox(
+    final fg = e.isInflow ? p.positive : p.ink;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: e.isInflow ? c.positiveSoft : c.surfaceMuted,
-        borderRadius: Radii.rFull,
+        color: e.isInflow ? p.tint(p.positive, 0.09) : p.sunk,
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: Space.x2_5, vertical: Space.x1),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(e.isInflow ? LucideIcons.arrowDownLeft : LucideIcons.arrowUpRight, size: 12, color: fg),
-            const SizedBox(width: Space.x1),
-            AmountText(
-              e.isInflow ? e.amount : -e.amount,
-              sign: SignDisplay.always,
-              decimals: DecimalDisplay.none,
-              color: fg,
-              style: context.text.amountSmall,
-            ),
-          ],
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(e.isInflow ? LucideIcons.arrowDownLeft : LucideIcons.arrowUpRight, size: 12, color: fg),
+          const SizedBox(width: 6),
+          LuxeAmount(
+            e.isInflow ? e.amount : -e.amount,
+            sign: SignDisplay.always,
+            fit: false,
+            style: context.lt.numberSmall.c(fg),
+          ),
+        ],
       ),
     );
   }
@@ -343,23 +467,23 @@ class _SpineEnd extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final p = context.luxe;
     return Padding(
-      padding: const EdgeInsets.only(left: _spineX - 14),
+      padding: const EdgeInsets.only(left: 3, top: 4),
       child: Row(
         children: [
           Container(
             width: 28,
             height: 28,
             decoration: BoxDecoration(
-              color: c.surfaceMuted,
+              color: p.paper,
               shape: BoxShape.circle,
-              border: Border.all(color: c.border, width: 2),
+              border: Border.all(color: p.lineStrong),
             ),
-            child: Icon(LucideIcons.anchor, size: 14, color: c.textTertiary),
+            child: Icon(LucideIcons.anchor, size: 13, color: p.inkMute),
           ),
-          const SizedBox(width: Space.x3),
-          Text('Start of the chapter', style: context.text.micro),
+          const SizedBox(width: 14),
+          Text('Start of the chapter', style: context.lt.micro),
         ],
       ),
     );
@@ -373,54 +497,50 @@ class _EventDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final p = context.luxe;
+    final t = context.lt;
     final e = event;
-    return FinnSheetScaffold(
+    final color = storyThemeColor(e.theme, p);
+    return LuxeSheet(
+      eyebrow: e.kind.label,
       title: e.title,
-      footer: FinnButton(label: 'Close', expand: true, variant: FinnButtonVariant.secondary, onPressed: () => Navigator.of(context).maybePop()),
+      footer: LuxeButton(
+        label: 'Close',
+        expand: true,
+        variant: LuxeButtonVariant.outline,
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(child: ExcludeSemantics(child: Text(e.emoji, style: const TextStyle(fontSize: 44)))),
-          const SizedBox(height: Space.x3),
+          const SizedBox(height: 8),
           Center(
-            child: AmountText(
-              e.isInflow ? e.amount : -e.amount,
-              sign: SignDisplay.always,
-              color: e.isInflow ? c.positive : c.textPrimary,
-              style: t.amountLarge,
+            child: Reveal(
+              scale: 0.8,
+              blur: 0,
+              child: LuxeIconDisc(icon: timelineKindIcon(e.kind), color: color, size: 64),
             ),
           ),
-          const SizedBox(height: Space.x4),
-          Text(e.description, style: t.body, textAlign: TextAlign.center),
-          const SizedBox(height: Space.x4),
-          KeyValueRow(label: 'Date', value: DateFormats.dayMonthYear.format(e.date)),
-          KeyValueRow(label: 'Type', value: e.kind.label),
-          KeyValueRow(label: 'Direction', value: e.isInflow ? 'Money in' : 'Money out'),
+          const SizedBox(height: 16),
+          Center(
+            child: LuxeAmount(
+              e.isInflow ? e.amount : -e.amount,
+              sign: SignDisplay.always,
+              color: e.isInflow ? p.positive : p.ink,
+              style: t.display.copyWith(fontSize: 40),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(e.description, style: t.bodySoft, textAlign: TextAlign.center),
+          const SizedBox(height: 20),
+          LuxeFacts(
+            facts: [
+              LuxeFact('Date', value: DateFormats.dayMonthYear.format(e.date)),
+              LuxeFact('Type', value: e.kind.label),
+              LuxeFact('Direction', value: e.isInflow ? 'Money in' : 'Money out'),
+            ],
+          ),
         ],
-      ),
-    );
-  }
-}
-
-class _TimelineSkeleton extends StatelessWidget {
-  const _TimelineSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return const SkeletonPulse(
-      child: Padding(
-        padding: EdgeInsets.all(Space.gutter),
-        child: Column(
-          children: [
-            CardSkeleton(height: 200),
-            SizedBox(height: Space.x5),
-            CardSkeleton(height: 120),
-            SizedBox(height: Space.x3),
-            CardSkeleton(height: 120),
-          ],
-        ),
       ),
     );
   }

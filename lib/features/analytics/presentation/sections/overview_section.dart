@@ -5,18 +5,20 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/money/money.dart';
 import '../../../../core/money/money_format.dart';
 import '../../../../design_system/design_system.dart';
+import '../../../../design_system/luxe/luxe.dart';
 import '../../application/analytics_providers.dart';
 import '../../domain/analytics.dart';
 import '../insight_widgets.dart';
 
-/// Overview: the headline numbers, a three-ring health check, what stands
-/// out, and one tile per topic that jumps straight to its chip.
+/// Overview: what was spent and how it compares, a three-ring health
+/// check, what stands out, and one tile per topic that jumps straight to
+/// its chip.
 List<Widget> overviewSection(InsightsData data) => [
-      _HeroCard(data: data),
-      _HealthCard(data: data),
-      if (data.insights.isNotEmpty) _InsightList(insights: data.insights),
-      _ExploreGrid(data: data),
-    ];
+  _HeroCard(data: data),
+  _HealthCard(data: data),
+  if (data.insights.isNotEmpty) _InsightList(insights: data.insights),
+  _ExploreGrid(data: data),
+];
 
 class _HeroCard extends StatelessWidget {
   const _HeroCard({required this.data});
@@ -24,53 +26,52 @@ class _HeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.text;
+    final p = context.luxe;
+    final t = context.lt;
     final cur = data.current;
     final change = data.expenseChangeBps;
     final rate = data.savingsRateBps;
-    final white70 = Colors.white.withValues(alpha: 0.7);
-    return GradientHeroCard(
-      watermark: LucideIcons.chartColumn,
-      semanticLabel: null,
+    // Figures scale down to fit their third of the row.
+    Widget figure(Money m, {SignDisplay sign = SignDisplay.auto}) => LuxeAmount(
+      m,
+      sign: sign,
+      style: t.number.copyWith(fontSize: 15, color: p.onObsidian),
+    );
+    return LuxeObsidian(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             '${data.isPartial ? 'SPENT SO FAR' : 'SPENT'} · ${data.periodLabel.toUpperCase()}',
-            style: t.eyebrow.copyWith(color: white70),
+            style: t.eyebrow.copyWith(fontSize: 10, color: p.onObsidianSoft),
           ),
-          const SizedBox(height: Space.x1),
-          AnimatedAmount(
-            cur.expense,
-            style: t.amountHero.copyWith(color: Colors.white),
-            decimals: DecimalDisplay.none,
-            fit: true,
+          const SizedBox(height: 8),
+          LuxeAmount(cur.expense, countFromZero: true, style: t.display.copyWith(fontSize: 42, color: p.onObsidian)),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: change == null
+                ? Text('Nothing to compare with in ${data.previousLabel}', style: t.caption.c(p.onObsidianSoft))
+                : _ChangePill(changeBps: change, against: data.previousLabel),
           ),
-          const SizedBox(height: Space.x2),
-          if (change != null) _ChangePill(changeBps: change, against: data.previousLabel),
-          if (change == null)
-            Text('Nothing to compare with in ${data.previousLabel}', style: t.caption.copyWith(color: white70)),
-          const SizedBox(height: Space.x4),
-          Container(height: 1, color: Colors.white.withValues(alpha: 0.16)),
-          const SizedBox(height: Space.x4),
-          Row(
+          const SizedBox(height: 18),
+          SizedBox(height: 1, child: ColoredBox(color: p.onObsidian.withValues(alpha: 0.1))),
+          const SizedBox(height: 16),
+          LuxeFigureRow(
+            onDark: true,
             children: [
-              Expanded(child: _HeroStat(label: 'Income', child: _heroAmount(context, cur.income))),
-              Expanded(
-                child: _HeroStat(
-                  label: cur.net.isNegative ? 'Overspent' : 'Saved',
-                  align: CrossAxisAlignment.center,
-                  child: _heroAmount(context, cur.net, sign: SignDisplay.always),
-                ),
+              LuxeFigure(label: 'Income', onDark: true, child: figure(cur.income)),
+              LuxeFigure(
+                label: cur.net.isNegative ? 'Overspent' : 'Saved',
+                onDark: true,
+                child: figure(cur.net, sign: SignDisplay.always),
               ),
-              Expanded(
-                child: _HeroStat(
-                  label: 'Daily avg',
-                  align: CrossAxisAlignment.end,
-                  child: rate == null && cur.expense.isZero
-                      ? Text('—', style: t.amountSmall.copyWith(color: Colors.white))
-                      : _heroAmount(context, data.dailyBurn),
-                ),
+              LuxeFigure(
+                label: 'Daily avg',
+                onDark: true,
+                child: rate == null && cur.expense.isZero
+                    ? Text('—', style: t.number.copyWith(color: p.onObsidian))
+                    : figure(data.dailyBurn),
               ),
             ],
           ),
@@ -78,35 +79,6 @@ class _HeroCard extends StatelessWidget {
       ),
     );
   }
-
-  Widget _heroAmount(BuildContext context, Money m, {SignDisplay sign = SignDisplay.auto}) => AmountText(
-        m,
-        sign: sign,
-        decimals: DecimalDisplay.none,
-        compact: m.abs() >= const Money.rupees(1000000),
-        style: context.text.amountSmall.copyWith(color: Colors.white),
-        fit: true,
-      );
-}
-
-class _HeroStat extends StatelessWidget {
-  const _HeroStat({required this.label, required this.child, this.align = CrossAxisAlignment.start});
-  final String label;
-  final Widget child;
-  final CrossAxisAlignment align;
-
-  @override
-  Widget build(BuildContext context) => MergeSemantics(
-        child: Column(
-          crossAxisAlignment: align,
-          children: [
-            Text(label.toUpperCase(),
-                style: context.text.micro.copyWith(color: Colors.white.withValues(alpha: 0.65), letterSpacing: 0.8)),
-            const SizedBox(height: Space.x1),
-            child,
-          ],
-        ),
-      );
 }
 
 class _ChangePill extends StatelessWidget {
@@ -116,35 +88,19 @@ class _ChangePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.luxe;
     final down = changeBps < 0;
     final level = changeBps.abs() < 100;
     final pct = formatBps(changeBps.abs());
     final text = level ? 'About the same as $against' : '$pct ${down ? 'less' : 'more'} than $against';
+    final tone = level ? p.onObsidianSoft : (down ? (p.isDark ? p.positive : const Color(0xFF9BD3B5)) : p.gold);
     return Semantics(
       label: 'Spending ${level ? 'about the same as' : '$pct ${down ? 'lower' : 'higher'} than'} $against',
       excludeSemantics: true,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: Space.x2_5, vertical: Space.x1),
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.14), borderRadius: Radii.rFull),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              level ? LucideIcons.minus : (down ? LucideIcons.trendingDown : LucideIcons.trendingUp),
-              size: 13,
-              color: Colors.white,
-            ),
-            const SizedBox(width: Space.x1),
-            Flexible(
-              child: Text(
-                text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.text.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
-              ),
-            ),
-          ],
-        ),
+      child: LuxeStatus(
+        label: text,
+        color: tone,
+        icon: level ? LucideIcons.minus : (down ? LucideIcons.trendingDown : LucideIcons.trendingUp),
       ),
     );
   }
@@ -158,11 +114,11 @@ class _HealthCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final p = context.luxe;
+    final t = context.lt;
 
     final rate = data.savingsRateBps;
-    final keptColor = rate == null ? c.textTertiary : (rate >= 2000 ? c.positive : (rate >= 0 ? c.warning : c.negative));
+    final keptColor = rate == null ? p.inkMute : (rate >= 2000 ? p.positive : (rate >= 0 ? p.goldInk : p.negative));
     final keptCaption = rate == null
         ? 'No income yet'
         : (rate >= 2000 ? 'Above the 20% mark' : (rate >= 0 ? 'Aim for 20%' : 'Spent more than earned'));
@@ -171,8 +127,8 @@ class _HealthCard extends StatelessWidget {
     final usedBps = data.budgetSpentTotal.ratioBps(limit);
     final elapsed = data.budgetElapsedBps;
     final budgetColor = usedBps == null
-        ? c.textTertiary
-        : (usedBps >= 10000 ? c.negative : (usedBps > elapsed + 500 ? c.warning : c.positive));
+        ? p.inkMute
+        : (usedBps >= 10000 ? p.negative : (usedBps > elapsed + 500 ? p.warning : p.positive));
     final budgetCaption = usedBps == null
         ? 'No budgets'
         : (usedBps >= 10000 ? 'Over the limit' : (usedBps > elapsed + 500 ? 'Ahead of pace' : 'On pace'));
@@ -182,15 +138,14 @@ class _HealthCard extends StatelessWidget {
     final saved = Money.sum(goals.map((g) => Money.min(g.saved, g.goal.target)));
     final goalBps = saved.ratioBps(target);
 
-    return FinnCard(
+    return LuxeCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Semantics(header: true, child: Text('Money health check', style: t.sectionTitle)),
-          const SizedBox(height: Space.x0_5),
-          Text('Three quick signs of how ${data.periodLabel} is going',
-              style: t.caption.copyWith(color: c.textSecondary)),
-          const SizedBox(height: Space.x4),
+          Semantics(header: true, child: Text('Money health check', style: t.title.copyWith(fontSize: 22))),
+          const SizedBox(height: 4),
+          Text('Three quick signs of how ${data.periodLabel} is going', style: t.caption),
+          const SizedBox(height: 20),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -217,7 +172,8 @@ class _HealthCard extends StatelessWidget {
               Expanded(
                 child: _Ring(
                   value: (goalBps ?? 0) / 10000,
-                  color: goalBps == null ? c.textTertiary : c.accentGoals,
+                  color: goalBps == null ? p.inkMute : p.gold,
+                  gradient: goalBps == null ? null : p.goldGradient.colors,
                   center: goalBps == null ? '—' : formatBps(goalBps, decimals: 0),
                   label: 'Goals reached',
                   caption: goals.isEmpty ? 'No goals yet' : '${goals.length} goal${goals.length == 1 ? '' : 's'}',
@@ -225,16 +181,13 @@ class _HealthCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: Space.x3),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(width: 2, height: 10, color: c.textPrimary),
-              const SizedBox(width: Space.x1_5),
-              Flexible(
-                child: Text('Tick = target (20% kept) or time passed this month',
-                    style: t.micro.copyWith(color: c.textTertiary, fontWeight: FontWeight.w700)),
-              ),
+              Container(width: 1.6, height: 10, color: p.ink),
+              const SizedBox(width: 8),
+              Flexible(child: Text('Tick = target (20% kept) or time passed this month', style: t.micro)),
             ],
           ),
         ],
@@ -251,38 +204,50 @@ class _Ring extends StatelessWidget {
     required this.label,
     required this.caption,
     this.marker,
+    this.gradient,
   });
 
   final double value;
   final double? marker;
   final Color color;
+  final List<Color>? gradient;
   final String center;
   final String label;
   final String caption;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final p = context.luxe;
+    final t = context.lt;
     return Semantics(
       label: '$label $center. $caption',
       excludeSemantics: true,
       child: Column(
         children: [
-          RingGauge(
-            value: value,
+          LuxeRing(
+            value: value.clamp(0.0, 1.0),
             marker: marker,
             color: color,
-            size: 84,
-            stroke: 9,
-            center: Text(center, style: t.amountSmall.copyWith(color: c.textPrimary)),
+            gradient: gradient,
+            size: 82,
+            stroke: 4,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Text(center, style: t.figure.copyWith(fontSize: 22)),
+              ),
+            ),
           ),
-          const SizedBox(height: Space.x2),
-          Text(label, style: t.label.copyWith(fontWeight: FontWeight.w800), textAlign: TextAlign.center),
-          Text(caption,
-              style: t.micro.copyWith(color: color == c.textTertiary ? c.textSecondary : color, fontWeight: FontWeight.w700),
-              textAlign: TextAlign.center,
-              maxLines: 2),
+          const SizedBox(height: 10),
+          Text(label, style: t.label.w(700).c(p.ink), textAlign: TextAlign.center),
+          const SizedBox(height: 2),
+          Text(
+            caption,
+            style: t.micro.w(700).c(color == p.inkMute ? p.inkSoft : color),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+          ),
         ],
       ),
     );
@@ -295,69 +260,72 @@ class _InsightList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final p = context.luxe;
+    final t = context.lt;
     final hidden = AmountVisibility.hiddenOf(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionHeader(icon: LucideIcons.lightbulb, title: 'What stands out', tileColor: c.attention),
-        const SizedBox(height: Space.x3),
-        for (final i in insights) ...[
-          FinnCard(
-            padding: const EdgeInsets.all(Space.x3 + 2),
-            child: MergeSemantics(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  IconTile(
-                    icon: switch (i.tone) {
-                      InsightTone.positive => LucideIcons.circleCheck,
-                      InsightTone.caution => LucideIcons.triangleAlert,
-                      InsightTone.neutral => LucideIcons.info,
-                    },
-                    background: _tone(i.tone).soft(c),
-                    foreground: _tone(i.tone).color(c),
-                    size: 32,
-                    radius: Radii.md,
-                    iconSize: 16,
-                  ),
-                  const SizedBox(width: Space.x3),
-                  Expanded(
-                    child: Column(
+        const Padding(
+          padding: EdgeInsets.only(top: 8, bottom: 12),
+          child: LuxeEyebrowHeader(label: 'What stands out'),
+        ),
+        LuxeCard(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+          child: Column(
+            children: [
+              for (var i = 0; i < insights.length; i++) ...[
+                if (i > 0) const LuxeHairline(indent: 48),
+                MergeSemantics(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(maskAmounts(i.title, hidden), style: t.bodyStrong),
-                        const SizedBox(height: Space.x0_5),
-                        Text(maskAmounts(i.body, hidden), style: t.caption.copyWith(color: c.textSecondary)),
+                        LuxeIconDisc(
+                          icon: switch (insights[i].tone) {
+                            InsightTone.positive => LucideIcons.circleCheck,
+                            InsightTone.caution => LucideIcons.triangleAlert,
+                            InsightTone.neutral => LucideIcons.lightbulb,
+                          },
+                          color: switch (insights[i].tone) {
+                            InsightTone.positive => p.positive,
+                            InsightTone.caution => p.warning,
+                            InsightTone.neutral => p.goldInk,
+                          },
+                          size: 34,
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(maskAmounts(insights[i].title, hidden), style: t.label.w(700).c(p.ink)),
+                              const SizedBox(height: 3),
+                              Text(maskAmounts(insights[i].body, hidden), style: t.caption),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ],
-              ),
-            ),
+                ),
+              ],
+            ],
           ),
-          const SizedBox(height: Space.x2),
-        ],
+        ),
       ],
     );
   }
-
-  static FinnTone _tone(InsightTone t) => switch (t) {
-        InsightTone.positive => FinnTone.positive,
-        InsightTone.caution => FinnTone.warning,
-        InsightTone.neutral => FinnTone.info,
-      };
 }
 
-/// One tile per topic: its key number, tap to open that chip.
+/// One tile per topic: its key number, tap to open that topic.
 class _ExploreGrid extends ConsumerWidget {
   const _ExploreGrid({required this.data});
   final InsightsData data;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
     String m(Money x, {bool compact = true}) => moneyText(context, x, compact: compact);
 
     final topCat = data.categories.isEmpty ? null : data.categories.first;
@@ -370,7 +338,10 @@ class _ExploreGrid extends ConsumerWidget {
         data.hasActivity ? '${m(data.dailyBurn)}/day' : 'No spending',
         'Average daily spend',
         data.dailySpend.isNotEmpty
-            ? [for (final d in data.dailySpend.where((d) => !d.isFuture).toList().reversed.take(10).toList().reversed) d.amount.toDouble()]
+            ? [
+                for (final d in data.dailySpend.where((d) => !d.isFuture).toList().reversed.take(10).toList().reversed)
+                  d.amount.toDouble(),
+              ]
             : [for (final x in data.months) x.expense.toDouble()],
       ),
       (
@@ -424,14 +395,16 @@ class _ExploreGrid extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionHeader(icon: LucideIcons.compass, title: 'Explore by topic', tileColor: c.accentAnalytics),
-        const SizedBox(height: Space.x3),
+        const Padding(
+          padding: EdgeInsets.only(top: 8, bottom: 12),
+          child: LuxeEyebrowHeader(label: 'Explore by topic', caption: 'Tap a tile to open that topic'),
+        ),
         LayoutBuilder(
           builder: (context, box) {
-            final w = (box.maxWidth - Space.x3) / 2;
+            final w = (box.maxWidth - 10) / 2;
             return Wrap(
-              spacing: Space.x3,
-              runSpacing: Space.x3,
+              spacing: 10,
+              runSpacing: 10,
               children: [
                 for (final (section, value, hint, spark) in tiles)
                   SizedBox(
@@ -472,45 +445,42 @@ class _ExploreTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final a = section.accent(c);
-    return FinnCard(
-      padding: const EdgeInsets.all(Space.x3),
+    final p = context.luxe;
+    final t = context.lt;
+    return LuxeCard(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      radius: LuxeSpace.rTile,
       onTap: onTap,
-      haptic: true,
       semanticLabel: '${section.label}: $value, $hint. Open ${section.label}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              IconTile(
-                icon: section.icon,
-                background: a.withValues(alpha: c.isDark ? 0.2 : 0.12),
-                foreground: a,
-                size: 28,
-                radius: Radii.md,
-                iconSize: 15,
-              ),
-              const SizedBox(width: Space.x2),
+              Icon(section.icon, size: 15, color: p.goldInk),
+              const SizedBox(width: 8),
               Expanded(
-                child: Text(section.label, style: t.label.copyWith(fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
+                child: Text(
+                  section.label.toUpperCase(),
+                  style: t.eyebrow.copyWith(fontSize: 9.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              Icon(LucideIcons.chevronRight, size: 14, color: c.textTertiary),
+              Icon(LucideIcons.arrowUpRight, size: 13, color: p.inkMute),
             ],
           ),
-          const SizedBox(height: Space.x2_5),
+          const SizedBox(height: 12),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(value, style: t.amountSmall, maxLines: 1),
+            child: Text(value, style: t.figure.copyWith(fontSize: 22), maxLines: 1),
           ),
-          const SizedBox(height: Space.x0_5),
-          Text(hint, style: t.micro.copyWith(color: c.textSecondary, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 2),
+          Text(hint, style: t.micro, maxLines: 1, overflow: TextOverflow.ellipsis),
           // Every tile keeps the spark row so tiles in a row line up.
-          const SizedBox(height: Space.x2),
-          spark == null ? const SizedBox(height: 22) : SparkBars(values: spark!, color: a, height: 22),
+          const SizedBox(height: 10),
+          spark == null ? const SizedBox(height: 20) : SparkBars(values: spark!, color: p.gold, height: 20),
         ],
       ),
     );

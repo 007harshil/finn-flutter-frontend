@@ -8,6 +8,7 @@ import '../../../app/di/data_providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../design_system/design_system.dart';
+import '../../../design_system/luxe/luxe.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../application/pending_actions.dart';
 import '../domain/pending_payment.dart';
@@ -284,7 +285,9 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LuxeScope(paint: true, child: Builder(builder: _buildSheet));
+
+  Widget _buildSheet(BuildContext context) {
     final today = ref.watch(todayProvider);
     if (_editing && !_loaded) {
       final v = ref.watch(pendingViewProvider(widget.pendingId!)).value;

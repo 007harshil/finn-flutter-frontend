@@ -6,6 +6,7 @@ import '../../../app/di/data_providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../design_system/design_system.dart';
+import '../../../design_system/luxe/luxe.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../goals/presentation/savings_widgets.dart';
 import '../application/emergency_actions.dart';
@@ -115,7 +116,9 @@ class _EmergencyPlanSheetState extends ConsumerState<EmergencyPlanSheet> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LuxeScope(paint: true, child: Builder(builder: _buildSheet));
+
+  Widget _buildSheet(BuildContext context) {
     final value = ref.watch(emergencyStatusProvider);
     if (value.hasValue) _load(value.requireValue);
     return FinnSheetScaffold(

@@ -11,8 +11,11 @@ abstract final class FinnTheme {
   static ThemeData light() => _build(FinnColors.light);
   static ThemeData dark() => _build(FinnColors.dark);
 
-  static ThemeData _build(FinnColors c) {
-    final type = FinnTypography.from(c);
+  /// A theme from explicit tokens (used to re-skin a subtree, e.g. Luxe).
+  static ThemeData fromTokens(FinnColors c, {FinnTypography? type}) => _build(c, type: type);
+
+  static ThemeData _build(FinnColors c, {FinnTypography? type}) {
+    type ??= FinnTypography.from(c);
     final scheme = ColorScheme(
       brightness: c.brightness,
       primary: c.primary,

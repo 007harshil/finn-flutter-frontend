@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../core/money/money_format.dart';
 import '../../../design_system/design_system.dart';
+import '../../../design_system/luxe/luxe.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../goals/presentation/savings_widgets.dart';
 import '../application/emergency_actions.dart';
@@ -16,7 +17,10 @@ class EmergencyMovementSheet extends ConsumerWidget {
   final bool withdraw;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context, WidgetRef ref) =>
+      LuxeScope(paint: true, child: Consumer(builder: (context, ref, _) => _buildSheet(context, ref)));
+
+  Widget _buildSheet(BuildContext context, WidgetRef ref) {
     final value = ref.watch(emergencyStatusProvider);
     if (!value.hasValue) {
       return FinnSheetScaffold(

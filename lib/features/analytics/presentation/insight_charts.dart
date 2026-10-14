@@ -9,6 +9,7 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
+import '../../../design_system/luxe/luxe.dart';
 import '../application/analytics_providers.dart';
 import '../domain/analytics.dart';
 import 'insight_widgets.dart';
@@ -39,55 +40,42 @@ class InsightChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final a = accent ?? c.accentAnalytics;
+    final p = context.luxe;
+    final lt = context.lt;
+    final a = accent ?? p.goldInk;
     final how = howCalculated;
-    return FinnCard(
-      padding: EdgeInsets.fromLTRB(Space.x4, Space.x4, Space.x4, how == null ? Space.x4 : Space.x1),
+    return LuxeCard(
+      padding: EdgeInsets.fromLTRB(18, 18, 18, how == null ? 18 : 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (icon != null) ...[
-                IconTile(
-                  icon: icon!,
-                  background: a.withValues(alpha: c.isDark ? 0.2 : 0.12),
-                  foreground: a,
-                  size: 32,
-                  radius: Radii.md,
-                  iconSize: 16,
-                ),
-                const SizedBox(width: Space.x3),
-              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Semantics(header: true, child: Text(title, style: t.sectionTitle)),
-                    const SizedBox(height: Space.x0_5),
-                    Text(subtitle, style: t.caption.copyWith(color: c.textSecondary)),
+                    Semantics(header: true, child: Text(title, style: lt.title.copyWith(fontSize: 20, height: 1.2))),
+                    const SizedBox(height: 6),
+                    Text(subtitle, style: lt.caption),
                   ],
                 ),
               ),
+              if (icon != null) ...[const SizedBox(width: 12), LuxeIconDisc(icon: icon!, color: a, size: 36)],
             ],
           ),
           if (legend.isNotEmpty) ...[
-            const SizedBox(height: Space.x3),
+            const SizedBox(height: 14),
             Wrap(
-              spacing: Space.x4,
-              runSpacing: Space.x1,
+              spacing: 16,
+              runSpacing: 6,
               children: [for (final l in legend) _LegendChip(entry: l)],
             ),
           ],
-          const SizedBox(height: Space.x4),
+          const SizedBox(height: 18),
           child,
-          if (how != null) ...[
-            const SizedBox(height: Space.x1),
-            HowCalculated(text: how),
-          ],
+          if (how != null) ...[const SizedBox(height: 6), const LuxeHairline(), HowCalculated(text: how)],
         ],
       ),
     );

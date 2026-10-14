@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../design_system/design_system.dart';
+import '../../../design_system/luxe/luxe.dart';
 import '../application/analytics_providers.dart';
 
 /// Shared building blocks for the Insights sections: entrance animation,
@@ -88,43 +89,33 @@ class TakeawayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final color = tone.color(c);
+    final p = context.luxe;
+    final lt = context.lt;
+    final color = tone.color(context.colors);
     final b = body;
     return Container(
-      padding: const EdgeInsets.all(Space.x4),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
       decoration: BoxDecoration(
-        color: tone.soft(c),
-        borderRadius: Radii.rXl,
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        color: p.tint(color, 0.06),
+        borderRadius: BorderRadius.circular(LuxeSpace.rTile),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: MergeSemantics(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            IconTile(
-              icon: icon,
-              background: color.withValues(alpha: c.isDark ? 0.25 : 0.16),
-              foreground: color,
-              size: 36,
-              radius: Radii.md,
-              iconSize: 18,
-            ),
-            const SizedBox(width: Space.x3),
+            LuxeIconDisc(icon: icon, color: color, size: 38),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: t.bodyStrong.copyWith(fontSize: 16, height: 1.3)),
-                  if (b != null) ...[
-                    const SizedBox(height: Space.x1),
-                    Text(b, style: t.caption.copyWith(color: c.textSecondary, height: 1.4)),
-                  ],
+                  Text(title, style: lt.title.copyWith(fontSize: 20, height: 1.2)),
+                  if (b != null) ...[const SizedBox(height: 6), Text(b, style: lt.caption)],
                 ],
               ),
             ),
-            if (trailing != null) ...[const SizedBox(width: Space.x2), trailing!],
+            if (trailing != null) ...[const SizedBox(width: 8), trailing!],
           ],
         ),
       ),
@@ -152,47 +143,47 @@ class KpiStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return FinnCard(
-      padding: const EdgeInsets.symmetric(vertical: Space.x3 + 2, horizontal: Space.x2),
+    final p = context.luxe;
+    final lt = context.lt;
+    return LuxeCard(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       child: IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (var i = 0; i < items.length; i++) ...[
-              if (i > 0) VerticalDivider(width: 1, thickness: 1, color: c.border),
+              if (i > 0)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: SizedBox(width: 1, child: ColoredBox(color: p.line)),
+                ),
               Expanded(
                 child: MergeSemantics(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: Space.x2),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(items[i].label.toUpperCase(),
-                            style: t.micro.copyWith(color: c.textTertiary, letterSpacing: 0.6, fontWeight: FontWeight.w800),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: Space.x1),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: DefaultTextStyle.merge(style: t.amountSmall, child: items[i].value),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        items[i].label.toUpperCase(),
+                        style: lt.eyebrow.copyWith(fontSize: 9.5),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: DefaultTextStyle.merge(style: lt.number.copyWith(fontSize: 17), child: items[i].value),
+                      ),
+                      if (items[i].caption != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          items[i].caption!,
+                          style: lt.micro.w(700).c(items[i].captionColor ?? p.inkSoft),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        if (items[i].caption != null) ...[
-                          const SizedBox(height: Space.x0_5),
-                          Text(
-                            items[i].caption!,
-                            style: t.micro.copyWith(
-                              color: items[i].captionColor ?? c.textSecondary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
                       ],
-                    ),
+                    ],
                   ),
                 ),
               ),

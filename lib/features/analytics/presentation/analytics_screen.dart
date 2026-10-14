@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/di/core_providers.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
-import '../../../shared/presentation/async_view.dart';
+import '../../../design_system/luxe/luxe.dart';
+import '../../../shared/presentation/luxe_async.dart';
 import '../application/analytics_providers.dart';
 import 'insight_widgets.dart';
 import 'sections/breakdown_sections.dart';
@@ -13,59 +13,20 @@ import 'sections/commitment_sections.dart';
 import 'sections/flow_sections.dart';
 import 'sections/overview_section.dart';
 
-/// Insights: one topic at a time. A pinned row of chips switches between
-/// topics, so the numbers you want are one tap away instead of a long scroll.
-class AnalyticsScreen extends ConsumerWidget {
+/// Insights: one topic at a time. The period sits under the title; a
+/// pinned rail of topics switches what is shown, so the numbers you want
+/// are one tap away instead of a long scroll. Topic content cross-fades
+/// and rises in, card by card.
+class AnalyticsScreen extends ConsumerStatefulWidget {
   const AnalyticsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final data = ref.watch(insightsDataProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Insights')),
-      body: AsyncView<InsightsData>(
-        value: data,
-        loading: const _InsightsSkeleton(),
-        errorTitle: 'Could not load your insights',
-        builder: (context, d) => _InsightsBody(data: d),
-      ),
-    );
-  }
+  ConsumerState<AnalyticsScreen> createState() => _AnalyticsScreenState();
 }
 
-class _InsightsSkeleton extends StatelessWidget {
-  const _InsightsSkeleton();
-
-  @override
-  Widget build(BuildContext context) => const SkeletonPulse(
-        child: ResponsiveCenter(
-          padding: EdgeInsets.all(Space.gutter),
-          child: Column(
-            children: [
-              SkeletonBox(height: 40, radius: Radii.full),
-              SizedBox(height: Space.x3),
-              SkeletonBox(height: 40, radius: Radii.full),
-              SizedBox(height: Space.x4),
-              CardSkeleton(height: 190, radius: Radii.xxxl),
-              SizedBox(height: Space.x4),
-              CardSkeleton(height: 240),
-            ],
-          ),
-        ),
-      );
-}
-
-class _InsightsBody extends ConsumerStatefulWidget {
-  const _InsightsBody({required this.data});
-  final InsightsData data;
-
-  @override
-  ConsumerState<_InsightsBody> createState() => _InsightsBodyState();
-}
-
-class _InsightsBodyState extends ConsumerState<_InsightsBody> {
+class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
   final _scroll = ScrollController();
-  final _filterKey = GlobalKey();
+  final _headKey = GlobalKey();
 
   @override
   void dispose() {
@@ -73,104 +34,121 @@ class _InsightsBodyState extends ConsumerState<_InsightsBody> {
     super.dispose();
   }
 
-  /// After switching topic, bring the chip row back to the top of the
+  /// After switching topic, bring the topic rail back to the top of the
   /// viewport so the new topic starts at its first card.
   void _revealTop() {
     if (!_scroll.hasClients) return;
-    // The chips sit directly below the period filter, so its height is the
-    // scroll offset at which they pin.
-    final box = _filterKey.currentContext?.findRenderObject() as RenderBox?;
-    final target = box?.size.height ?? 0.0;
+    final box = _headKey.currentContext?.findRenderObject() as RenderBox?;
+    final target = (box?.size.height ?? 0.0) + 4;
     if (_scroll.offset <= target) return;
-    final motion = context.motion;
-    if (motion.reduced) {
+    if (context.reduceMotion) {
       _scroll.jumpTo(target);
     } else {
-      _scroll.animateTo(target, duration: motion.slow, curve: motion.emphasized);
+      _scroll.animateTo(target, duration: LuxeDurations.base, curve: LuxeCurves.arrive);
     }
   }
 
   List<Widget> _sectionChildren(BuildContext context, InsightsSection s, InsightsData d) => switch (s) {
-        InsightsSection.overview => overviewSection(d),
-        InsightsSection.spending => spendingSection(context, d),
-        InsightsSection.cashFlow => cashFlowSection(context, d),
-        InsightsSection.categories => categoriesSection(d),
-        InsightsSection.payments => paymentsSection(context, d),
-        InsightsSection.budgets => budgetsSection(context, d),
-        InsightsSection.savings => savingsSection(context, d),
-        InsightsSection.loans => loansSection(context, d),
-        InsightsSection.subscriptions => subscriptionsSection(context, d),
-      };
+    InsightsSection.overview => overviewSection(d),
+    InsightsSection.spending => spendingSection(context, d),
+    InsightsSection.cashFlow => cashFlowSection(context, d),
+    InsightsSection.categories => categoriesSection(d),
+    InsightsSection.payments => paymentsSection(context, d),
+    InsightsSection.budgets => budgetsSection(context, d),
+    InsightsSection.savings => savingsSection(context, d),
+    InsightsSection.loans => loansSection(context, d),
+    InsightsSection.subscriptions => subscriptionsSection(context, d),
+  };
 
   @override
   Widget build(BuildContext context) {
-    final data = widget.data;
+    final value = ref.watch(insightsDataProvider);
     final section = ref.watch(insightsSectionProvider);
     ref.listen(insightsSectionProvider, (prev, next) {
       if (prev != next) WidgetsBinding.instance.addPostFrameCallback((_) => _revealTop());
     });
-    final children = _sectionChildren(context, section, data);
-    final motion = context.motion;
-
-    return CustomScrollView(
-      key: const PageStorageKey('insights'),
+    final data = value.value;
+    return LuxeDetailPage(
+      title: 'Insights',
+      storageKey: 'insights',
       controller: _scroll,
       slivers: [
         SliverToBoxAdapter(
           child: ResponsiveCenter(
-            key: _filterKey,
-            padding: const EdgeInsets.fromLTRB(Space.gutter, Space.x2, Space.gutter, Space.x1),
-            child: _FilterBar(filter: data.filter),
-          ),
-        ),
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: _ChipsHeader(selected: section),
-        ),
-        SliverToBoxAdapter(
-          child: ResponsiveCenter(
-            padding: EdgeInsets.fromLTRB(Space.gutter, Space.x3, Space.gutter, Space.x10 + context.bottomClearance),
-            child: AnimatedSwitcher(
-              duration: motion.normal,
-              switchInCurve: motion.emphasized,
-              switchOutCurve: Curves2.exit,
-              layoutBuilder: (current, previous) => Stack(
-                alignment: Alignment.topCenter,
-                children: [...previous, ?current],
-              ),
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: SlideTransition(
-                  position: Tween(begin: const Offset(0, 0.02), end: Offset.zero).animate(anim),
-                  child: child,
+            key: _headKey,
+            padding: const EdgeInsets.fromLTRB(LuxeSpace.gutter, 4, LuxeSpace.gutter, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Reveal(
+                  child: LuxePageTitle(
+                    eyebrow: data == null ? 'Your money, read' : data.periodLabel,
+                    title: 'Insights',
+                  ),
                 ),
-              ),
-              child: Column(
-                // A new topic or period remounts the content, replaying the
-                // chart entrances for the new numbers.
-                key: ValueKey((section, data.filter)),
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var i = 0; i < children.length; i++) ...[
-                    if (i > 0) const SizedBox(height: Space.x4),
-                    StaggeredEntrance(index: i, child: children[i]),
-                  ],
-                ],
-              ),
+                const SizedBox(height: 18),
+                if (data != null) Reveal(index: 1, child: _PeriodBar(filter: data.filter)),
+              ],
             ),
           ),
         ),
+        if (data == null)
+          SliverToBoxAdapter(
+            child: LuxeAsync<InsightsData>(
+              value: value,
+              loading: const LuxePageSkeleton(title: false, hero: 220, rows: 2),
+              errorTitle: 'Could not load your insights',
+              builder: (_, _) => const SizedBox.shrink(),
+            ),
+          )
+        else ...[
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: LuxePinnedBar(height: 64, fullBleed: true, child: _TopicRail(selected: section)),
+          ),
+          SliverToBoxAdapter(
+            child: ResponsiveCenter(
+              padding: const EdgeInsets.fromLTRB(LuxeSpace.gutter, 10, LuxeSpace.gutter, 24),
+              child: LuxeScope(
+                child: AnimatedSwitcher(
+                  duration: context.reduceMotion ? Duration.zero : LuxeDurations.base,
+                  switchInCurve: LuxeCurves.arrive,
+                  switchOutCurve: LuxeCurves.leave,
+                  layoutBuilder: (current, previous) =>
+                      Stack(alignment: Alignment.topCenter, children: [...previous, ?current]),
+                  child: Builder(
+                    // A new topic or period remounts the content, replaying
+                    // the chart entrances for the new numbers.
+                    key: ValueKey((section, data.filter)),
+                    builder: (context) {
+                      final children = _sectionChildren(context, section, data);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var i = 0; i < children.length; i++) ...[
+                            if (i > 0) const SizedBox(height: 16),
+                            Reveal(index: i, child: children[i]),
+                          ],
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Period filter
+// Period
 // ---------------------------------------------------------------------------
 
-class _FilterBar extends ConsumerWidget {
-  const _FilterBar({required this.filter});
+class _PeriodBar extends ConsumerWidget {
+  const _PeriodBar({required this.filter});
   final InsightsFilter filter;
 
   @override
@@ -181,75 +159,51 @@ class _FilterBar extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SegmentedTabs<InsightsPeriod>(
-          items: [
+        LuxeSegmented<InsightsPeriod>(
+          segments: [
             for (final p in InsightsPeriod.values)
-              SegmentItem(p, p == InsightsPeriod.month && filter.month != current ? 'Month' : p.label),
+              LuxeSegment(p, p == InsightsPeriod.month && filter.month != current ? 'Month' : p.label),
           ],
           selected: filter.period,
           onChanged: ctrl.setPeriod,
         ),
-        if (isMonth) ...[
-          const SizedBox(height: Space.x3),
-          MonthSwitcher(
-            month: filter.month,
-            min: current.shift(-(insightsHistoryMonths - 1)),
-            max: current,
-            onChanged: ctrl.setMonth,
-          ),
-        ],
+        MotionAnimatedSize(
+          child: isMonth
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: LuxeMonthStepper(
+                    month: filter.month,
+                    compact: true,
+                    min: current.shift(-(insightsHistoryMonths - 1)),
+                    max: current,
+                    subtitle: filter.month == current ? 'so far' : null,
+                    onChanged: ctrl.setMonth,
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
+        ),
       ],
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Topic chips (pinned)
+// Topic rail (pinned)
 // ---------------------------------------------------------------------------
 
-class _ChipsHeader extends SliverPersistentHeaderDelegate {
-  _ChipsHeader({required this.selected});
-  final InsightsSection selected;
-
-  static const double _height = 60;
-
-  @override
-  double get minExtent => _height;
-
-  @override
-  double get maxExtent => _height;
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    final c = context.colors;
-    final pinned = shrinkOffset > 0 || overlapsContent;
-    return AnimatedContainer(
-      duration: context.motion.fast,
-      decoration: BoxDecoration(
-        color: c.background,
-        border: Border(bottom: BorderSide(color: pinned ? c.border : Colors.transparent)),
-      ),
-      child: Center(child: ResponsiveCenter(child: _SectionChips(selected: selected))),
-    );
-  }
-
-  @override
-  bool shouldRebuild(_ChipsHeader old) => old.selected != selected;
-}
-
-class _SectionChips extends ConsumerStatefulWidget {
-  const _SectionChips({required this.selected});
+class _TopicRail extends ConsumerStatefulWidget {
+  const _TopicRail({required this.selected});
   final InsightsSection selected;
 
   @override
-  ConsumerState<_SectionChips> createState() => _SectionChipsState();
+  ConsumerState<_TopicRail> createState() => _TopicRailState();
 }
 
-class _SectionChipsState extends ConsumerState<_SectionChips> {
+class _TopicRailState extends ConsumerState<_TopicRail> {
   final _keys = {for (final s in InsightsSection.values) s: GlobalKey()};
 
   @override
-  void didUpdateWidget(_SectionChips old) {
+  void didUpdateWidget(_TopicRail old) {
     super.didUpdateWidget(old);
     if (old.selected != widget.selected) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _center(widget.selected));
@@ -259,83 +213,40 @@ class _SectionChipsState extends ConsumerState<_SectionChips> {
   void _center(InsightsSection s) {
     final ctx = _keys[s]?.currentContext;
     if (ctx == null || !mounted) return;
-    Scrollable.ensureVisible(ctx, alignment: 0.5, duration: context.motion.normal, curve: context.motion.emphasized);
+    Scrollable.ensureVisible(
+      ctx,
+      alignment: 0.5,
+      duration: context.reduceMotion ? Duration.zero : LuxeDurations.base,
+      curve: LuxeCurves.arrive,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
+      key: const PageStorageKey('insights-topics'),
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: Space.gutter),
+      padding: const EdgeInsets.symmetric(horizontal: LuxeSpace.gutter),
       child: Row(
         children: [
           for (final s in InsightsSection.values) ...[
-            if (s.index > 0) const SizedBox(width: Space.x2),
-            _SectionChip(
+            if (s.index > 0) const SizedBox(width: 8),
+            KeyedSubtree(
               key: _keys[s],
-              section: s,
-              selected: s == widget.selected,
-              onTap: () {
-                if (s == widget.selected) return;
-                HapticFeedback.selectionClick();
-                ref.read(insightsSectionProvider.notifier).select(s);
-              },
+              child: LuxeChip(
+                key: Key('insights-chip:${s.name}'),
+                label: s.label,
+                icon: s.icon,
+                selected: s == widget.selected,
+                semanticLabel: '${s.label} insights',
+                onTap: () {
+                  if (s == widget.selected) return;
+                  ref.read(insightsSectionProvider.notifier).select(s);
+                },
+              ),
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _SectionChip extends StatelessWidget {
-  const _SectionChip({super.key, required this.section, required this.selected, required this.onTap});
-
-  final InsightsSection section;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final a = section.accent(c);
-    final fg = selected ? Colors.white : c.textPrimary;
-    return Semantics(
-      button: true,
-      selected: selected,
-      inMutuallyExclusiveGroup: true,
-      label: '${section.label} insights',
-      excludeSemantics: true,
-      child: GestureDetector(
-        key: Key('insights-chip:${section.name}'),
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: AnimatedScale(
-          scale: selected ? 1.0 : 0.96,
-          duration: context.motion.fast,
-          child: AnimatedContainer(
-            duration: context.motion.normal,
-            curve: Curves2.emphasized,
-            constraints: const BoxConstraints(minHeight: 40),
-            padding: const EdgeInsets.symmetric(horizontal: Space.x3, vertical: Space.x2),
-            decoration: BoxDecoration(
-              color: selected ? a : c.surface,
-              borderRadius: Radii.rFull,
-              border: Border.all(color: selected ? a : c.border, width: 1.5),
-              boxShadow: selected && !c.isDark
-                  ? [BoxShadow(color: a.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 3))]
-                  : const [],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(section.icon, size: 15, color: selected ? Colors.white : a),
-                const SizedBox(width: Space.x1_5),
-                Text(section.label, style: context.text.label.copyWith(color: fg, fontWeight: FontWeight.w800)),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

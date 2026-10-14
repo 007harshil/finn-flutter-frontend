@@ -247,7 +247,7 @@ void main() {
       final card = find.byKey(const ValueKey('pending-split-card'));
       await tester.scrollUntilVisible(card, 300, scrollable: find.byType(Scrollable).first);
       expect(find.text('Split bill · 4 people'), findsOneWidget);
-      expect(find.text('THIS ITEM'), findsOneWidget);
+      expect(find.text('This item'), findsOneWidget);
       expect(find.descendant(of: card, matching: find.text('Sneha Patil')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

@@ -464,7 +464,14 @@ class LuxeLink extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(label, style: context.lt.label.w(650).c(p.ink)),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.lt.label.w(650).c(p.ink),
+                ),
+              ),
               const SizedBox(width: 6),
               Icon(icon, size: 14, color: p.ink),
             ],

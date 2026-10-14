@@ -8,6 +8,7 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
+import '../../../design_system/luxe/luxe.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../transactions/domain/transaction.dart';
 import '../application/pending_actions.dart';
@@ -94,7 +95,9 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LuxeScope(paint: true, child: Builder(builder: _buildSheet));
+
+  Widget _buildSheet(BuildContext context) {
     final v = ref.watch(pendingViewProvider(widget.pendingId)).value;
     if (v == null) {
       return const FinnSheetScaffold(
