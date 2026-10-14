@@ -63,6 +63,7 @@ void main() {
 
     // And back home the figure is still consistent.
     await tapTab(tester, 'Home');
+    await showHero(tester);
     expect(inHero(rupees(after.balance.available)), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../app/di/data_providers.dart';
 import '../../app/router/routes.dart';
 import '../../core/money/money_format.dart';
-import '../../design_system/design_system.dart';
 import '../../features/transactions/domain/transaction.dart';
-import 'category_icons.dart';
+import '../../kit/kit.dart';
 
-/// One transaction in a list. Rebuilds only when this transaction or its
-/// category changes (category is selected individually).
+/// One transaction in a list: category mark, what it was, and the signed
+/// amount (income green, spending ink). Sits inside a panel. Rebuilds
+/// only when this transaction or its category changes (the category is
+/// selected individually).
 class TransactionRow extends ConsumerWidget {
   const TransactionRow({super.key, required this.transaction, this.onTap, this.showDate = false});
 
   final Transaction transaction;
+
+  /// Defaults to opening the transaction.
   final VoidCallback? onTap;
 
   /// Show the date in the subtitle (for lists not grouped by date).
@@ -24,67 +26,28 @@ class TransactionRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = transaction;
-    final c = context.colors;
-    final text = context.text;
+    final c = context.ink;
+    final type = context.type;
     final category = ref.watch(categoryProvider(t.categoryId));
     final title = t.displayTitle ?? category?.name ?? 'Transaction';
-    final subtitleParts = <String>[
+    final date = showDate ? DateFormatsX.short(t.date) : null;
+    final subtitle = [
       if (t.displayTitle != null && category != null) category.name,
-      if (showDate) DateFormatsX.short(t.date),
-      if (t.paymentMethod != null) t.paymentMethod!.label,
-    ];
+      ?date,
+    ].join(', ');
     final amount = t.isIncome ? t.amount : -t.amount;
-    return Semantics(
-      button: true,
-      label: '$title, ${t.type.label}, ${MoneyFormatter.spoken(t.amount)}',
-      excludeSemantics: true,
-      child: PressableScale(
-        scale: 0.985,
-        onTap: onTap ?? () => context.push(AppRoutes.transaction(t.id)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: Space.x2_5, horizontal: Space.x1),
-          child: Row(
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  CategoryAvatar(category: category, size: 40),
-                  if (t.isLinked)
-                    Positioned(
-                      right: -3,
-                      bottom: -3,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(color: c.surface, shape: BoxShape.circle),
-                        child: Icon(LucideIcons.link2, size: 11, color: c.textSecondary),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(width: Space.x3),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodyStrong),
-                    if (subtitleParts.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(subtitleParts.join(' · '),
-                          maxLines: 1, overflow: TextOverflow.ellipsis, style: text.caption),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: Space.x3),
-              AmountText(
-                amount,
-                sign: SignDisplay.always,
-                style: text.amountMedium.copyWith(color: t.isIncome ? c.positive : c.textPrimary),
-              ),
-            ],
-          ),
-        ),
+    final spoken = AmountVisibility.hiddenOf(context) ? 'amount hidden' : MoneyFormatter.spoken(t.amount);
+    return LedgerRow(
+      leading: CategoryMark(category: category),
+      title: title,
+      subtitle: subtitle.isEmpty ? null : subtitle,
+      trailing: AmountText(
+        amount,
+        sign: SignDisplay.always,
+        style: type.figure.copyWith(color: t.isIncome ? c.green : c.ink),
       ),
+      semanticLabel: '$title, ${t.type.label}, $spoken${date == null ? '' : ', $date'}',
+      onTap: onTap ?? () => context.push(AppRoutes.transaction(t.id)),
     );
   }
 }

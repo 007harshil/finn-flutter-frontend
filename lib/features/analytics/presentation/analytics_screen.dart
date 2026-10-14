@@ -1,63 +1,39 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/di/core_providers.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../application/analytics_providers.dart';
-import 'insight_widgets.dart';
 import 'sections/breakdown_sections.dart';
 import 'sections/commitment_sections.dart';
 import 'sections/flow_sections.dart';
 import 'sections/overview_section.dart';
 
-/// Insights: one topic at a time. A pinned row of chips switches between
-/// topics, so the numbers you want are one tap away instead of a long scroll.
+/// Insights: the period on top, then one topic at a time. A pinned row of
+/// chips switches between topics, so the numbers you want are one tap away
+/// instead of a long scroll.
 class AnalyticsScreen extends ConsumerWidget {
   const AnalyticsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(insightsDataProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Insights')),
-      body: AsyncView<InsightsData>(
-        value: data,
-        loading: const _InsightsSkeleton(),
-        errorTitle: 'Could not load your insights',
-        builder: (context, d) => _InsightsBody(data: d),
-      ),
+    const appBar = LedgerAppBar(title: 'Insights');
+    return AsyncView<InsightsData>(
+      value: data,
+      loading: Scaffold(backgroundColor: context.ink.paper, appBar: appBar, body: const LedgerPageSkeleton()),
+      errorTitle: 'Could not load your insights',
+      builder: (context, d) => _InsightsBody(data: d, appBar: appBar),
     );
   }
 }
 
-class _InsightsSkeleton extends StatelessWidget {
-  const _InsightsSkeleton();
-
-  @override
-  Widget build(BuildContext context) => const SkeletonPulse(
-        child: ResponsiveCenter(
-          padding: EdgeInsets.all(Space.gutter),
-          child: Column(
-            children: [
-              SkeletonBox(height: 40, radius: Radii.full),
-              SizedBox(height: Space.x3),
-              SkeletonBox(height: 40, radius: Radii.full),
-              SizedBox(height: Space.x4),
-              CardSkeleton(height: 190, radius: Radii.xxxl),
-              SizedBox(height: Space.x4),
-              CardSkeleton(height: 240),
-            ],
-          ),
-        ),
-      );
-}
-
 class _InsightsBody extends ConsumerStatefulWidget {
-  const _InsightsBody({required this.data});
+  const _InsightsBody({required this.data, required this.appBar});
   final InsightsData data;
+  final PreferredSizeWidget appBar;
 
   @override
   ConsumerState<_InsightsBody> createState() => _InsightsBodyState();
@@ -74,7 +50,7 @@ class _InsightsBodyState extends ConsumerState<_InsightsBody> {
   }
 
   /// After switching topic, bring the chip row back to the top of the
-  /// viewport so the new topic starts at its first card.
+  /// viewport so the new topic starts at its first block.
   void _revealTop() {
     if (!_scroll.hasClients) return;
     // The chips sit directly below the period filter, so its height is the
@@ -86,7 +62,7 @@ class _InsightsBodyState extends ConsumerState<_InsightsBody> {
     if (motion.reduced) {
       _scroll.jumpTo(target);
     } else {
-      _scroll.animateTo(target, duration: motion.slow, curve: motion.emphasized);
+      _scroll.animateTo(target, duration: motion.slow, curve: motion.standard);
     }
   }
 
@@ -110,54 +86,34 @@ class _InsightsBodyState extends ConsumerState<_InsightsBody> {
       if (prev != next) WidgetsBinding.instance.addPostFrameCallback((_) => _revealTop());
     });
     final children = _sectionChildren(context, section, data);
-    final motion = context.motion;
 
-    return CustomScrollView(
-      key: const PageStorageKey('insights'),
+    return LedgerPage(
+      appBar: widget.appBar,
+      storageKey: 'insights',
       controller: _scroll,
       slivers: [
         SliverToBoxAdapter(
-          child: ResponsiveCenter(
+          child: PageColumn(
             key: _filterKey,
-            padding: const EdgeInsets.fromLTRB(Space.gutter, Space.x2, Space.gutter, Space.x1),
+            top: Sp.sm,
+            bottom: Sp.md,
             child: _FilterBar(filter: data.filter),
           ),
         ),
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: _ChipsHeader(selected: section),
-        ),
-        SliverToBoxAdapter(
-          child: ResponsiveCenter(
-            padding: EdgeInsets.fromLTRB(Space.gutter, Space.x3, Space.gutter, Space.x10 + context.bottomClearance),
-            child: AnimatedSwitcher(
-              duration: motion.normal,
-              switchInCurve: motion.emphasized,
-              switchOutCurve: Curves2.exit,
-              layoutBuilder: (current, previous) => Stack(
-                alignment: Alignment.topCenter,
-                children: [...previous, ?current],
-              ),
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: SlideTransition(
-                  position: Tween(begin: const Offset(0, 0.02), end: Offset.zero).animate(anim),
-                  child: child,
-                ),
-              ),
-              child: Column(
-                // A new topic or period remounts the content, replaying the
-                // chart entrances for the new numbers.
-                key: ValueKey((section, data.filter)),
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var i = 0; i < children.length; i++) ...[
-                    if (i > 0) const SizedBox(height: Space.x4),
-                    StaggeredEntrance(index: i, child: children[i]),
-                  ],
-                ],
-              ),
-            ),
+        SliverPersistentHeader(pinned: true, delegate: _ChipsHeader(selected: section)),
+        PageBlock(
+          top: Sp.lg,
+          child: Column(
+            // A new topic or period remounts the content, replaying the
+            // chart entrances for the new numbers.
+            key: ValueKey((section, data.filter)),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0) const SizedBox(height: Sp.section),
+                children[i],
+              ],
+            ],
           ),
         ),
       ],
@@ -181,17 +137,17 @@ class _FilterBar extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SegmentedTabs<InsightsPeriod>(
-          items: [
+        LedgerSegmented<InsightsPeriod>(
+          segments: [
             for (final p in InsightsPeriod.values)
-              SegmentItem(p, p == InsightsPeriod.month && filter.month != current ? 'Month' : p.label),
+              LedgerSegment(p, p == InsightsPeriod.month && filter.month != current ? 'Month' : p.label),
           ],
           selected: filter.period,
           onChanged: ctrl.setPeriod,
         ),
         if (isMonth) ...[
-          const SizedBox(height: Space.x3),
-          MonthSwitcher(
+          const SizedBox(height: Sp.sm),
+          MonthStepper(
             month: filter.month,
             min: current.shift(-(insightsHistoryMonths - 1)),
             max: current,
@@ -211,7 +167,7 @@ class _ChipsHeader extends SliverPersistentHeaderDelegate {
   _ChipsHeader({required this.selected});
   final InsightsSection selected;
 
-  static const double _height = 60;
+  static const double _height = 56;
 
   @override
   double get minExtent => _height;
@@ -221,15 +177,19 @@ class _ChipsHeader extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    final c = context.colors;
+    final c = context.ink;
     final pinned = shrinkOffset > 0 || overlapsContent;
-    return AnimatedContainer(
-      duration: context.motion.fast,
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: c.background,
-        border: Border(bottom: BorderSide(color: pinned ? c.border : Colors.transparent)),
+        color: c.paper,
+        border: Border(bottom: BorderSide(color: pinned ? c.line : Colors.transparent)),
       ),
-      child: Center(child: ResponsiveCenter(child: _SectionChips(selected: selected))),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: Sp.maxWidth),
+          child: _SectionChips(selected: selected),
+        ),
+      ),
     );
   }
 
@@ -259,83 +219,36 @@ class _SectionChipsState extends ConsumerState<_SectionChips> {
   void _center(InsightsSection s) {
     final ctx = _keys[s]?.currentContext;
     if (ctx == null || !mounted) return;
-    Scrollable.ensureVisible(ctx, alignment: 0.5, duration: context.motion.normal, curve: context.motion.emphasized);
+    Scrollable.ensureVisible(ctx, alignment: 0.5, duration: context.motion.normal, curve: context.motion.standard);
   }
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: Space.gutter),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.gutter),
       child: Row(
         children: [
           for (final s in InsightsSection.values) ...[
-            if (s.index > 0) const SizedBox(width: Space.x2),
-            _SectionChip(
+            if (s.index > 0) const SizedBox(width: Sp.sm),
+            KeyedSubtree(
               key: _keys[s],
-              section: s,
-              selected: s == widget.selected,
-              onTap: () {
-                if (s == widget.selected) return;
-                HapticFeedback.selectionClick();
-                ref.read(insightsSectionProvider.notifier).select(s);
-              },
+              child: Semantics(
+                inMutuallyExclusiveGroup: true,
+                child: LedgerChip(
+                  key: Key('insights-chip:${s.name}'),
+                  label: s.label,
+                  selected: s == widget.selected,
+                  semanticLabel: '${s.label} insights',
+                  onTap: () {
+                    if (s == widget.selected) return;
+                    ref.read(insightsSectionProvider.notifier).select(s);
+                  },
+                ),
+              ),
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _SectionChip extends StatelessWidget {
-  const _SectionChip({super.key, required this.section, required this.selected, required this.onTap});
-
-  final InsightsSection section;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final a = section.accent(c);
-    final fg = selected ? Colors.white : c.textPrimary;
-    return Semantics(
-      button: true,
-      selected: selected,
-      inMutuallyExclusiveGroup: true,
-      label: '${section.label} insights',
-      excludeSemantics: true,
-      child: GestureDetector(
-        key: Key('insights-chip:${section.name}'),
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: AnimatedScale(
-          scale: selected ? 1.0 : 0.96,
-          duration: context.motion.fast,
-          child: AnimatedContainer(
-            duration: context.motion.normal,
-            curve: Curves2.emphasized,
-            constraints: const BoxConstraints(minHeight: 40),
-            padding: const EdgeInsets.symmetric(horizontal: Space.x3, vertical: Space.x2),
-            decoration: BoxDecoration(
-              color: selected ? a : c.surface,
-              borderRadius: Radii.rFull,
-              border: Border.all(color: selected ? a : c.border, width: 1.5),
-              boxShadow: selected && !c.isDark
-                  ? [BoxShadow(color: a.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 3))]
-                  : const [],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(section.icon, size: 15, color: selected ? Colors.white : a),
-                const SizedBox(width: Space.x1_5),
-                Text(section.label, style: context.text.label.copyWith(color: fg, fontWeight: FontWeight.w800)),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

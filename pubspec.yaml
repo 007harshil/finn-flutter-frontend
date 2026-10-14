@@ -71,6 +71,13 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Variable font (wght 200–800) used by the lib/kit design system. The
+  # kit sets the `wght` axis explicitly (see kit/tokens.dart).
+  fonts:
+    - family: Atkinson
+      fonts:
+        - asset: assets/fonts/AtkinsonHyperlegibleNext.ttf
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

@@ -7,11 +7,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/core_providers.dart';
 import '../../../../app/di/data_providers.dart';
 import '../../../../app/router/routes.dart';
-import '../../../../app/shell/app_drawer.dart';
 import '../../../../core/time/dates.dart';
-import '../../../../design_system/design_system.dart';
+import '../../../../kit/kit.dart';
 
-/// Greeting, today's date, hide-balances toggle and the alerts bell.
+/// Menu, hide-balances and alerts on one line; date and greeting below.
 class HomeHeader extends ConsumerWidget {
   const HomeHeader({super.key});
 
@@ -23,8 +22,7 @@ class HomeHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
-    final t = context.text;
+    final t = context.type;
     final name = ref.watch(profileStreamProvider.select((v) => v.value?.displayName.trim()));
     final today = ref.watch(todayProvider);
     final hidden = ref.watch(settingsProvider.select((s) => s.hideBalances));
@@ -32,49 +30,44 @@ class HomeHeader extends ConsumerWidget {
     final greeting = greetingFor(ref.read(clockProvider).now().hour);
     final title = name == null || name.isEmpty ? greeting : '$greeting, $name';
 
-    return Padding(
-      padding: const EdgeInsets.only(top: Space.x2),
-      child: Row(
-        children: [
-          const AppMenuButton(),
-          if (AppDrawerScope.maybeOf(context) != null) const SizedBox(width: Space.x3),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(DateFormats.weekdayDayMonth.format(today).toUpperCase(), style: t.eyebrow),
-                const SizedBox(height: Space.x1),
-                Semantics(
-                  header: true,
-                  child: Text(title, style: t.pageTitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: Sp.sm),
+          child: Row(
+            children: [
+              Transform.translate(offset: const Offset(-10, 0), child: const LedgerMenuButton()),
+              const Spacer(),
+              LedgerIconButton(
+                icon: hidden ? LucideIcons.eyeOff : LucideIcons.eye,
+                tooltip: hidden ? 'Show balances' : 'Hide balances',
+                onPressed: () {
+                  if (ref.read(settingsProvider).hapticsEnabled) HapticFeedback.selectionClick();
+                  ref.read(settingsProvider.notifier).update((s) => s.copyWith(hideBalances: !s.hideBalances));
+                },
+              ),
+              Transform.translate(
+                offset: const Offset(8, 0),
+                child: LedgerIconButton(
+                  icon: LucideIcons.bell,
+                  tooltip: unread > 0 ? 'Alerts, $unread unread' : 'Alerts',
+                  badge: unread,
+                  badgeLabel: '$unread unread alerts',
+                  onPressed: () => context.push(AppRoutes.alerts),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(width: Space.x2),
-          FinnIconButton(
-            icon: hidden ? LucideIcons.eyeOff : LucideIcons.eye,
-            tooltip: hidden ? 'Show balances' : 'Hide balances',
-            variant: FinnIconButtonVariant.filled,
-            onPressed: () {
-              if (ref.read(settingsProvider).hapticsEnabled) HapticFeedback.selectionClick();
-              ref.read(settingsProvider.notifier).update((s) => s.copyWith(hideBalances: !s.hideBalances));
-            },
-          ),
-          const SizedBox(width: Space.x2),
-          CountBadge(
-            count: unread,
-            color: c.attention,
-            semanticsLabel: '$unread unread alerts',
-            child: FinnIconButton(
-              icon: LucideIcons.bell,
-              tooltip: unread > 0 ? 'Alerts, $unread unread' : 'Alerts',
-              variant: FinnIconButtonVariant.filled,
-              onPressed: () => context.push(AppRoutes.alerts),
-            ),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: Sp.md),
+        Text(DateFormats.weekdayDayMonth.format(today), style: t.label),
+        const SizedBox(height: 2),
+        Semantics(
+          header: true,
+          child: Text(title, style: t.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+        ),
+      ],
     );
   }
 }

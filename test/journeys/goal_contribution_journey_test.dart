@@ -54,6 +54,7 @@ void main() {
 
     // Home: available down, set aside up, cash unchanged.
     await tapTab(tester, 'Home');
+    await showHero(tester);
     expect(inHero(rupees(after.balance.available)), findsOneWidget);
     expect(inHero(rupees(after.balance.earmarked)), findsOneWidget);
     expect(inHero(rupees(before.balance.cash)), findsOneWidget);

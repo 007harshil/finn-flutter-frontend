@@ -9,7 +9,6 @@ import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
 import '../../../shared/presentation/action_runner.dart';
-import '../../emergency_fund/domain/emergency_fund.dart';
 import '../domain/goal.dart';
 
 /// Shared presentation pieces for earmarked savings (goals and the
@@ -23,60 +22,6 @@ String savingsMoney(BuildContext context, Money m, {SignDisplay sign = SignDispl
 String coverageLabel(double months) {
   final s = months.toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '');
   return '$s month${months == 1 ? '' : 's'}';
-}
-
-/// Hero gradient for an emergency-fund level, derived from semantic tokens.
-Gradient emergencyGradient(FinnColors c, EmergencyFundLevel level) {
-  Color base;
-  switch (level) {
-    case EmergencyFundLevel.notConfigured:
-      return c.heroGradient;
-    case EmergencyFundLevel.critical:
-      base = c.negative;
-    case EmergencyFundLevel.building:
-      base = c.attention;
-    case EmergencyFundLevel.funded:
-      base = c.positive;
-  }
-  return LinearGradient(
-    colors: [base, Color.lerp(base, c.heroEnd, 0.6)!],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-}
-
-IconData emergencyLevelIcon(EmergencyFundLevel level) => switch (level) {
-      EmergencyFundLevel.notConfigured => LucideIcons.shieldCheck,
-      EmergencyFundLevel.critical => LucideIcons.shieldAlert,
-      EmergencyFundLevel.building => LucideIcons.shieldCheck,
-      EmergencyFundLevel.funded => LucideIcons.circleCheck,
-    };
-
-/// Translucent pill for use on gradient cards.
-class OnGradientPill extends StatelessWidget {
-  const OnGradientPill({super.key, required this.label, this.icon});
-
-  final String label;
-  final IconData? icon;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: Space.x2, vertical: Space.x1),
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: Radii.rFull),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 12, color: Colors.white),
-              const SizedBox(width: Space.x1),
-            ],
-            Text(
-              label,
-              style: context.text.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 0.4),
-            ),
-          ],
-        ),
-      );
 }
 
 /// One contribution or withdrawal.

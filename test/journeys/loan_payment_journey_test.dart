@@ -48,10 +48,10 @@ void main() {
     expect(after.balance.available, before.balance.available - emi);
 
     // Loan detail: new outstanding in the hero, payment in the history.
-    await scrollTo(tester, find.text('outstanding principal'), up: true);
+    await scrollTo(tester, find.text('Outstanding principal'), up: true);
     expect(find.text(AmountText.formatted(loanAfter.outstanding)), findsOneWidget);
     expect(find.text(AmountText.formatted(loanBefore.outstanding)), findsNothing);
-    await scrollTo(tester, find.text('${loanAfter.payments.length} recorded'));
+    await scrollTo(tester, find.textContaining('Payments'));
     expect(loanAfter.payments.length, loanBefore.payments.length + 1);
     final row = find.byKey(ValueKey(payment.id));
     await scrollTo(tester, row);
@@ -66,6 +66,7 @@ void main() {
     // second returns to the Home root.
     await tapTab(tester, 'Home');
     await tapTab(tester, 'Home');
+    await showHero(tester);
     expect(inHero(rupees(after.balance.available)), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

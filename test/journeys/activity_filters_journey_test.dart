@@ -1,5 +1,6 @@
 import 'package:finn/data/local/local_data_store.dart';
 import 'package:finn/features/transactions/application/transaction_filter.dart';
+import 'package:finn/features/transactions/domain/transaction.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,18 +18,22 @@ void main() {
     ProviderContainer container() => ProviderScope.containerOf(tester.element(find.byKey(const ValueKey('activity-filters'))));
     TransactionFilter filter() => container().read(transactionFilterProvider);
 
-    // One-line verdict plus in/out figures.
+    // One-line verdict plus money in / money out.
     expect(find.textContaining(RegExp(r'^(Kept|Overspent|Spent|Earned)')), findsWidgets);
-    expect(find.text('In'), findsOneWidget);
-    expect(find.text('Out'), findsOneWidget);
+    expect(find.text('Money in'), findsOneWidget);
+    expect(find.text('Money out'), findsOneWidget);
 
-    // Daily details open and close.
-    await tester.tap(find.byKey(const ValueKey('pulse-details')));
+    // The two figures double as the type switch: tap to narrow, tap again for all.
+    await tester.tap(find.byKey(const ValueKey('activity-type:income')));
     await tester.pumpAndSettle();
-    expect(find.text('No-spend days'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('pulse-details')));
+    expect(filter().type, TransactionType.income);
+    expect(find.textContaining(RegExp(r'^Earned')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('activity-type:expense')));
     await tester.pumpAndSettle();
-    expect(find.text('No-spend days'), findsNothing);
+    expect(filter().type, TransactionType.expense);
+    await tester.tap(find.byKey(const ValueKey('activity-type:expense')));
+    await tester.pumpAndSettle();
+    expect(filter().type, isNull);
 
     // Tapping a legend chip filters to that category; its chip appears up top.
     final legend = find.byWidgetPredicate((w) => w.key is ValueKey<String> &&
@@ -70,11 +75,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  // Small phone + heavy data: summary, details and filter sheet must not overflow.
+  // Small phone + heavy data: summary, list and filter sheet must not overflow.
   testWidgets('activity lays out at 320 px wide (stressed data)', (tester) async {
     tester.view.physicalSize = const Size(320, 640) * tester.view.devicePixelRatio;
     addTearDown(tester.view.resetPhysicalSize);
-    // Full motion: the bar/chart animations must also finish and settle.
+    // Full motion: every transition must also finish and settle.
     final env = await TestEnv.create(
       scenario: DataScenario.stressed,
       prefsValues: {'finn.settings.v1': '{"onboardingComplete":true,"motion":"full"}'},
@@ -82,7 +87,7 @@ void main() {
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
     await tapTab(tester, 'Activity');
-    await tester.tap(find.byKey(const ValueKey('pulse-details')));
+    await tester.tap(find.byKey(const ValueKey('activity-type:expense')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('activity-filters')));
     await tester.pumpAndSettle();

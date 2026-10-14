@@ -4,61 +4,43 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/router/routes.dart';
-import '../../../../design_system/design_system.dart';
-import '../../../../shared/presentation/async_view.dart';
+import '../../../../kit/kit.dart';
 import '../../application/home_overview.dart';
-import 'home_common.dart';
 
-/// First-run welcome with the primary call to action.
+/// First-run block: one sentence about FiNN and the one action that
+/// starts everything.
 class WelcomeCard extends StatelessWidget {
   const WelcomeCard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final t = context.text;
-    return GradientHeroCard(
-      watermark: LucideIcons.sparkles,
-      padding: const EdgeInsets.all(Space.x6),
-      child: Column(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle),
-            child: const Icon(LucideIcons.wallet, size: 26, color: Colors.white),
-          ),
-          const SizedBox(height: Space.x4),
-          Text(
-            'Welcome to FiNN',
-            style: t.title.copyWith(color: Colors.white, fontSize: 22),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: Space.x1_5),
-          Text(
-            'Your calm, private command centre for money. Record your first transaction and everything else builds from there.',
-            style: t.body.copyWith(color: Colors.white70),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: Space.x5),
-          FinnButton(
-            label: 'Record first transaction',
-            icon: LucideIcons.plus,
-            variant: FinnButtonVariant.secondary,
-            size: FinnButtonSize.lg,
-            expand: true,
-            onPressed: () => context.push(AppRoutes.newTransaction()),
-          ),
-        ],
-      ),
+    final t = context.type;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Welcome to FiNN', style: t.heading),
+        const SizedBox(height: Sp.xs),
+        Text(
+          'Record your first income or expense. Balances, budgets and goals build from there.',
+          style: t.label,
+        ),
+        const SizedBox(height: Sp.lg),
+        LedgerButton(
+          label: 'Record first transaction',
+          icon: LucideIcons.plus,
+          expand: true,
+          onPressed: () => context.push(AppRoutes.newTransaction()),
+        ),
+      ],
     );
   }
 }
 
-/// Getting-started checklist for new users.
+/// "Get set up": four optional steps, each opening its form.
 class SetupChecklistSection extends ConsumerWidget {
   const SetupChecklistSection({super.key});
 
-  static String routeFor(SetupStep s) => switch (s) {
+  static String routeFor(SetupStep step) => switch (step) {
     SetupStep.profile => AppRoutes.profile,
     SetupStep.emergencyFund => AppRoutes.emergencyPlan,
     SetupStep.goal => AppRoutes.newGoal,
@@ -67,36 +49,31 @@ class SetupChecklistSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
-    final value = ref.watch(setupChecklistProvider);
-    final done = value.value;
-    return HomeSection(
-      icon: LucideIcons.listChecks,
+    final c = context.ink;
+    final list = ref.watch(setupChecklistProvider).value;
+    if (list == null) return const LedgerSkeleton(height: 260, radius: Rad.lg);
+    return LedgerSection(
       title: 'Get set up',
-      subtitle: done == null ? null : '${done.completed} of ${done.total} done · takes a few minutes',
-      tileColor: c.accentTransactions,
-      child: AsyncView<SetupChecklist>(
-        value: value,
-        loading: const SkeletonPulse(child: CardSkeleton(height: 240)),
-        builder: (context, list) => HomeListCard(
-          children: [
-            for (final step in SetupStep.values)
-              HomeRow(
-                key: ValueKey(step),
-                onTap: () => context.push(routeFor(step)),
-                semanticLabel: list.isDone(step) ? '${step.title}, done' : step.title,
-                leading: Icon(
-                  list.isDone(step) ? LucideIcons.circleCheck : LucideIcons.circle,
-                  size: 22,
-                  color: list.isDone(step) ? c.positive : c.textTertiary,
-                ),
-                title: step.title,
-                subtitle: list.isDone(step) ? 'Done' : step.description,
-                subtitleColor: list.isDone(step) ? c.positive : null,
-                showChevron: true,
-              ),
-          ],
-        ),
+      trailing: Text('${list.completed} of ${list.total} done', style: context.type.label),
+      child: LedgerPanel(
+        dividerIndent: Sp.lg + 40 + Sp.md + 2,
+        children: [
+          for (final step in SetupStep.values)
+            LedgerRow(
+              key: ValueKey(step),
+              leading: list.done.contains(step)
+                  ? IconWell(icon: LucideIcons.check, color: c.green, background: c.greenSoft)
+                  : const IconWell(icon: LucideIcons.circle),
+              title: step.title,
+              subtitle: list.done.contains(step) ? 'Done' : step.description,
+              subtitleColor: list.done.contains(step) ? c.green : null,
+              semanticLabel: list.done.contains(step) ? '${step.title}, done' : step.title,
+              titleLines: 2,
+              subtitleLines: 2,
+              chevron: true,
+              onTap: () => context.push(routeFor(step)),
+            ),
+        ],
       ),
     );
   }

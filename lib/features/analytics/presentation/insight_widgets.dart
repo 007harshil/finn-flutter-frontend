@@ -1,15 +1,14 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../application/analytics_providers.dart';
 
-/// Shared building blocks for the Insights sections: entrance animation,
-/// KPI strips, gauges, split bars and plain-language takeaways.
+/// Shared building blocks for the Insights topics: the lead figure that
+/// opens a topic, a row of supporting figures, list sections and the
+/// one-time chart entrance.
 
 extension InsightsSectionUi on InsightsSection {
   IconData get icon => switch (this) {
@@ -22,18 +21,6 @@ extension InsightsSectionUi on InsightsSection {
         InsightsSection.savings => LucideIcons.piggyBank,
         InsightsSection.loans => LucideIcons.landmark,
         InsightsSection.subscriptions => LucideIcons.repeat,
-      };
-
-  Color accent(FinnColors c) => switch (this) {
-        InsightsSection.overview => c.accentAnalytics,
-        InsightsSection.spending => c.info,
-        InsightsSection.cashFlow => c.accentNetWorth,
-        InsightsSection.categories => c.accentPending,
-        InsightsSection.payments => c.accentTransactions,
-        InsightsSection.budgets => c.accentBudgets,
-        InsightsSection.savings => c.accentGoals,
-        InsightsSection.loans => c.accentLoans,
-        InsightsSection.subscriptions => c.accentSubscriptions,
       };
 }
 
@@ -61,465 +48,293 @@ class GrowIn extends StatelessWidget {
     final m = context.motion;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: m.reduced ? 1 : 0, end: 1),
-      duration: m.progress,
-      curve: Curves2.emphasized,
+      duration: m.slow,
+      curve: m.standard,
       builder: (context, t, _) => builder(context, t),
     );
   }
 }
 
-/// A big, plain-language sentence that opens a section: the one thing to
-/// know before reading any chart.
-class TakeawayCard extends StatelessWidget {
-  const TakeawayCard({
+/// Whole-rupee amount in a figure style, scaled down to fit.
+Widget insightAmount(
+  BuildContext context,
+  Money m, {
+  TextStyle? style,
+  Color? color,
+  SignDisplay sign = SignDisplay.auto,
+}) =>
+    AmountText(
+      m,
+      style: style ?? context.type.figure,
+      color: color,
+      sign: sign,
+      decimals: DecimalDisplay.none,
+      compact: m.abs() >= const Money.rupees(10000000),
+      fit: true,
+    );
+
+/// Green for a gain, red for a loss, ink for zero. Masked amounts stay ink.
+Color? signColor(BuildContext context, Money m) {
+  if (AmountVisibility.hiddenOf(context)) return null;
+  final c = context.ink;
+  return m.isNegative ? c.red : (m.isPositive ? c.green : null);
+}
+
+/// The figure a topic opens with: a short label, the number, and one
+/// plain sentence that explains it.
+class InsightLead extends StatelessWidget {
+  const InsightLead({
     super.key,
-    required this.icon,
-    required this.title,
-    this.body,
-    this.tone = FinnTone.info,
-    this.trailing,
+    required this.label,
+    required this.value,
+    this.sentence,
+    this.sentenceColor,
+    this.below,
   });
 
-  final IconData icon;
-  final String title;
-  final String? body;
-  final FinnTone tone;
-  final Widget? trailing;
+  final String label;
+
+  /// Usually an [AnimatedAmount] in `figureXL` or a `Text` in `figureL`.
+  final Widget value;
+  final String? sentence;
+  final Color? sentenceColor;
+
+  /// Bar or note under the number.
+  final Widget? below;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final color = tone.color(c);
-    final b = body;
-    return Container(
-      padding: const EdgeInsets.all(Space.x4),
-      decoration: BoxDecoration(
-        color: tone.soft(c),
-        borderRadius: Radii.rXl,
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: MergeSemantics(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            IconTile(
-              icon: icon,
-              background: color.withValues(alpha: c.isDark ? 0.25 : 0.16),
-              foreground: color,
-              size: 36,
-              radius: Radii.md,
-              iconSize: 18,
-            ),
-            const SizedBox(width: Space.x3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: t.bodyStrong.copyWith(fontSize: 16, height: 1.3)),
-                  if (b != null) ...[
-                    const SizedBox(height: Space.x1),
-                    Text(b, style: t.caption.copyWith(color: c.textSecondary, height: 1.4)),
-                  ],
-                ],
-              ),
-            ),
-            if (trailing != null) ...[const SizedBox(width: Space.x2), trailing!],
-          ],
+    final t = context.type;
+    final s = sentence;
+    final b = below;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        MergeSemantics(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(label, style: t.label),
+              const SizedBox(height: Sp.xs),
+              Align(alignment: Alignment.centerLeft, child: value),
+            ],
+          ),
         ),
-      ),
+        if (b != null) ...[const SizedBox(height: Sp.lg), b],
+        if (s != null) ...[
+          const SizedBox(height: Sp.md),
+          Text(s, style: t.label.copyWith(color: sentenceColor)),
+        ],
+      ],
     );
   }
 }
 
-/// One number in a [KpiStrip].
-@immutable
-class Kpi {
-  const Kpi({required this.label, required this.value, this.caption, this.captionColor});
+/// Two or three supporting figures side by side, under a lead.
+class InsightStats extends StatelessWidget {
+  const InsightStats({super.key, required this.stats});
+
+  final List<Widget> stats;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < stats.length; i++) ...[
+          if (i > 0) const SizedBox(width: Sp.md),
+          Expanded(child: stats[i]),
+        ],
+      ],
+    );
+  }
+}
+
+/// A [LedgerStat] whose value is a whole-rupee amount, plus an optional
+/// small line under it ("per month").
+class InsightStat extends StatelessWidget {
+  const InsightStat({
+    super.key,
+    required this.label,
+    required this.value,
+    this.caption,
+    this.captionColor,
+  });
 
   final String label;
-
-  /// Usually an `AmountText` or a `Text`; scaled down to fit.
   final Widget value;
   final String? caption;
   final Color? captionColor;
-}
-
-/// Two to three headline numbers side by side in one card.
-class KpiStrip extends StatelessWidget {
-  const KpiStrip({super.key, required this.items});
-  final List<Kpi> items;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return FinnCard(
-      padding: const EdgeInsets.symmetric(vertical: Space.x3 + 2, horizontal: Space.x2),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < items.length; i++) ...[
-              if (i > 0) VerticalDivider(width: 1, thickness: 1, color: c.border),
-              Expanded(
-                child: MergeSemantics(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: Space.x2),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(items[i].label.toUpperCase(),
-                            style: t.micro.copyWith(color: c.textTertiary, letterSpacing: 0.6, fontWeight: FontWeight.w800),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: Space.x1),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: DefaultTextStyle.merge(style: t.amountSmall, child: items[i].value),
-                        ),
-                        if (items[i].caption != null) ...[
-                          const SizedBox(height: Space.x0_5),
-                          Text(
-                            items[i].caption!,
-                            style: t.micro.copyWith(
-                              color: items[i].captionColor ?? c.textSecondary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Circular gauge that sweeps to [value] (0–1; values above 1 draw a
-/// full ring). An optional [marker] (0–1) draws a tick, e.g. "time passed".
-class RingGauge extends StatelessWidget {
-  const RingGauge({
-    super.key,
-    required this.value,
-    required this.color,
-    this.size = 92,
-    this.stroke = 10,
-    this.marker,
-    this.center,
-    this.semanticLabel,
-  });
-
-  final double value;
-  final Color color;
-  final double size;
-  final double stroke;
-  final double? marker;
-  final Widget? center;
-  final String? semanticLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Semantics(
-      label: semanticLabel,
-      excludeSemantics: semanticLabel != null,
-      child: GrowIn(
-        builder: (context, t) => SizedBox.square(
-          dimension: size,
-          child: CustomPaint(
-            painter: _RingPainter(
-              value: value.clamp(0, 1) * t,
-              color: color,
-              track: c.surfaceMuted,
-              stroke: stroke,
-              marker: marker,
-              markerColor: c.textPrimary,
-            ),
-            child: center == null
-                ? null
-                : Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(stroke + 4),
-                      child: FittedBox(fit: BoxFit.scaleDown, child: center),
-                    ),
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RingPainter extends CustomPainter {
-  _RingPainter({
-    required this.value,
-    required this.color,
-    required this.track,
-    required this.stroke,
-    required this.marker,
-    required this.markerColor,
-  });
-
-  final double value;
-  final Color color;
-  final Color track;
-  final double stroke;
-  final double? marker;
-  final Color markerColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final arcRect = rect.deflate(stroke / 2);
-    final base = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(arcRect, 0, math.pi * 2, false, base..color = track);
-    if (value > 0) {
-      canvas.drawArc(arcRect, -math.pi / 2, math.pi * 2 * value, false, base..color = color);
-    }
-    final m = marker;
-    if (m != null) {
-      final angle = -math.pi / 2 + math.pi * 2 * m.clamp(0, 1);
-      final r = size.width / 2;
-      final c = rect.center;
-      final dir = Offset(math.cos(angle), math.sin(angle));
-      canvas.drawLine(
-        c + dir * (r - stroke - 3),
-        c + dir * (r + 1),
-        Paint()
-          ..color = markerColor
-          ..strokeWidth = 2.5
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_RingPainter old) =>
-      old.value != value || old.color != color || old.track != track || old.marker != marker;
-}
-
-/// One part of a [SplitBar].
-@immutable
-class SplitSegment {
-  const SplitSegment(this.value, this.color, {this.label});
-  final double value;
-  final Color color;
-  final String? label;
-}
-
-/// Horizontal bar split into proportional coloured parts that slide in.
-class SplitBar extends StatelessWidget {
-  const SplitBar({super.key, required this.segments, this.height = 14, this.semanticLabel});
-
-  final List<SplitSegment> segments;
-  final double height;
-  final String? semanticLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final total = segments.fold<double>(0, (a, s) => a + math.max(0, s.value));
-    return Semantics(
-      label: semanticLabel,
-      excludeSemantics: semanticLabel != null,
-      child: GrowIn(
-        builder: (context, t) => ClipRRect(
-          borderRadius: Radii.rFull,
-          child: SizedBox(
-            height: height,
-            child: LayoutBuilder(
-              builder: (context, box) {
-                final w = box.maxWidth;
-                final parts = segments.where((s) => s.value > 0).toList();
-                return Stack(
-                  children: [
-                    Positioned.fill(child: ColoredBox(color: c.surfaceMuted)),
-                    if (total > 0)
-                      Row(
-                        children: [
-                          for (var i = 0; i < parts.length; i++) ...[
-                            if (i > 0) SizedBox(width: 2 * t),
-                            Container(
-                              width: math.max(0, w * parts[i].value / total * t - (i > 0 ? 2 : 0)),
-                              color: parts[i].color,
-                            ),
-                          ],
-                        ],
-                      ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Small coloured dot + label + value used under split bars and gauges.
-class LegendValue extends StatelessWidget {
-  const LegendValue({super.key, required this.color, required this.label, required this.value, this.dashed = false});
-
-  final Color color;
-  final String label;
-  final String value;
-  final bool dashed;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return MergeSemantics(
-      child: Row(
+    final t = context.type;
+    final cap = caption;
+    return LedgerStat(
+      label: label,
+      value: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 10,
-            height: dashed ? 3 : 10,
-            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
-          ),
-          const SizedBox(width: Space.x1_5),
-          Text(label, style: t.caption.copyWith(color: c.textSecondary)),
-          const SizedBox(width: Space.x1),
-          Flexible(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(value, style: t.caption.copyWith(color: c.textPrimary, fontWeight: FontWeight.w800)),
-            ),
-          ),
+          value,
+          if (cap != null)
+            Text(cap, style: t.small.copyWith(color: captionColor), maxLines: 2, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
   }
 }
 
-/// Muted placeholder shown inside a card when there is nothing to chart.
-class InsightNoData extends StatelessWidget {
-  const InsightNoData({super.key, required this.message, this.icon = LucideIcons.chartNoAxesColumn, this.action});
+/// A titled list: an optional sentence, rows in one panel, and an
+/// optional quiet action under it ("See all 12").
+class InsightListSection extends StatelessWidget {
+  const InsightListSection({
+    super.key,
+    required this.title,
+    required this.rows,
+    this.note,
+    this.actionLabel,
+    this.onAction,
+    this.footer,
+    this.dividerIndent = Sp.lg + 40 + Sp.md + 2,
+  });
 
-  final String message;
-  final IconData icon;
-  final Widget? action;
+  final String title;
 
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: Space.x6, horizontal: Space.x4),
-          decoration: BoxDecoration(color: c.surfaceMuted, borderRadius: Radii.rLg),
-          child: Column(
-            children: [
-              Icon(icon, size: 22, color: c.textTertiary),
-              const SizedBox(height: Space.x2),
-              Text(message, textAlign: TextAlign.center, style: context.text.caption.copyWith(color: c.textSecondary)),
-            ],
-          ),
-        ),
-        if (action != null) ...[const SizedBox(height: Space.x3), action!],
-      ],
-    );
-  }
-}
-
-/// Thin bar showing [value] (0–1) of the widest item, used in ranked lists.
-class RelativeBar extends StatelessWidget {
-  const RelativeBar({super.key, required this.value, required this.color, this.height = 6, this.marker});
-
-  final double value;
-  final Color color;
-  final double height;
-
-  /// Optional tick (0–1), e.g. how much of the budget period has passed.
-  final double? marker;
+  /// Under everything else (a "How this is calculated" disclosure).
+  final Widget? footer;
+  final String? note;
+  final List<Widget> rows;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final double dividerIndent;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    return GrowIn(
-      builder: (context, t) => SizedBox(
-        height: height + (marker == null ? 0 : 6),
-        child: LayoutBuilder(
-          builder: (context, box) {
-            final w = box.maxWidth;
-            return Stack(
+    final t = context.type;
+    final n = note;
+    final a = actionLabel;
+    return LedgerSection(
+      title: title,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (n != null) ...[Text(n, style: t.label), const SizedBox(height: Sp.md)],
+          LedgerPanel(dividerIndent: dividerIndent, children: rows),
+          if (a != null) ...[
+            const SizedBox(height: Sp.sm),
+            Align(
               alignment: Alignment.centerLeft,
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  height: height,
-                  decoration: BoxDecoration(color: c.surfaceMuted, borderRadius: Radii.rFull),
-                ),
-                Container(
-                  height: height,
-                  width: w * value.clamp(0, 1) * t,
-                  decoration: BoxDecoration(color: color, borderRadius: Radii.rFull),
-                ),
-                if (marker != null)
-                  Positioned(
-                    left: (w * marker!.clamp(0, 1) - 1).clamp(0, math.max(0, w - 2)),
-                    top: 0,
-                    bottom: 0,
-                    child: Container(width: 2, decoration: BoxDecoration(color: c.textPrimary, borderRadius: Radii.rFull)),
-                  ),
-              ],
-            );
-          },
-        ),
+              child: LedgerButton(label: a, onPressed: onAction, variant: LedgerButtonVariant.quiet, small: true),
+            ),
+          ],
+          ?footer,
+        ],
       ),
     );
   }
 }
 
-/// Tiny bar sparkline for summary tiles.
-class SparkBars extends StatelessWidget {
-  const SparkBars({super.key, required this.values, required this.color, this.height = 28});
+/// Ink shades for the parts of a "where it went" bar, darkest first; the
+/// remainder uses the sunken tone.
+const insightRamp = [1.0, 0.78, 0.6, 0.45, 0.32, 0.22];
 
-  final List<double> values;
+Color rampColor(LedgerColors c, int i) => c.ink.withValues(alpha: insightRamp[i % insightRamp.length]);
+
+/// Small square colour key for a chart legend or bar part.
+class InsightSwatch extends StatelessWidget {
+  const InsightSwatch({super.key, required this.color, this.dashed = false});
+
   final Color color;
-  final double height;
+  final bool dashed;
 
   @override
   Widget build(BuildContext context) {
-    final maxV = values.fold<double>(0, math.max);
-    return ExcludeSemantics(
-      child: GrowIn(
-        builder: (context, t) => SizedBox(
-          height: height,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              for (var i = 0; i < values.length; i++) ...[
-                if (i > 0) const SizedBox(width: 3),
-                Expanded(
-                  child: Container(
-                    height: maxV <= 0 ? 2 : math.max(2, height * (values[i] / maxV) * t),
-                    decoration: BoxDecoration(
-                      color: i == values.length - 1 ? color : color.withValues(alpha: 0.35),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-              ],
-            ],
+    if (dashed) {
+      return SizedBox(width: 14, height: 10, child: CustomPaint(painter: _DashPainter(color)));
+    }
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
+    );
+  }
+}
+
+class _DashPainter extends CustomPainter {
+  _DashPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = 1.5;
+    final y = size.height / 2;
+    canvas.drawLine(Offset(0, y), Offset(size.width * 0.4, y), p);
+    canvas.drawLine(Offset(size.width * 0.6, y), Offset(size.width, y), p);
+  }
+
+  @override
+  bool shouldRepaint(_DashPainter old) => old.color != color;
+}
+
+/// Quiet line inside a chart panel when there is nothing to draw, with an
+/// optional next step under it.
+class InsightNoData extends StatelessWidget {
+  const InsightNoData({super.key, required this.message, this.actionLabel, this.onAction});
+
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = actionLabel;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(message, style: context.type.label),
+          if (a != null) ...[
+            const SizedBox(height: Sp.md),
+            LedgerButton(label: a, onPressed: onAction, variant: LedgerButtonVariant.secondary, small: true),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Colour key, label and amount in one line ("■ Spent ₹42,300").
+class InsightKeyValue extends StatelessWidget {
+  const InsightKeyValue({super.key, required this.color, required this.label, required this.value});
+
+  final Color color;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.type;
+    return MergeSemantics(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InsightSwatch(color: color),
+          const SizedBox(width: Sp.sm - 2),
+          Text(label, style: t.label),
+          const SizedBox(width: Sp.xs + 2),
+          Flexible(
+            child: Text(
+              value,
+              style: t.labelStrong.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

@@ -9,7 +9,7 @@ import 'journey_helpers.dart';
 String _location(WidgetTester tester) => GoRouter.of(tester.element(find.byType(Navigator).first)).state.uri.path;
 
 void main() {
-  testWidgets('home quick-access tiles sit in bento order and open their module', (tester) async {
+  testWidgets('home quick-access tiles sit in a 3 × 2 grid and open their module', (tester) async {
     final env = await TestEnv.create();
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
@@ -19,14 +19,15 @@ void main() {
       for (final name in ['Loans & EMIs', 'Pending payments', 'Emergency fund', 'Goals', 'Timeline', 'Insights'])
         name: tester.getCenter(find.byKey(ValueKey('quick-tile:$name'))),
     };
-    // Tall loans tile on the left, pending above emergency fund on the right,
-    // goals and timeline sharing the bottom row.
-    expect(pos['Loans & EMIs']!.dx, lessThan(pos['Pending payments']!.dx));
-    expect(pos['Pending payments']!.dy, lessThan(pos['Emergency fund']!.dy));
-    expect(pos['Goals']!.dy, greaterThan(pos['Emergency fund']!.dy));
-    expect(pos['Goals']!.dx, lessThan(pos['Timeline']!.dx));
-    expect((pos['Goals']!.dy - pos['Timeline']!.dy).abs(), lessThan(1));
-    expect(pos['Insights']!.dy, greaterThan(pos['Timeline']!.dy), reason: 'insights spans the last row');
+    // Loans, pending, emergency fund on the first row; goals, timeline,
+    // insights on the second, left to right.
+    final names = pos.keys.toList();
+    for (var i = 0; i < names.length; i++) {
+      final row = i ~/ 3;
+      expect((pos[names[i]]!.dy - pos[names[row * 3]]!.dy).abs(), lessThan(1), reason: '${names[i]} row');
+      if (i % 3 > 0) expect(pos[names[i]]!.dx, greaterThan(pos[names[i - 1]]!.dx), reason: '${names[i]} column');
+    }
+    expect(pos['Goals']!.dy, greaterThan(pos['Loans & EMIs']!.dy));
 
     final routes = {
       'Loans & EMIs': AppRoutes.loans,

@@ -2,6 +2,8 @@ import 'package:finn/core/money/money.dart';
 import 'package:finn/core/money/money_format.dart';
 import 'package:finn/design_system/design_system.dart';
 import 'package:finn/features/home/presentation/widgets/hero_balance_card.dart';
+import 'package:finn/features/home/presentation/widgets/home_header.dart';
+import 'package:finn/kit/kit.dart' show LedgerButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -112,10 +114,16 @@ Future<void> confirmReview(WidgetTester tester) async {
   await settle(tester);
 }
 
-/// Taps the [FinnButton] labelled [label]; when several match (a sheet over
-/// its screen), the top-most (last built) one.
+/// A [FinnButton] or kit [LedgerButton] labelled [label].
+Finder buttonWithText(String label) => find.ancestor(
+  of: find.text(label),
+  matching: find.byWidgetPredicate((w) => w is FinnButton || w is LedgerButton, description: 'button'),
+);
+
+/// Taps the button labelled [label]; when several match (a sheet over its
+/// screen), the top-most (last built) one.
 Future<void> tapButton(WidgetTester tester, String label) async {
-  final button = find.widgetWithText(FinnButton, label);
+  final button = buttonWithText(label);
   expect(button, findsWidgets, reason: 'button "$label"');
   await tester.ensureVisible(button.last);
   await tester.pumpAndSettle();
@@ -128,3 +136,7 @@ String rupees(Money m) => MoneyFormatter.format(m, decimals: DecimalDisplay.none
 
 /// Finds [text] inside the home hero balance card.
 Finder inHero(String text) => find.descendant(of: find.byType(HeroBalanceCard), matching: find.text(text));
+
+/// Scrolls Home back to the top: header and hero (tabs keep their scroll
+/// position).
+Future<void> showHero(WidgetTester tester) => scrollTo(tester, find.byType(HomeHeader), up: true);

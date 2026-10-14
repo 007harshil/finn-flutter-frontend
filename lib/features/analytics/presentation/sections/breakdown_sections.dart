@@ -1,264 +1,192 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/money/money.dart';
 import '../../../../core/money/money_format.dart';
-import '../../../../design_system/design_system.dart';
-import '../../../../shared/presentation/category_icons.dart';
+import '../../../../kit/kit.dart';
 import '../../../transactions/domain/transaction.dart';
 import '../../application/analytics_providers.dart';
-import '../../domain/analytics.dart';
 import '../insight_charts.dart';
 import '../insight_widgets.dart';
+
+/// Indent that lines row dividers up with the text after a 40pt well.
+const double _rowIndent = Sp.lg + 40 + Sp.md + 2;
 
 // ---------------------------------------------------------------------------
 // Categories
 // ---------------------------------------------------------------------------
 
-/// Categories: an interactive donut + ranked list (tap either to focus a
-/// category), and what changed compared with the previous period.
+/// Categories: one bar of where the money went with a row per category
+/// (tap a row to pick it out in the bar), and what changed compared with
+/// the previous period.
 List<Widget> categoriesSection(InsightsData data) => [
-      _CategoryCard(data: data),
-      _ChangesCard(data: data),
+      if (data.categories.isEmpty)
+        LedgerEmpty(
+          icon: LucideIcons.chartPie,
+          title: 'No spending in ${data.periodLabel}',
+          message: 'Record an expense and see where your money goes.',
+        )
+      else
+        _WhereItWent(data: data),
+      _Changes(data: data),
     ];
 
-class _CategoryCard extends StatefulWidget {
-  const _CategoryCard({required this.data});
+class _WhereItWent extends StatefulWidget {
+  const _WhereItWent({required this.data});
   final InsightsData data;
 
   @override
-  State<_CategoryCard> createState() => _CategoryCardState();
+  State<_WhereItWent> createState() => _WhereItWentState();
 }
 
-class _CategoryCardState extends State<_CategoryCard> {
-  static const _maxSlices = 6;
+class _WhereItWentState extends State<_WhereItWent> {
+  static const _maxParts = 6;
   int? _selected;
 
-  void _select(int? i) => setState(() => _selected = i);
+  void _toggle(int i) => setState(() => _selected = _selected == i ? null : i);
 
   @override
   Widget build(BuildContext context) {
     final data = widget.data;
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
+    final total = data.current.expense;
     final cats = data.categories;
-    final top = cats.take(_maxSlices).toList();
-    final rest = cats.skip(_maxSlices).toList();
+    final top = cats.take(_maxParts).toList();
+    final rest = cats.skip(_maxParts).toList();
     final restTotal = Money.sum(rest.map((x) => x.amount));
-    Color colorOf(int i) => c.chartSeries[i % c.chartSeries.length];
-    final slices = [
-      for (var i = 0; i < top.length; i++) DonutSlice(label: top[i].name, amount: top[i].amount, color: colorOf(i)),
-      if (restTotal.isPositive) DonutSlice(label: 'Everything else', amount: restTotal, color: c.textTertiary),
-    ];
-    final topShare = cats.isEmpty ? 1 : math.max(1, cats.first.shareBps);
-    return InsightChartCard(
-      icon: LucideIcons.chartPie,
-      accent: c.accentPending,
-      title: data.categoryHeadline,
-      subtitle: 'Where your money went in ${data.periodLabel}. Tap a slice or a row to focus on it.',
-      howCalculated: 'Each category\'s share = its spending ÷ total spending in the period. The change compares '
-          'the same category with ${data.previousLabel}. Categories beyond the top $_maxSlices are grouped as '
-          '"Everything else".',
-      child: cats.isEmpty
-          ? const InsightNoData(message: 'No spending in this period.', icon: LucideIcons.chartPie)
-          : Column(
-              children: [
-                Center(
-                  child: CategoryDonut(slices: slices, total: data.current.expense, selected: _selected, onSelect: _select),
+    final restShare = restTotal.ratioBps(total) ?? 0;
+    final sel = _selected;
+
+    Color partColor(int i, Color own) => sel == null || sel == i ? own : c.lineStrong;
+    final names = [for (final s in top) s.name, if (restTotal.isPositive) 'Everything else'];
+    final amounts = [for (final s in top) s.amount, if (restTotal.isPositive) restTotal];
+    final shares = [for (final s in top) s.shareBps, if (restTotal.isPositive) restShare];
+    final readout = sel == null || sel >= names.length
+        ? data.categoryHeadline
+        : '${names[sel]}: ${moneyText(context, amounts[sel])}, ${formatBps(shares[sel], decimals: 0)} of spending';
+
+    return LedgerSection(
+      title: 'Where it went',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(liveRegion: true, child: Text(readout, style: t.bodyStrong)),
+          const SizedBox(height: Sp.md),
+          LedgerStackBar(
+            gapColor: c.paper,
+            semanticLabel: 'Spending by category: '
+                '${[for (var i = 0; i < names.length; i++) '${names[i]} ${formatBps(shares[i], decimals: 0)}'].join(', ')}',
+            parts: [
+              for (var i = 0; i < top.length; i++) BarPart(top[i].shareBps / 10000, partColor(i, rampColor(c, i))),
+              if (restTotal.isPositive) BarPart(restShare / 10000, partColor(top.length, c.sunken)),
+            ],
+          ),
+          const SizedBox(height: Sp.lg),
+          LedgerPanel(
+            dividerIndent: _rowIndent,
+            children: [
+              for (var i = 0; i < top.length; i++)
+                _ShareRow(
+                  leading: CategoryMark(category: top[i].category),
+                  title: top[i].name,
+                  subtitle: _changeText(top[i].previous, top[i].changeBps, i + 1),
+                  amount: top[i].amount,
+                  shareBps: top[i].shareBps,
+                  swatch: rampColor(c, i),
+                  selected: sel == i,
+                  onTap: () => _toggle(i),
                 ),
-                const SizedBox(height: Space.x4),
-                for (var i = 0; i < top.length; i++)
-                  _CategoryRow(
-                    slice: top[i],
-                    color: colorOf(i),
-                    rank: i + 1,
-                    barValue: top[i].shareBps / topShare,
-                    selected: _selected == i,
-                    dimmed: _selected != null && _selected != i,
-                    onTap: () => _select(_selected == i ? null : i),
-                  ),
-                if (restTotal.isPositive)
-                  _RankRow(
-                    color: c.textTertiary,
-                    leading: CategoryIconTile(icon: LucideIcons.ellipsis, color: c.textTertiary, size: 32),
-                    title: 'Everything else',
-                    subtitle: '${rest.length} more categories',
-                    amount: restTotal,
-                    shareBps: restTotal.ratioBps(data.current.expense) ?? 0,
-                    barValue: (restTotal.ratioBps(data.current.expense) ?? 0) / topShare,
-                    selected: _selected == top.length,
-                    dimmed: _selected != null && _selected != top.length,
-                    onTap: () => _select(_selected == top.length ? null : top.length),
-                  ),
-                if (cats.length > 1) ...[
-                  const SizedBox(height: Space.x1),
-                  Text(
-                    'Top ${top.length} of ${cats.length} categories by amount',
-                    style: t.micro.copyWith(color: c.textTertiary),
-                  ),
-                ],
-              ],
-            ),
+              if (restTotal.isPositive)
+                _ShareRow(
+                  leading: const IconWell(icon: LucideIcons.ellipsis),
+                  title: 'Everything else',
+                  subtitle: '${rest.length} more categories',
+                  amount: restTotal,
+                  shareBps: restShare,
+                  swatch: c.sunken,
+                  selected: sel == top.length,
+                  onTap: () => _toggle(top.length),
+                ),
+            ],
+          ),
+          if (cats.length > 1) ...[
+            const SizedBox(height: Sp.sm),
+            Text('Top ${top.length} of ${cats.length} categories by amount. Tap one to pick it out.', style: t.small),
+          ],
+          HowCalculated(
+            text: 'Each category\'s share = its spending ÷ total spending in the period. The change compares '
+                'the same category with ${data.previousLabel}. Categories beyond the top $_maxParts are grouped as '
+                '"Everything else".',
+          ),
+        ],
+      ),
     );
+  }
+
+  static String _changeText(Money? prev, int? change, int rank) {
+    if (prev == null) return 'Number $rank';
+    if (prev.isZero) return 'New this period';
+    if (change == null || change.abs() < 100) return 'About the same as before';
+    return '${formatBps(change.abs(), decimals: 0)} ${change < 0 ? 'less' : 'more'} than before';
   }
 }
 
-class _CategoryRow extends StatelessWidget {
-  const _CategoryRow({
-    required this.slice,
-    required this.color,
-    required this.rank,
-    required this.barValue,
-    required this.selected,
-    required this.dimmed,
-    required this.onTap,
-  });
-
-  final CategorySlice slice;
-  final Color color;
-  final int rank;
-  final double barValue;
-  final bool selected;
-  final bool dimmed;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final change = slice.changeBps;
-    final prev = slice.previous;
-    final String sub;
-    if (prev == null) {
-      sub = '#$rank';
-    } else if (prev.isZero) {
-      sub = 'New this period';
-    } else if (change == null || change.abs() < 100) {
-      sub = 'About the same as before';
-    } else {
-      sub = '${change < 0 ? '↓' : '↑'} ${formatBps(change.abs(), decimals: 0)} ${change < 0 ? 'less' : 'more'} than before';
-    }
-    return _RankRow(
-      color: color,
-      leading: CategoryAvatar(category: slice.category, size: 32),
-      title: slice.name,
-      subtitle: sub,
-      subtitleColor: change == null || change.abs() < 100
-          ? null
-          : (change < 0 ? context.colors.positive : context.colors.negative),
-      amount: slice.amount,
-      shareBps: slice.shareBps,
-      barValue: barValue,
-      selected: selected,
-      dimmed: dimmed,
-      onTap: onTap,
-    );
-  }
-}
-
-class _RankRow extends StatelessWidget {
-  const _RankRow({
-    required this.color,
+/// A row in a share list: what it is, its amount, and its share with the
+/// colour key of its part of the bar.
+class _ShareRow extends StatelessWidget {
+  const _ShareRow({
     required this.leading,
     required this.title,
     required this.subtitle,
     required this.amount,
     required this.shareBps,
-    required this.barValue,
-    required this.selected,
-    required this.dimmed,
-    required this.onTap,
-    this.subtitleColor,
+    required this.swatch,
+    this.selected = false,
+    this.onTap,
   });
 
-  final Color color;
   final Widget leading;
   final String title;
-  final String subtitle;
-  final Color? subtitleColor;
+  final String? subtitle;
   final Money amount;
   final int shareBps;
-  final double barValue;
+  final Color swatch;
   final bool selected;
-  final bool dimmed;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return Semantics(
-      button: true,
-      selected: selected,
-      child: InkWell(
-        borderRadius: Radii.rLg,
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
-        child: AnimatedOpacity(
-          duration: context.motion.fast,
-          opacity: dimmed ? 0.45 : 1,
-          child: AnimatedContainer(
-            duration: context.motion.fast,
-            padding: const EdgeInsets.symmetric(vertical: Space.x2, horizontal: Space.x2),
-            decoration: BoxDecoration(
-              color: selected ? color.withValues(alpha: c.isDark ? 0.18 : 0.09) : Colors.transparent,
-              borderRadius: Radii.rLg,
-            ),
-            child: MergeSemantics(
-              child: Row(
-                children: [
-                  leading,
-                  const SizedBox(width: Space.x3),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(child: Text(title, style: t.bodyStrong, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                            AmountText(amount, style: t.amountSmall, decimals: DecimalDisplay.none),
-                          ],
-                        ),
-                        const SizedBox(height: Space.x1),
-                        RelativeBar(value: barValue, color: color, height: 5),
-                        const SizedBox(height: Space.x1),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(subtitle,
-                                  style: t.micro.copyWith(color: subtitleColor ?? c.textSecondary, fontWeight: FontWeight.w700),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis),
-                            ),
-                            Text(formatBps(shareBps), style: t.micro.copyWith(color: c.textTertiary, fontWeight: FontWeight.w700)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+    final t = context.type;
+    final pct = formatBps(shareBps, decimals: 0);
+    final row = LedgerRow(
+      leading: leading,
+      title: title,
+      subtitle: subtitle,
+      trailing: insightAmount(context, amount),
+      trailingSub: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [InsightSwatch(color: swatch), const SizedBox(width: Sp.sm - 2), Text(pct, style: t.small)],
       ),
+      semanticLabel: '$title, ${moneyText(context, amount)}, $pct${subtitle == null ? '' : ', $subtitle'}'
+          '${selected ? '. Picked out' : ''}',
+      onTap: onTap,
     );
+    if (!selected) return row;
+    return ColoredBox(color: context.ink.sunken, child: row);
   }
 }
 
-/// Diverging bars: which categories went up (right, red) or down (left,
+/// Diverging bars: which categories went up (right, ink) or down (left,
 /// green) compared with the previous period.
-class _ChangesCard extends StatelessWidget {
-  const _ChangesCard({required this.data});
+class _Changes extends StatelessWidget {
+  const _Changes({required this.data});
   final InsightsData data;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final changes = [
       for (final s in data.categories)
         if (s.previous != null && s.amount != s.previous) (s, s.amount - s.previous!),
@@ -269,38 +197,36 @@ class _ChangesCard extends StatelessWidget {
     final down = Money.sum(changes.where((x) => x.$2.isNegative).map((x) => x.$2.abs()));
     String m(Money x) => moneyText(context, x, compact: true);
     return InsightChartCard(
-      icon: LucideIcons.arrowUpDown,
-      accent: c.warning,
-      title: list.isEmpty ? 'What changed' : 'Biggest changes vs ${data.previousLabel}',
+      heading: 'What changed',
+      title: list.isEmpty ? 'Nothing to compare yet' : 'Biggest changes against ${data.previousLabel}',
       subtitle: list.isEmpty
-          ? 'Nothing to compare yet'
-          : 'Right (red) = spent more · Left (green) = spent less. '
-              'Up ${m(up)}, down ${m(down)} overall.',
+          ? null
+          : 'Right = spent more, left = spent less. Up ${m(up)} and down ${m(down)} overall.',
       child: list.isEmpty
-          ? const InsightNoData(message: 'Once you have two periods of spending, changes show up here.', icon: LucideIcons.arrowUpDown)
+          ? const InsightNoData(message: 'Once you have two periods of spending, changes show up here.')
           : Column(
               children: [
                 for (final (s, delta) in list)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: Space.x1_5),
+                    padding: const EdgeInsets.symmetric(vertical: Sp.sm - 2),
                     child: MergeSemantics(
                       child: Row(
                         children: [
                           SizedBox(
-                            width: 92,
-                            child: Text(s.name, style: t.label.copyWith(fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            width: 96,
+                            child: Text(s.name, style: t.label.copyWith(color: c.ink), maxLines: 1, overflow: TextOverflow.ellipsis),
                           ),
-                          const SizedBox(width: Space.x2),
+                          const SizedBox(width: Sp.sm),
                           Expanded(child: _Diverging(value: delta.toDouble() / maxAbs)),
-                          const SizedBox(width: Space.x2),
+                          const SizedBox(width: Sp.sm),
                           SizedBox(
-                            width: 64,
+                            width: 68,
                             child: Text(
                               '${delta.isNegative ? '−' : '+'}${m(delta.abs())}',
                               textAlign: TextAlign.end,
-                              style: t.label.copyWith(
-                                color: delta.isNegative ? c.positive : c.negative,
-                                fontWeight: FontWeight.w800,
+                              style: t.labelStrong.copyWith(
+                                color: delta.isNegative ? c.green : c.ink,
+                                fontFeatures: const [FontFeature.tabularFigures()],
                               ),
                             ),
                           ),
@@ -322,7 +248,7 @@ class _Diverging extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
     return GrowIn(
       builder: (context, t) => SizedBox(
         height: 14,
@@ -332,18 +258,18 @@ class _Diverging extends StatelessWidget {
             final w = half * value.abs().clamp(0, 1) * t;
             return Stack(
               children: [
-                Positioned(left: half - 0.5, top: 0, bottom: 0, child: Container(width: 1, color: c.borderStrong)),
+                Positioned(left: half - 0.5, top: 0, bottom: 0, child: Container(width: 1, color: c.lineStrong)),
                 Positioned(
                   left: value < 0 ? half - w : half,
-                  top: 2,
-                  bottom: 2,
+                  top: 3,
+                  bottom: 3,
                   child: Container(
                     width: w,
                     decoration: BoxDecoration(
-                      color: value < 0 ? c.positive : c.negative,
+                      color: value < 0 ? c.green : c.ink,
                       borderRadius: value < 0
-                          ? const BorderRadius.horizontal(left: Radius.circular(4))
-                          : const BorderRadius.horizontal(right: Radius.circular(4)),
+                          ? const BorderRadius.horizontal(left: Radius.circular(2))
+                          : const BorderRadius.horizontal(right: Radius.circular(2)),
                     ),
                   ),
                 ),
@@ -369,96 +295,67 @@ IconData _methodIcon(PaymentMethod m) => switch (m) {
       PaymentMethod.other => LucideIcons.circleDot,
     };
 
-/// Payments: digital vs cash, and the split across payment methods.
+/// Payments: digital against cash, and the split across payment methods.
 List<Widget> paymentsSection(BuildContext context, InsightsData data) {
-  final c = context.colors;
-  final t = context.text;
+  final c = context.ink;
+  final t = context.type;
   final total = data.current.expense;
   final digital = data.digitalShareBps;
-  Color colorOf(int i) => c.chartSeries[i % c.chartSeries.length];
+  if (digital == null || data.methods.isEmpty) {
+    return [
+      LedgerEmpty(
+        icon: LucideIcons.creditCard,
+        title: 'No payments in ${data.periodLabel}',
+        message: 'Record expenses with a payment method to see how you pay.',
+      ),
+    ];
+  }
+  int share(Money m) => m.ratioBps(total) ?? 0;
   return [
-    TakeawayCard(
-      icon: LucideIcons.smartphone,
-      tone: FinnTone.info,
-      title: digital == null
-          ? 'No payments in ${data.periodLabel}'
-          : '${formatBps(digital, decimals: 0)} of your spending was digital',
-      body: digital == null
-          ? 'Record expenses with a payment method to see how you pay.'
-          : 'Cash covered ${formatBps(10000 - digital, decimals: 0)}. UPI, cards, bank transfers and wallets make up the rest.',
+    InsightLead(
+      label: 'Paid digitally',
+      value: Text(formatBps(digital, decimals: 0), style: t.figureXL),
+      sentence: 'Cash covered ${formatBps(10000 - digital, decimals: 0)}. '
+          'UPI, cards, bank transfers and wallets make up the rest.',
     ),
-    InsightChartCard(
-      icon: LucideIcons.creditCard,
-      accent: c.accentTransactions,
-      title: data.methodHeadline,
-      subtitle: 'How you paid in ${data.periodLabel}. Each colour is one way of paying.',
-      howCalculated: 'Share = spending through each payment method ÷ total spending. Expenses recorded without '
-          'a method are counted as "Other".',
-      child: data.methods.isEmpty
-          ? const InsightNoData(message: 'No payments in this period.', icon: LucideIcons.creditCard)
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SplitBar(
-                  height: 18,
-                  semanticLabel: data.methods
-                      .map((m) => '${m.key.label} ${formatBps(m.value.ratioBps(total) ?? 0, decimals: 0)}')
-                      .join(', '),
-                  segments: [
-                    for (var i = 0; i < data.methods.length; i++)
-                      SplitSegment(data.methods[i].value.toDouble(), colorOf(i)),
-                  ],
+    LedgerSection(
+      title: 'How you paid',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(data.methodHeadline, style: t.bodyStrong),
+          const SizedBox(height: Sp.md),
+          LedgerStackBar(
+            gapColor: c.paper,
+            semanticLabel: data.methods
+                .map((m) => '${m.key.label} ${formatBps(share(m.value), decimals: 0)}')
+                .join(', '),
+            parts: [
+              for (var i = 0; i < data.methods.length; i++)
+                BarPart(share(data.methods[i].value) / 10000, rampColor(c, i)),
+            ],
+          ),
+          const SizedBox(height: Sp.lg),
+          LedgerPanel(
+            dividerIndent: _rowIndent,
+            children: [
+              for (var i = 0; i < data.methods.length; i++)
+                _ShareRow(
+                  leading: IconWell(icon: _methodIcon(data.methods[i].key)),
+                  title: data.methods[i].key.label,
+                  subtitle: null,
+                  amount: data.methods[i].value,
+                  shareBps: share(data.methods[i].value),
+                  swatch: rampColor(c, i),
                 ),
-                const SizedBox(height: Space.x3),
-                for (var i = 0; i < data.methods.length; i++)
-                  MergeSemantics(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: Space.x2),
-                      child: Row(
-                        children: [
-                          IconTile(
-                            icon: _methodIcon(data.methods[i].key),
-                            background: colorOf(i).withValues(alpha: c.isDark ? 0.22 : 0.14),
-                            foreground: colorOf(i),
-                            size: 32,
-                            radius: Radii.md,
-                            iconSize: 16,
-                          ),
-                          const SizedBox(width: Space.x3),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(child: Text(data.methods[i].key.label, style: t.bodyStrong)),
-                                    AmountText(data.methods[i].value, style: t.amountSmall, decimals: DecimalDisplay.none),
-                                    const SizedBox(width: Space.x2),
-                                    SizedBox(
-                                      width: 40,
-                                      child: Text(
-                                        formatBps(data.methods[i].value.ratioBps(total) ?? 0, decimals: 0),
-                                        textAlign: TextAlign.end,
-                                        style: t.label.copyWith(color: c.textSecondary),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: Space.x1_5),
-                                RelativeBar(
-                                  value: (data.methods[i].value.ratioBps(total) ?? 0) / 10000,
-                                  color: colorOf(i),
-                                  height: 6,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            ],
+          ),
+          const HowCalculated(
+            text: 'Share = spending through each payment method ÷ total spending. Expenses recorded without '
+                'a method are counted as "Other".',
+          ),
+        ],
+      ),
     ),
   ];
 }

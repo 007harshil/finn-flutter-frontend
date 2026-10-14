@@ -5,9 +5,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
+import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../application/loan_actions.dart';
@@ -60,37 +61,34 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
   Widget build(BuildContext context) {
     final value = ref.watch(loanStateProvider(widget.id));
     final s = value.value;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(s?.loan.name ?? 'Loan'),
+    return LedgerPage(
+      appBar: LedgerAppBar(
+        title: s?.loan.name ?? 'Loan',
         actions: [
-          if (s != null) FinnIconButton(icon: LucideIcons.ellipsisVertical, tooltip: 'More actions', onPressed: () => _menu(s)),
-          const SizedBox(width: Space.x2),
+          if (s != null)
+            LedgerIconButton(icon: LucideIcons.ellipsisVertical, tooltip: 'More actions', onPressed: () => _menu(s)),
         ],
       ),
-      body: AsyncView<LoanState?>(
-        value: value,
-        loading: const SkeletonPulse(
-          child: Padding(
-            padding: EdgeInsets.all(Space.gutter),
-            child: Column(children: [CardSkeleton(height: 220), SizedBox(height: Space.x4), CardSkeleton(height: 240)]),
+      storageKey: 'loan-${widget.id}',
+      slivers: [
+        SliverToBoxAdapter(
+          child: AsyncView<LoanState?>(
+            value: value,
+            loading: const LedgerPageSkeleton(rows: 3),
+            builder: (context, s) => s == null
+                ? PageColumn(
+                    top: Sp.xxl,
+                    child: LedgerEmpty(
+                      title: 'This loan no longer exists',
+                      message: 'It may have been deleted.',
+                      actionLabel: 'Back to loans',
+                      onAction: () => context.go(AppRoutes.loans),
+                    ),
+                  )
+                : _Body(state: s),
           ),
         ),
-        builder: (context, s) {
-          if (s == null) {
-            return Center(
-              child: EmptyState(
-                icon: LucideIcons.searchX,
-                title: 'This loan no longer exists',
-                message: 'It may have been deleted.',
-                actionLabel: 'Back to loans',
-                onAction: () => context.go(AppRoutes.loans),
-              ),
-            );
-          }
-          return _Body(state: s);
-        },
-      ),
+      ],
     );
   }
 }
@@ -110,169 +108,141 @@ class _BodyState extends State<_Body> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final t = context.type;
     final s = widget.state;
     final l = s.loan;
     final next = s.nextDue;
     final schedule = _showAllSchedule ? s.schedule : s.schedule.take(_collapsedRows).toList();
-    final sections = <Widget>[
-      _Hero(state: s),
-      if (!s.isClosed) ...[
-        const SizedBox(height: Space.x3),
-        FinnButton(
-          label: l.isBorrowed ? 'Record a payment' : 'Record money received',
-          icon: LucideIcons.circleCheck,
-          expand: true,
-          size: FinnButtonSize.lg,
-          onPressed: () => context.push(AppRoutes.payLoan(l.id)),
-        ),
-      ],
-      if (s.warning != null) ...[
-        const SizedBox(height: Space.x3),
-        InfoBanner(tone: FinnTone.warning, icon: LucideIcons.triangleAlert, message: s.warning!),
-      ],
-      if (next != null) ...[
-        const SizedBox(height: Space.x4),
-        _NextDueCard(state: s, row: next),
-      ],
-      const SizedBox(height: Space.section),
-      SectionHeader(icon: LucideIcons.fileText, title: 'Terms', tileColor: c.accentLoans),
-      const SizedBox(height: Space.x2),
-      FinnCard(
-        padding: const EdgeInsets.symmetric(horizontal: Space.x4, vertical: Space.x1),
-        child: Column(
-          children: [
-            KeyValueRow(label: l.isBorrowed ? 'Lender' : 'Borrower', value: l.counterparty),
-            KeyValueRow(label: 'Type', value: l.structure.label),
-            KeyValueRow(label: 'Principal', valueWidget: AmountText(l.principal, style: t.bodyStrong)),
-            KeyValueRow(label: 'Interest rate', value: '${l.rate.label} p.a.'),
-            KeyValueRow(label: 'Repayment', value: l.frequency.label),
-            KeyValueRow(
-              label: l.isAmortizing ? 'Current EMI' : 'Interest per ${l.frequency.unit}',
-              valueWidget: AmountText(s.currentInstallment, style: t.bodyStrong),
-            ),
-            KeyValueRow(label: 'Started', value: DateFormats.dayMonthYear.format(l.startDate)),
-            if (l.isAmortizing) ...[
-              KeyValueRow(label: 'Tenure', value: '${l.tenureInstallments ?? 0} instalments'),
-              KeyValueRow(label: 'Paid', value: '${s.periodsPaid} instalments'),
-              if (!s.isClosed && s.remainingInstallments != null)
-                KeyValueRow(label: 'Remaining', value: '${s.remainingInstallments} instalments (projected)'),
-              KeyValueRow(label: 'After a prepayment', value: l.prepaymentStrategy.label),
-            ],
-            if (s.projectedEndDate != null && !s.isClosed)
-              KeyValueRow(
-                label: l.isAmortizing ? 'Projected end' : 'Principal due',
-                value: DateFormats.dayMonthYear.format(s.projectedEndDate!),
-              ),
-            if (!l.isAmortizing && l.maturityDate == null)
-              const KeyValueRow(label: 'Principal due', value: 'No fixed date'),
-            KeyValueRow(
-              label: l.isBorrowed ? 'Interest paid' : 'Interest received',
-              valueWidget: AmountText(s.interestPaid, style: t.bodyStrong),
-            ),
-            if (l.isAmortizing && !s.isClosed)
-              KeyValueRow(
-                label: 'Total interest cost',
-                valueWidget: AmountText(s.totalInterestCost, style: t.bodyStrong),
-              ),
-            if (l.note != null && l.note!.trim().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: Space.x2_5),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('NOTES', style: t.eyebrow),
-                    const SizedBox(height: Space.x1),
-                    SizedBox(width: double.infinity, child: Text(l.note!, style: t.body)),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-      if (s.schedule.isNotEmpty && !s.isClosed) ...[
-        const SizedBox(height: Space.section),
-        SectionHeader(
-          icon: LucideIcons.listOrdered,
-          title: 'Upcoming schedule',
-          subtitle: l.isAmortizing
-              ? 'Projected · ${s.schedule.length} left · interest ${maskedAmount(context, s.projectedInterest)}'
-              : 'Projected · next ${s.schedule.length} ${l.frequency.unit}s',
-          tileColor: c.info,
-        ),
-        const SizedBox(height: Space.x2),
-        FinnCard(
-          padding: const EdgeInsets.symmetric(horizontal: Space.x4, vertical: Space.x1),
-          child: Column(
-            children: [
-              for (var i = 0; i < schedule.length; i++) ...[
-                if (i > 0) const FinnDivider(),
-                _ScheduleRowTile(key: ValueKey('row-${schedule[i].number}'), row: schedule[i], today: s.today),
-              ],
-            ],
-          ),
-        ),
-        if (s.schedule.length > _collapsedRows)
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton.icon(
-              onPressed: () => setState(() => _showAllSchedule = !_showAllSchedule),
-              icon: Icon(_showAllSchedule ? LucideIcons.chevronUp : LucideIcons.chevronDown, size: 16),
-              label: Text(_showAllSchedule ? 'Show less' : 'Show all ${s.schedule.length}'),
-            ),
-          ),
-      ],
-      const SizedBox(height: Space.section),
-      SectionHeader(
-        icon: LucideIcons.history,
-        title: l.isBorrowed ? 'Payments' : 'Repayments received',
-        subtitle: s.payments.isEmpty ? null : '${s.payments.length} recorded',
-        tileColor: c.positive,
-      ),
-      const SizedBox(height: Space.x2),
-      if (s.payments.isEmpty)
-        FinnCard(
-          variant: FinnCardVariant.muted,
-          child: Text(
-            l.isBorrowed
-                ? 'No payments recorded yet. Record each EMI or repayment when you make it.'
-                : 'Nothing received yet. Record repayments as they come in.',
-            style: t.caption,
-          ),
-        )
-      else
-        FinnCard(
-          padding: const EdgeInsets.symmetric(horizontal: Space.x4, vertical: Space.x1),
-          child: Column(
-            children: [
-              for (var i = 0; i < s.payments.length; i++) ...[
-                if (i > 0) const FinnDivider(),
-                _PaymentRow(key: ValueKey(s.payments[i].id), payment: s.payments[i], loan: l),
-              ],
-            ],
-          ),
-        ),
-      if (s.payments.isNotEmpty) ...[
-        const SizedBox(height: Space.x3),
-        Text('Loans with payments cannot be deleted, and their terms are locked, so your history stays accurate.',
-            style: t.micro),
-      ],
-    ];
-    return ListView(
-      key: PageStorageKey('loan-${l.id}'),
-      padding: EdgeInsets.fromLTRB(0, Space.x2, 0, context.bottomClearance),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < sections.length; i++)
-          ResponsiveCenter(
-            padding: const EdgeInsets.symmetric(horizontal: Space.gutter),
-            child: i == 0 ? StaggeredEntrance(child: sections[i]) : sections[i],
+        PageColumn(top: Sp.xl, child: _Hero(state: s)),
+        if (s.warning != null)
+          PageColumn(
+            top: Sp.lg,
+            child: LedgerNote(icon: LucideIcons.triangleAlert, tone: NoteTone.caution, text: s.warning!),
+          ),
+        if (next != null && !s.isClosed)
+          PageColumn(
+            top: Sp.section,
+            child: LedgerSection(
+              title: 'Next payment',
+              child: LedgerPanel(children: [_NextDueRow(state: s, row: next)]),
+            ),
+          ),
+        if (s.schedule.isNotEmpty && !s.isClosed)
+          PageColumn(
+            top: Sp.section,
+            child: LedgerSection(
+              title: 'Upcoming schedule',
+              count: s.schedule.length,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  LedgerPanel(
+                    children: [
+                      for (final r in schedule)
+                        _ScheduleRowTile(key: ValueKey('row-${r.number}'), row: r, today: s.today),
+                    ],
+                  ),
+                  if (s.schedule.length > _collapsedRows) ...[
+                    const SizedBox(height: Sp.sm),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: LedgerButton(
+                        label: _showAllSchedule ? 'Show less' : 'Show all ${s.schedule.length}',
+                        icon: _showAllSchedule ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                        variant: LedgerButtonVariant.quiet,
+                        small: true,
+                        onPressed: () => setState(() => _showAllSchedule = !_showAllSchedule),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        PageColumn(
+          top: Sp.section,
+          child: LedgerSection(
+            title: l.isBorrowed ? 'Payments' : 'Repayments received',
+            count: s.payments.isEmpty ? null : s.payments.length,
+            child: s.payments.isEmpty
+                ? LedgerNote(
+                    text: l.isBorrowed
+                        ? 'No payments recorded yet. Record each EMI or repayment when you make it.'
+                        : 'Nothing received yet. Record repayments as they come in.',
+                  )
+                : LedgerPanel(
+                    children: [for (final p in s.payments) _PaymentRow(key: ValueKey(p.id), payment: p, loan: l)],
+                  ),
+          ),
+        ),
+        PageColumn(
+          top: Sp.section,
+          child: LedgerSection(title: 'Terms', child: LedgerPanel(children: _terms(context, s))),
+        ),
+        if (s.payments.isNotEmpty)
+          PageColumn(
+            top: Sp.lg,
+            child: Text(
+              'Loans with payments cannot be deleted, and their terms are locked, so your history stays accurate.',
+              style: t.label,
+            ),
           ),
       ],
     );
   }
+
+  List<Widget> _terms(BuildContext context, LoanState s) {
+    final l = s.loan;
+    final t = context.type;
+    Widget money(Money m) => AmountText(m, style: t.figure);
+    Widget text(String v) => Text(v, style: t.body, textAlign: TextAlign.end);
+    return [
+      LedgerFact(label: l.isBorrowed ? 'Lender' : 'Borrower', value: text(l.counterparty)),
+      LedgerFact(label: 'Type', value: text(l.structure.label)),
+      LedgerFact(label: 'Principal', value: money(l.principal)),
+      LedgerFact(label: 'Interest rate', value: text('${l.rate.label} p.a.')),
+      LedgerFact(label: 'Repayment', value: text(l.frequency.label)),
+      LedgerFact(
+        label: l.isAmortizing ? 'Current EMI' : 'Interest per ${l.frequency.unit}',
+        value: money(s.currentInstallment),
+      ),
+      LedgerFact(label: 'Started', value: text(DateFormats.dayMonthYear.format(l.startDate))),
+      if (l.isAmortizing) ...[
+        LedgerFact(label: 'Tenure', value: text('${l.tenureInstallments ?? 0} instalments')),
+        LedgerFact(label: 'Paid', value: text('${s.periodsPaid} instalments')),
+        if (!s.isClosed && s.remainingInstallments != null)
+          LedgerFact(label: 'Remaining', value: text('${s.remainingInstallments} instalments (projected)')),
+        LedgerFact(label: 'After a prepayment', value: text(l.prepaymentStrategy.label)),
+      ],
+      if (s.projectedEndDate != null && !s.isClosed)
+        LedgerFact(
+          label: l.isAmortizing ? 'Projected end' : 'Principal due',
+          value: text(DateFormats.dayMonthYear.format(s.projectedEndDate!)),
+        ),
+      if (!l.isAmortizing && l.maturityDate == null) LedgerFact(label: 'Principal due', value: text('No fixed date')),
+      LedgerFact(label: l.isBorrowed ? 'Interest paid' : 'Interest received', value: money(s.interestPaid)),
+      if (l.isAmortizing && !s.isClosed) LedgerFact(label: 'Total interest cost', value: money(s.totalInterestCost)),
+      if (l.note != null && l.note!.trim().isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md + 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Notes', style: t.label),
+              const SizedBox(height: Sp.xs),
+              Text(l.note!, style: t.body),
+            ],
+          ),
+        ),
+    ];
+  }
 }
 
+/// Outstanding principal as the one number, how much is repaid, where the
+/// next payment stands, and the primary action.
 class _Hero extends StatelessWidget {
   const _Hero({required this.state});
 
@@ -280,136 +250,76 @@ class _Hero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.text;
+    final t = context.type;
     final s = state;
     final l = s.loan;
-    final white70 = Colors.white.withValues(alpha: 0.75);
-    final due = loanDueLabel(context, s);
-    return GradientHeroCard(
-      watermark: l.direction.icon,
-      semanticLabel: '${l.direction.sentence(l.counterparty)}. Outstanding ${MoneyFormatter.spoken(s.outstanding)}. ${due.label}',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Flexible(child: LoanDirectionPill(direction: l.direction, onGradient: true)),
-              const SizedBox(width: Space.x2),
-              StatusPill(label: due.label, color: Colors.white, icon: due.icon),
-            ],
-          ),
-          const SizedBox(height: Space.x3),
-          Text(l.direction.sentence(l.counterparty), style: t.bodyStrong.copyWith(color: Colors.white)),
-          const SizedBox(height: Space.x1),
-          AnimatedAmount(s.outstanding, style: t.amountHero.copyWith(color: Colors.white), fit: true),
-          Text(s.isClosed ? 'Fully repaid' : 'outstanding principal', style: t.caption.copyWith(color: white70)),
-          const SizedBox(height: Space.x4),
-          FinnProgressBar(
-            value: s.repaidBps / 10000,
-            color: Colors.white,
-            trackColor: Colors.white.withValues(alpha: 0.18),
-            semanticsLabel: 'Principal ${l.direction.repaidVerb.toLowerCase()} so far',
-          ),
-          const SizedBox(height: Space.x3),
-          Row(
-            children: [
-              Expanded(
-                child: _HeroFigure(
-                  label: 'Principal',
-                  amount: AmountText(l.principal, style: t.amountSmall.copyWith(color: Colors.white)),
-                ),
+    final due = loanDueStatus(context, s);
+    final pct = s.repaidBps ~/ 100;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(l.direction.sentence(l.counterparty), style: t.label),
+        const SizedBox(height: Sp.xs),
+        AnimatedAmount(s.outstanding, style: t.figureXL, fit: true, animateOnMount: true),
+        const SizedBox(height: Sp.xs),
+        Text(s.isClosed ? 'Fully repaid' : 'Outstanding principal', style: t.label),
+        const SizedBox(height: Sp.lg),
+        LedgerBar(value: s.repaidBps / 10000, semanticLabel: '${l.direction.repaidVerb} $pct% of principal'),
+        const SizedBox(height: Sp.md),
+        Text('$pct% ${l.direction.repaidVerb.toLowerCase()} of ${maskedAmount(context, l.principal)}', style: t.label),
+        const SizedBox(height: Sp.xs),
+        Text(due.label, style: t.label.copyWith(color: due.color)),
+        const SizedBox(height: Sp.lg),
+        Row(
+          children: [
+            Expanded(
+              child: LedgerStat(
+                label: l.direction.repaidVerb,
+                value: AmountText(s.principalRepaid, style: t.figure, decimals: DecimalDisplay.none),
               ),
-              Expanded(
-                child: _HeroFigure(
-                  label: l.direction.repaidVerb,
-                  amount: AmountText(s.principalRepaid, style: t.amountSmall.copyWith(color: Colors.white)),
-                ),
+            ),
+            Expanded(
+              child: LedgerStat(
+                label: 'Interest',
+                value: AmountText(s.interestPaid, style: t.figure, decimals: DecimalDisplay.none),
               ),
-              Expanded(
-                child: _HeroFigure(
-                  label: 'Interest',
-                  amount: AmountText(s.interestPaid, style: t.amountSmall.copyWith(color: Colors.white)),
-                ),
-              ),
-            ],
+            ),
+          ],
+        ),
+        if (!s.isClosed) ...[
+          const SizedBox(height: Sp.xl),
+          LedgerButton(
+            label: l.isBorrowed ? 'Record a payment' : 'Record money received',
+            icon: LucideIcons.circleCheck,
+            expand: true,
+            onPressed: () => context.push(AppRoutes.payLoan(l.id)),
           ),
         ],
-      ),
+      ],
     );
   }
 }
 
-class _HeroFigure extends StatelessWidget {
-  const _HeroFigure({required this.label, required this.amount});
-
-  final String label;
-  final Widget amount;
-
-  @override
-  Widget build(BuildContext context) => MergeSemantics(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label.toUpperCase(), style: context.text.eyebrow.copyWith(color: Colors.white.withValues(alpha: 0.7))),
-            const SizedBox(height: 2),
-            amount,
-          ],
-        ),
-      );
-}
-
-class _NextDueCard extends StatelessWidget {
-  const _NextDueCard({required this.state, required this.row});
+class _NextDueRow extends StatelessWidget {
+  const _NextDueRow({required this.state, required this.row});
 
   final LoanState state;
   final ScheduleRow row;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final t = context.type;
+    final c = context.ink;
     final l = state.loan;
-    final due = loanDueLabel(context, state);
-    final title = l.isAmortizing ? 'Next EMI · #${row.number}' : (row.isFinal ? 'Final payment' : 'Next interest · #${row.number}');
-    return FinnCard(
-      variant: FinnCardVariant.outlined,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              IconTile(icon: LucideIcons.calendarClock, background: c.infoSoft, foreground: c.info, size: 36, iconSize: 18),
-              const SizedBox(width: Space.x3),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: t.bodyStrong),
-                    Text(
-                      '${DateFormats.dayMonthYear.format(row.dueDate)} · ${DateFormats.dueIn(row.dueDate, state.today)}',
-                      style: t.caption,
-                    ),
-                  ],
-                ),
-              ),
-              AmountText(row.payment, style: t.amountMedium),
-            ],
-          ),
-          const SizedBox(height: Space.x3),
-          Wrap(
-            spacing: Space.x2,
-            runSpacing: Space.x1,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              StatusPill(label: due.label, color: due.color, icon: due.icon),
-              Text(
-                'Projected · ${maskedAmount(context, row.interest)} interest + ${maskedAmount(context, row.principal)} principal',
-                style: t.micro,
-              ),
-            ],
-          ),
-        ],
-      ),
+    final due = loanDueStatus(context, state);
+    final title = l.isAmortizing ? 'EMI #${row.number}' : (row.isFinal ? 'Final payment' : 'Interest #${row.number}');
+    return LedgerRow(
+      title: title,
+      subtitle: '${DateFormats.dayMonthYear.format(row.dueDate)}, ${DateFormats.dueIn(row.dueDate, state.today)}\n'
+          '${maskedAmount(context, row.interest)} interest, ${maskedAmount(context, row.principal)} principal',
+      subtitleColor: due.overdue ? c.red : null,
+      subtitleLines: 3,
+      trailing: AmountText(row.payment, style: t.figure),
     );
   }
 }
@@ -422,46 +332,17 @@ class _ScheduleRowTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final overdue = row.dueDate.isBefore(today);
-    return MergeSemantics(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: Space.x2_5),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 36,
-              child: Text('#${row.number}', style: t.caption.copyWith(fontWeight: FontWeight.w700)),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: Space.x1_5,
-                    runSpacing: Space.x0_5,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(DateFormats.dayMonthYear.format(row.dueDate), style: t.bodyStrong),
-                      if (overdue) StatusPill(label: 'Overdue', color: c.negative, icon: LucideIcons.triangleAlert),
-                    ],
-                  ),
-                  Text(
-                    '${maskedAmount(context, row.interest)} interest · ${maskedAmount(context, row.principal)} principal',
-                    style: t.micro,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text('Balance after ${maskedAmount(context, row.balanceAfter)}', style: t.micro),
-                ],
-              ),
-            ),
-            const SizedBox(width: Space.x2),
-            AmountText(row.payment, style: t.amountSmall),
-          ],
-        ),
-      ),
+    return LedgerRow(
+      title: '${DateFormats.dayMonthYear.format(row.dueDate)}${overdue ? ', overdue' : ''}',
+      subtitle:
+          '#${row.number}, ${maskedAmount(context, row.interest)} interest, ${maskedAmount(context, row.principal)} principal',
+      subtitleColor: overdue ? c.red : null,
+      subtitleLines: 2,
+      trailing: AmountText(row.payment, style: t.figure),
+      trailingSub: Text('${maskedAmount(context, row.balanceAfter)} after', style: t.small),
     );
   }
 }
@@ -474,64 +355,27 @@ class _PaymentRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final t = context.type;
     final p = payment;
     final txId = p.transactionId;
     final split = [
       if (p.interestComponent.isPositive) '${maskedAmount(context, p.interestComponent)} interest',
       if (p.principalComponent.isPositive) '${maskedAmount(context, p.principalComponent)} principal',
-    ].join(' · ');
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Space.x2_5),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              IconTile(icon: LucideIcons.circleCheck, background: c.positiveSoft, foreground: c.positive, size: 32, iconSize: 16),
-              const SizedBox(width: Space.x3),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${p.kind.label}${p.periodNumber != null ? ' #${p.periodNumber}' : ''}', style: t.bodyStrong),
-                    Text(
-                      [DateFormats.dayMonthYear.format(p.date), if (split.isNotEmpty) split].join(' · '),
-                      style: t.caption,
-                      maxLines: 2,
-                    ),
-                  ],
-                ),
-              ),
-              AmountText(p.total, style: t.amountSmall),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 44, top: Space.x1),
-            child: txId == null
-                ? Row(children: [
-                    Icon(LucideIcons.circleSlash, size: 13, color: c.textTertiary),
-                    const SizedBox(width: Space.x1),
-                    Flexible(child: Text('Not recorded as a cash movement', style: t.micro)),
-                  ])
-                : Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: TextButton.icon(
-                      onPressed: () => context.push(AppRoutes.transaction(txId)),
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(Dimens.minTouch, 36),
-                        foregroundColor: c.info,
-                        textStyle: t.label.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      icon: const Icon(LucideIcons.link2, size: 14),
-                      label: const Text('View linked transaction'),
-                    ),
-                  ),
-          ),
-        ],
-      ),
+    ].join(', ');
+    final title = '${p.kind.label}${p.periodNumber != null ? ' #${p.periodNumber}' : ''}';
+    return LedgerRow(
+      leading: const IconWell(icon: LucideIcons.circleCheck),
+      title: title,
+      subtitle: [
+        DateFormats.dayMonthYear.format(p.date),
+        if (split.isNotEmpty) split,
+        if (txId == null) 'Not recorded as a cash movement',
+      ].join(', '),
+      subtitleLines: 3,
+      trailing: AmountText(p.total, style: t.figure),
+      chevron: txId != null,
+      semanticLabel: txId == null ? null : '$title, ${AmountText.spokenLabel(p.total)}. View linked transaction',
+      onTap: txId == null ? null : () => context.push(AppRoutes.transaction(txId)),
     );
   }
 }

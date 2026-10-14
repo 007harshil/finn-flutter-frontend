@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -9,13 +8,10 @@ import '../../../app/router/routes.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/async_view.dart';
-import '../../../shared/presentation/category_icons.dart';
 import '../../../shared/presentation/transaction_row.dart';
-import '../../alerts/presentation/alert_visuals.dart' show MaybeAnimate;
-import '../../transactions/domain/transaction.dart';
 import '../application/budget_actions.dart';
 import '../application/budget_history.dart';
 import '../application/budget_view.dart';
@@ -23,9 +19,9 @@ import '../domain/budget.dart';
 import 'budget_charts.dart';
 import 'budget_widgets.dart';
 
-/// One budget: a gauge that answers "how much is left and am I on pace",
-/// a chart (this period's running total, or the last six periods), and the
-/// spending behind it with quick filters by payee and day.
+/// One budget: how much is left and whether the pace holds, a chart of
+/// this period (or the last few), and the spending behind it with quick
+/// filters by payee and day.
 class BudgetDetailScreen extends ConsumerWidget {
   const BudgetDetailScreen({super.key, required this.id, this.month});
 
@@ -76,53 +72,43 @@ class BudgetDetailScreen extends ConsumerWidget {
     final b = pace.value?.usage.budget;
     final categoryName = b == null ? null : ref.watch(categoryProvider(b.categoryId))?.name;
     final monthName = past ? DateFormats.monthYear.format(pace.value!.usage.period.start) : null;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          categoryName == null ? 'Budget' : (past ? '$categoryName · $monthName' : '$categoryName budget'),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: [
-          if (b != null && !past) ...[
-            FinnIconButton(
-              icon: LucideIcons.pencil,
-              tooltip: 'Edit budget',
-              onPressed: () => context.push(AppRoutes.editBudget(id)),
-            ),
-            FinnIconButton(
-              key: const ValueKey('budget-more'),
-              icon: LucideIcons.ellipsisVertical,
-              tooltip: 'More actions',
-              onPressed: () => _menu(context, ref, b),
-            ),
-          ],
-          const SizedBox(width: Space.x2),
-        ],
-      ),
-      body: AsyncView<BudgetPace?>(
-        value: pace,
-        loading: const SkeletonPulse(
-          child: Padding(
-            padding: EdgeInsets.all(Space.gutter),
-            child: Column(children: [CardSkeleton(height: 300), SizedBox(height: Space.x4), CardSkeleton(height: 220)]),
+    final appBar = LedgerAppBar(
+      title: categoryName == null ? 'Budget' : (past ? '$categoryName, $monthName' : '$categoryName budget'),
+      actions: [
+        if (b != null && !past) ...[
+          LedgerIconButton(
+            icon: LucideIcons.pencil,
+            tooltip: 'Edit budget',
+            onPressed: () => context.push(AppRoutes.editBudget(id)),
           ),
-        ),
-        builder: (context, p) => p == null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(Space.x6),
-                  child: EmptyState(
-                    icon: LucideIcons.chartPie,
+          LedgerIconButton(
+            key: const ValueKey('budget-more'),
+            icon: LucideIcons.ellipsisVertical,
+            tooltip: 'More actions',
+            onPressed: () => _menu(context, ref, b),
+          ),
+        ],
+      ],
+    );
+    return AsyncView<BudgetPace?>(
+      value: pace,
+      loading: Scaffold(backgroundColor: context.ink.paper, appBar: appBar, body: const LedgerPageSkeleton(rows: 3)),
+      builder: (context, p) => p == null
+          ? LedgerPage(
+              appBar: appBar,
+              slivers: [
+                PageBlock(
+                  top: Sp.xxl,
+                  child: LedgerEmpty(
                     title: 'Budget not found',
                     message: 'It may have been deleted.',
                     actionLabel: 'Back to budgets',
                     onAction: () => context.go(AppRoutes.budgets),
                   ),
                 ),
-              )
-            : _DetailBody(pace: p),
-      ),
+              ],
+            )
+          : _DetailBody(pace: p, appBar: appBar),
     );
   }
 }
@@ -130,9 +116,10 @@ class BudgetDetailScreen extends ConsumerWidget {
 enum _TxSort { newest, largest }
 
 class _DetailBody extends ConsumerStatefulWidget {
-  const _DetailBody({required this.pace});
+  const _DetailBody({required this.pace, required this.appBar});
 
   final BudgetPace pace;
+  final PreferredSizeWidget appBar;
 
   @override
   ConsumerState<_DetailBody> createState() => _DetailBodyState();
@@ -146,136 +133,114 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
   @override
   Widget build(BuildContext context) {
     final p = widget.pace;
-    final c = context.colors;
-    final t = context.text;
     final month = p.usage.period.start.monthKey;
     final burn = ref.watch(budgetBurnProvider((p.usage.budget.id, month))).value;
-    final all = burn?.transactions ?? const <Transaction>[];
+    return LedgerPage(
+      appBar: widget.appBar,
+      storageKey: 'budget-${p.usage.budget.id}',
+      slivers: [
+        if (p.isPast)
+          const PageBlock(
+            top: Sp.sm,
+            child: LedgerNote(
+              icon: LucideIcons.lock,
+              text: 'A past month is read-only. Budgets can only be changed for the current month.',
+            ),
+          ),
+        PageBlock(top: p.isPast ? Sp.xl : Sp.md, child: _Hero(pace: p)),
+        PageBlock(top: Sp.xl, child: _Stats(pace: p)),
+        if (burn != null) ...[
+          PageBlock(
+            top: Sp.section,
+            child: _ChartSection(pace: p, burn: burn, day: _day, onDay: (d) => setState(() => _day = d)),
+          ),
+          PageBlock(top: Sp.section, child: _spending(context, burn)),
+        ],
+      ],
+    );
+  }
+
+  Widget _spending(BuildContext context, BudgetBurn burn) {
+    final t = context.type;
+    final all = burn.transactions;
     var shown = all.where((tx) {
       if (_payee != null && payeeOf(tx) != _payee) return false;
-      if (_day != null && burn!.indexOf(tx.date) != _day) return false;
+      if (_day != null && burn.indexOf(tx.date) != _day) return false;
       return true;
     }).toList();
     if (_sort == _TxSort.largest) shown = [...shown]..sort((a, b) => b.amount.compareTo(a.amount));
     final payees = topPayees(all);
-    final shownTotal = Money.sum(shown.map((tx) => tx.amount));
-
-    Widget box(Widget child, {double top = Space.x3}) => SliverToBoxAdapter(
-          child: ResponsiveCenter(padding: EdgeInsets.fromLTRB(Space.gutter, top, Space.gutter, 0), child: child),
-        );
-    return CustomScrollView(
-      key: PageStorageKey('budget-${p.usage.budget.id}'),
-      slivers: [
-        if (p.isPast)
-          box(
-            const InfoBanner(
-              icon: LucideIcons.lock,
-              message: 'A past month is read-only. Budgets can only be changed for the current month.',
+    final newest = _sort == _TxSort.newest;
+    final day = _day;
+    return LedgerSection(
+      title: 'Spending',
+      count: shown.length,
+      trailing: all.length < 2
+          ? null
+          : LedgerChip(
+              key: const ValueKey('budget-tx-sort'),
+              label: newest ? 'Newest' : 'Largest',
+              icon: LucideIcons.arrowDownUp,
+              semanticLabel: 'Sorted by ${newest ? 'newest' : 'largest'}. Change',
+              onTap: () => setState(() => _sort = newest ? _TxSort.largest : _TxSort.newest),
             ),
-            top: Space.x2,
-          ),
-        box(StaggeredEntrance(child: _HeroCard(pace: p)), top: Space.x2),
-        if (burn != null)
-          box(
-            StaggeredEntrance(
-              index: 1,
-              child: _ChartCard(
-                pace: p,
-                burn: burn,
-                day: _day,
-                onDay: (d) => setState(() => _day = d),
-              ),
-            ),
-          ),
-        box(
-          Row(
-            children: [
-              Text('Spending', style: t.sectionTitle),
-              const SizedBox(width: Space.x2),
-              Text('${shown.length}', style: t.label.copyWith(color: c.textTertiary, fontWeight: FontWeight.w900)),
-              const Spacer(),
-              if (shown.isNotEmpty) Flexible(child: AmountText(shownTotal, style: t.amountSmall, fit: true)),
-              const SizedBox(width: Space.x2),
-              FinnTapChip(
-                key: const ValueKey('budget-tx-sort'),
-                label: _sort == _TxSort.newest ? 'Newest' : 'Largest',
-                icon: LucideIcons.arrowDownUp,
-                height: 28,
-                semantics: 'Sorted by ${_sort == _TxSort.newest ? 'newest' : 'largest'}. Change',
-                onTap: () => setState(() => _sort = _sort == _TxSort.newest ? _TxSort.largest : _TxSort.newest),
-              ),
-            ],
-          ),
-          top: Space.section,
-        ),
-        if (payees.length > 1 || _day != null)
-          box(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (payees.length > 1 || day != null) ...[
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
               child: Row(
                 children: [
-                  if (_day != null && burn != null) ...[
-                    FinnTapChip(
+                  if (day != null) ...[
+                    LedgerChip(
                       key: const ValueKey('budget-day-chip'),
-                      label: DateFormats.shortWeekdayDayMonth.format(burn.dayAt(_day!)),
+                      label: DateFormats.shortWeekdayDayMonth.format(burn.dayAt(day)),
                       icon: LucideIcons.calendar,
-                      trailing: LucideIcons.x,
-                      color: c.primary,
                       selected: true,
-                      semantics: 'Showing one day. Remove',
+                      removable: true,
+                      semanticLabel: 'Showing one day. Remove',
                       onTap: () => setState(() => _day = null),
                     ),
-                    const SizedBox(width: Space.x1_5),
+                    const SizedBox(width: Sp.sm),
                   ],
-                  for (final (name, total, count) in payees) ...[
-                    FinnTapChip(
-                      key: ValueKey('budget-payee:$name'),
-                      label: '$name · ${budgetMoney(context, total)}',
-                      selected: _payee == name,
-                      color: _payee == name ? c.primary : null,
-                      semantics: '$name, $count ${count == 1 ? 'payment' : 'payments'}, '
-                          '${budgetMoney(context, total)}. ${_payee == name ? 'Showing only these' : 'Show only these'}',
-                      onTap: () => setState(() => _payee = _payee == name ? null : name),
-                    ),
-                    const SizedBox(width: Space.x1_5),
-                  ],
+                  if (payees.length > 1)
+                    for (final (name, total, count) in payees) ...[
+                      LedgerChip(
+                        key: ValueKey('budget-payee:$name'),
+                        label: '$name ${budgetMoney(context, total)}',
+                        selected: _payee == name,
+                        semanticLabel: '$name, $count ${count == 1 ? 'payment' : 'payments'}, '
+                            '${budgetMoney(context, total)}. ${_payee == name ? 'Showing only these' : 'Show only these'}',
+                        onTap: () => setState(() => _payee = _payee == name ? null : name),
+                      ),
+                      const SizedBox(width: Sp.sm),
+                    ],
                 ],
               ),
             ),
-            top: Space.x2,
-          ),
-        if (shown.isEmpty)
-          box(
+            const SizedBox(height: Sp.md),
+          ],
+          if (shown.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: Space.x4),
-              child: Row(
-                children: [
-                  Icon(all.isEmpty ? LucideIcons.sparkles : LucideIcons.searchX, size: 16, color: c.textTertiary),
-                  const SizedBox(width: Space.x2),
-                  Expanded(
-                    child: Text(
-                      all.isEmpty ? 'No spending in this category yet this period.' : 'Nothing matches these filters.',
-                      style: t.body.copyWith(color: c.textSecondary),
-                    ),
-                  ),
-                ],
+              padding: const EdgeInsets.symmetric(vertical: Sp.sm),
+              child: Text(
+                all.isEmpty ? 'No spending in this category yet this period.' : 'Nothing matches these filters.',
+                style: t.label,
               ),
+            )
+          else
+            LedgerPanel(
+              // Align hairlines with the row text (padding + 40pt mark + gap).
+              dividerIndent: Sp.lg + 40 + Sp.md + 2,
+              children: [
+                for (final tx in shown)
+                  KeyedSubtree(key: ValueKey(tx.id), child: TransactionRow(transaction: tx, showDate: true)),
+              ],
             ),
-          )
-        else
-          SliverList.builder(
-            itemCount: shown.length,
-            itemBuilder: (context, i) => ResponsiveCenter(
-              key: ValueKey(shown[i].id),
-              padding: const EdgeInsets.symmetric(horizontal: Space.gutter),
-              child: TransactionRow(
-                transaction: shown[i],
-                showDate: true,
-              ),
-            ),
-          ),
-        const SliverToBoxAdapter(child: SizedBox(height: Space.x12)),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -284,236 +249,163 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
 // Hero
 // ---------------------------------------------------------------------------
 
-class _HeroCard extends ConsumerWidget {
-  const _HeroCard({required this.pace});
+class _Hero extends ConsumerWidget {
+  const _Hero({required this.pace});
 
   final BudgetPace pace;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.ink;
+    final t = context.type;
     final p = pace;
     final u = p.usage;
-    final c = context.colors;
-    final t = context.text;
+    final hidden = AmountVisibility.hiddenOf(context);
     final category = ref.watch(categoryProvider(u.budget.categoryId));
-    final color = p.state.color(c);
     final paused = p.state == BudgetState.paused;
-    final (IconData vIcon, String verdict) = _verdict(context, p);
-    final safe = p.safePerDay;
-    final projected = p.projected;
-    return FinnCard(
-      radius: Radii.xxl,
-      padding: const EdgeInsets.fromLTRB(Space.x4, Space.x3, Space.x4, Space.x4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              CategoryAvatar(category: category, size: 28),
-              const SizedBox(width: Space.x2),
-              Expanded(
-                child: Text(
-                  '${p.isPast ? 'Closed' : 'Monthly'} · ${periodLabel(u.period)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.caption,
-                ),
+    final over = u.isOver;
+    final verdictColor = switch (p.state) {
+      BudgetState.over => c.red,
+      BudgetState.risk => c.amber,
+      _ => c.ink,
+    };
+    final note = u.budget.note;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            CategoryMark(category: category, size: 32),
+            const SizedBox(width: Sp.md),
+            Expanded(
+              child: Text(
+                paused ? 'Paused, ${periodLabel(u.period)}' : periodLabel(u.period),
+                style: t.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              StatusPill(label: p.state.labelFor(past: p.isPast), color: color, icon: p.state.icon),
-            ],
-          ),
-          const SizedBox(height: Space.x3),
-          Center(
-            child: BudgetGauge(
-              used: p.used,
-              elapsed: paused ? 0 : p.elapsed,
-              warnAt: u.budget.warningThresholdBps / 10000,
-              color: color,
-              semanticsLabel: '${formatBps(u.utilizationBps, decimals: 0)} of the limit used, '
-                  '${formatBps(u.elapsedBps, decimals: 0)} of the period gone',
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(u.isOver ? 'OVER BY' : 'LEFT', style: t.eyebrow),
-                  AnimatedAmount(
-                    u.remaining.abs(),
-                    animateOnMount: true,
-                    fit: true,
-                    style: t.amountLarge.copyWith(color: u.isOver ? c.negative : c.textPrimary),
-                  ),
-                  Text('of ${budgetMoney(context, u.budget.limit)}', style: t.caption),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: Space.x3),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: Space.x3, vertical: Space.x2_5),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: c.isDark ? 0.16 : 0.09),
-              borderRadius: Radii.rLg,
-            ),
-            child: Row(
-              children: [
-                Icon(vIcon, size: 16, color: color),
-                const SizedBox(width: Space.x2),
-                Expanded(child: Text(verdict, style: t.label.copyWith(color: c.textPrimary, fontWeight: FontWeight.w700))),
-              ],
-            ),
-          ).maybeAnimate(context, (a) => a.fadeIn(delay: 500.ms, duration: 300.ms).slideY(begin: 0.3, end: 0, delay: 500.ms)),
-          const SizedBox(height: Space.x3),
-          IntrinsicHeight(
-            child: Row(
-              children: [
-                _Stat(
-                  label: 'SPENT',
-                  value: budgetMoney(context, u.spent),
-                  sub: formatBps(u.utilizationBps, decimals: 0),
-                  color: u.isOver ? c.negative : null,
-                ),
-                VerticalDivider(width: Space.x4, color: c.border),
-                if (p.isPast) ...[
-                  _Stat(
-                    label: 'DAILY AVERAGE',
-                    value: budgetMoney(context, u.spent.scale(1, u.period.dayCount)),
-                    sub: 'over ${u.period.dayCount} days',
-                  ),
-                  VerticalDivider(width: Space.x4, color: c.border),
-                  _Stat(
-                    label: 'LIMIT THEN',
-                    value: budgetMoney(context, u.budget.limit),
-                    sub: '${formatBps(u.utilizationBps, decimals: 0)} used',
-                  ),
-                ] else ...[
-                  _Stat(
-                    label: 'SAFE PER DAY',
-                    value: safe == null ? '—' : budgetMoney(context, safe),
-                    sub: daysLeftLabel(p.daysLeft).toLowerCase(),
-                  ),
-                  VerticalDivider(width: Space.x4, color: c.border),
-                  _Stat(
-                    label: 'AT THIS PACE',
-                    value: projected == null || paused ? '—' : budgetMoney(context, projected),
-                    sub: projected == null || paused ? 'too early' : 'by ${DateFormats.dayMonth.format(u.period.end)}',
-                    color: projected != null && !paused && projected > u.budget.limit ? c.negative : null,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (u.committed.isPositive || u.budget.note != null) ...[
-            const SizedBox(height: Space.x3),
-            Wrap(
-              spacing: Space.x3,
-              runSpacing: Space.x1,
-              children: [
-                if (u.committed.isPositive)
-                  _Fact(
-                    icon: LucideIcons.repeat,
-                    text: '${budgetMoney(context, u.committed)} subscriptions due · '
-                        '${budgetMoney(context, u.remainingAfterCommitted)} left after',
-                  ),
-                if (u.budget.note != null) _Fact(icon: LucideIcons.stickyNote, text: u.budget.note!),
-              ],
             ),
           ],
+        ),
+        const SizedBox(height: Sp.xl),
+        Text(over ? 'Over by' : 'Left', style: t.label.copyWith(color: over ? c.red : null)),
+        const SizedBox(height: Sp.xs),
+        AnimatedAmount(
+          u.remaining.abs(),
+          style: t.figureXL.copyWith(color: over && !hidden ? c.red : c.ink),
+          decimals: DecimalDisplay.none,
+          fit: true,
+          animateOnMount: true,
+        ),
+        const SizedBox(height: Sp.xs),
+        Text('of ${budgetMoney(context, u.budget.limit)}', style: t.label),
+        const SizedBox(height: Sp.lg),
+        LedgerBar(
+          value: p.used,
+          marker: p.isPast || paused ? null : p.elapsed,
+          color: switch (p.state) {
+            BudgetState.risk => c.amber,
+            BudgetState.paused => c.inkFaint,
+            _ => c.green,
+          },
+          semanticLabel: '${formatBps(u.utilizationBps, decimals: 0)} of the limit used, '
+              '${formatBps(u.elapsedBps, decimals: 0)} of the period gone',
+        ),
+        const SizedBox(height: Sp.md),
+        Text(_verdict(context, p), style: t.label.copyWith(color: verdictColor)),
+        if (u.committed.isPositive) ...[
+          const SizedBox(height: Sp.xs),
+          Text(
+            '${budgetMoney(context, u.committed)} in subscriptions still to come, '
+            '${budgetMoney(context, u.remainingAfterCommitted)} left after',
+            style: t.label,
+          ),
         ],
-      ),
+        if (note != null && note.trim().isNotEmpty) ...[
+          const SizedBox(height: Sp.xs),
+          Text(note, style: t.label),
+        ],
+      ],
     );
   }
 
-  (IconData, String) _verdict(BuildContext context, BudgetPace p) {
+  String _verdict(BuildContext context, BudgetPace p) {
     final u = p.usage;
     String m(Money x) => budgetMoney(context, x);
     return switch (p.state) {
-      BudgetState.over when p.isPast => (LucideIcons.triangleAlert, 'Went ${m(-u.remaining)} over the limit that month.'),
-      _ when p.isPast => (
-          LucideIcons.circleCheck,
-          'Stayed within the limit with ${m(u.remaining)} left unspent.'
-        ),
-      BudgetState.paused => (LucideIcons.circlePause, 'Paused — no warnings or alerts until you resume.'),
-      BudgetState.over => (
-          LucideIcons.triangleAlert,
-          'You are ${m(-u.remaining)} over. Anything more here adds to the overspend.'
-        ),
-      _ when p.runsOutOn != null => (
-          LucideIcons.gauge,
-          'At this pace the limit runs out around ${DateFormats.dayMonth.format(p.runsOutOn!)}. '
-              'Keep to ${p.safePerDay == null ? 'less' : '${m(p.safePerDay!)}/day'} to stay within it.'
-        ),
-      BudgetState.risk => (
-          LucideIcons.gauge,
-          'Used ${formatBps(u.utilizationBps, decimals: 0)} already. '
-              '${p.safePerDay == null ? '' : 'Up to ${m(p.safePerDay!)}/day keeps you within the limit.'}'
-        ),
-      _ when p.projected != null => (
-          LucideIcons.circleCheck,
-          'On pace to finish with about ${m(u.budget.limit - p.projected!)} to spare.'
-        ),
-      _ => (LucideIcons.circleCheck, 'Plenty of room this period.'),
+      BudgetState.over when p.isPast => 'Went ${m(-u.remaining)} over the limit that month.',
+      _ when p.isPast => 'Stayed within the limit with ${m(u.remaining)} left unspent.',
+      BudgetState.paused => 'Paused. No warnings or alerts until you resume.',
+      BudgetState.over => 'You are ${m(-u.remaining)} over. Anything more here adds to the overspend.',
+      _ when p.runsOutOn != null => 'At this pace the limit runs out around ${DateFormats.dayMonth.format(p.runsOutOn!)}. '
+          'Keep to ${p.safePerDay == null ? 'less' : '${m(p.safePerDay!)} a day'} to stay within it.',
+      BudgetState.risk => 'Used ${formatBps(u.utilizationBps, decimals: 0)} already.'
+          '${p.safePerDay == null ? '' : ' Up to ${m(p.safePerDay!)} a day keeps you within the limit.'}',
+      _ when p.projected != null => 'On pace to finish with about ${m(u.budget.limit - p.projected!)} to spare.',
+      _ => 'Plenty of room this period.',
     };
   }
 }
 
-class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value, required this.sub, this.color});
+/// Three figures under the hero: spent, safe per day, where the period
+/// ends at this pace (a past month: spent, daily average, the limit then).
+class _Stats extends StatelessWidget {
+  const _Stats({required this.pace});
 
-  final String label;
-  final String value;
-  final String sub;
-  final Color? color;
+  final BudgetPace pace;
 
   @override
   Widget build(BuildContext context) {
-    final t = context.text;
-    return Expanded(
-      child: MergeSemantics(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.eyebrow.copyWith(fontSize: 10)),
-            const SizedBox(height: 2),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(value, maxLines: 1, style: t.amountSmall.copyWith(color: color)),
+    final c = context.ink;
+    final t = context.type;
+    final p = pace;
+    final u = p.usage;
+    final paused = p.state == BudgetState.paused;
+    final projected = paused ? null : p.projected;
+    final safe = p.safePerDay;
+    Widget money(Money? m, {Color? color, bool exact = false}) => m == null
+        ? Text('—', style: t.figure)
+        : AmountText(
+            m,
+            style: t.figure,
+            color: color,
+            fit: true,
+            decimals: exact ? DecimalDisplay.auto : DecimalDisplay.none,
+          );
+    final stats = p.isPast
+        ? [
+            LedgerStat(label: 'Spent', value: money(u.spent, color: u.isOver ? c.red : null, exact: true)),
+            LedgerStat(label: 'Daily average', value: money(u.spent.scale(1, u.period.dayCount))),
+            LedgerStat(label: 'Limit then', value: money(u.budget.limit)),
+          ]
+        : [
+            LedgerStat(label: 'Spent', value: money(u.spent, color: u.isOver ? c.red : null, exact: true)),
+            LedgerStat(label: 'Safe per day', value: money(safe)),
+            LedgerStat(
+              label: 'At this pace',
+              value: money(projected, color: projected != null && projected > u.budget.limit ? c.red : null),
             ),
-            Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.micro),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Fact extends StatelessWidget {
-  const _Fact({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
+          ];
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 12, color: c.textTertiary),
-        const SizedBox(width: Space.x1),
-        Flexible(child: Text(text, style: context.text.micro)),
+        for (var i = 0; i < stats.length; i++) ...[
+          if (i > 0) const SizedBox(width: Sp.md),
+          Expanded(child: stats[i]),
+        ],
       ],
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Chart card
+// Chart
 // ---------------------------------------------------------------------------
 
 enum _ChartView { period, history }
 
-class _ChartCard extends ConsumerStatefulWidget {
-  const _ChartCard({required this.pace, required this.burn, required this.day, required this.onDay});
+class _ChartSection extends ConsumerStatefulWidget {
+  const _ChartSection({required this.pace, required this.burn, required this.day, required this.onDay});
 
   final BudgetPace pace;
   final BudgetBurn burn;
@@ -521,80 +413,64 @@ class _ChartCard extends ConsumerStatefulWidget {
   final ValueChanged<int?> onDay;
 
   @override
-  ConsumerState<_ChartCard> createState() => _ChartCardState();
+  ConsumerState<_ChartSection> createState() => _ChartSectionState();
 }
 
-class _ChartCardState extends ConsumerState<_ChartCard> {
+class _ChartSectionState extends ConsumerState<_ChartSection> {
   _ChartView _view = _ChartView.period;
   int? _bar;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final p = widget.pace;
-    final u = p.usage;
-    final color = p.state == BudgetState.over ? c.negative : c.primary;
+    final t = context.type;
+    final u = widget.pace.usage;
     final history =
         ref.watch(budgetHistoryProvider((u.budget.id, u.period.start.monthKey))).value ?? const <BudgetPeriodPoint>[];
     final showHistory = _view == _ChartView.history && history.isNotEmpty;
-    return FinnCard(
-      radius: Radii.xxl,
-      padding: const EdgeInsets.fromLTRB(Space.x4, Space.x3, Space.x4, Space.x3),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SegmentedTabs<_ChartView>(
-            items: [
-              const SegmentItem(_ChartView.period, 'This period'),
-              SegmentItem(_ChartView.history, history.length > 2 ? 'Last ${history.length}' : 'Compare'),
-            ],
-            selected: _view,
-            onChanged: (v) => setState(() => _view = v),
-          ),
-          const SizedBox(height: Space.x3),
-          AnimatedSwitcher(
-            duration: context.motion.normal,
-            child: KeyedSubtree(
-              key: ValueKey(showHistory ? 'h$_bar' : 'p${widget.day}'),
-              child: showHistory ? _historyReadout(context, history) : _periodReadout(context),
-            ),
-          ),
-          const SizedBox(height: Space.x2),
-          AnimatedSwitcher(
-            duration: context.motion.normal,
-            switchInCurve: Curves2.emphasized,
-            child: showHistory
-                ? HistoryBars(
-                    key: const ValueKey('history'),
-                    points: history,
-                    color: c.primary,
-                    selected: _bar,
-                    onSelect: (i) => setState(() => _bar = i),
-                  )
-                : BurnChart(
-                    key: const ValueKey('burn'),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LedgerSegmented<_ChartView>(
+          segments: [
+            const LedgerSegment(_ChartView.period, 'This period'),
+            LedgerSegment(_ChartView.history, history.length > 2 ? 'Last ${history.length}' : 'Compare'),
+          ],
+          selected: _view,
+          onChanged: (v) => setState(() => _view = v),
+        ),
+        const SizedBox(height: Sp.md),
+        LedgerPanel(
+          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.md),
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                showHistory ? _historyReadout(context, history) : _periodReadout(context),
+                const SizedBox(height: Sp.lg),
+                if (showHistory)
+                  HistoryBars(points: history, selected: _bar, onSelect: (i) => setState(() => _bar = i))
+                else
+                  BurnChart(
                     burn: widget.burn,
                     limit: u.budget.limit,
-                    color: color,
                     selected: widget.day,
                     onSelect: widget.onDay,
                   ),
-          ),
-          const SizedBox(height: Space.x1),
-          Text(
-            showHistory
-                ? 'Line = limit · grey = your average before · tap a bar'
-                : 'Dashed diagonal = even pace · tap or drag to read a day',
-            style: t.micro,
-          ),
-        ],
-      ),
+                const SizedBox(height: Sp.sm),
+                Text(
+                  showHistory ? 'Tap a bar to read that month.' : 'Tap or drag across the chart to read a day.',
+                  style: t.small,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
     );
   }
 
   Widget _periodReadout(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
     final b = widget.burn;
     final u = widget.pace.usage;
     final cum = b.cumulative;
@@ -605,7 +481,7 @@ class _ChartCardState extends ConsumerState<_ChartCard> {
       return _Readout(
         title: DateFormats.shortWeekdayDayMonth.format(b.dayAt(d)),
         value: spent.isZero ? 'No spending' : '${budgetMoney(context, spent)} spent',
-        note: '${budgetMoney(context, total)} by then · ${formatBps(total.ratioBps(u.budget.limit) ?? 0, decimals: 0)} of limit',
+        note: '${budgetMoney(context, total)} by then, ${formatBps(total.ratioBps(u.budget.limit) ?? 0, decimals: 0)} of the limit',
       );
     }
     final last = b.todayIndex.clamp(0, cum.length - 1);
@@ -617,29 +493,30 @@ class _ChartCardState extends ConsumerState<_ChartCard> {
         title: 'Month total',
         value: budgetMoney(context, now),
         note: '${formatBps(now.ratioBps(u.budget.limit) ?? 0, decimals: 0)} of the limit',
-        noteColor: now > u.budget.limit ? c.negative : c.positive,
+        noteColor: now > u.budget.limit ? c.red : null,
       );
     }
     return _Readout(
       title: 'So far',
       value: budgetMoney(context, now),
       note: ahead.isPositive
-          ? '${budgetMoney(context, ahead)} ahead of an even pace'
-          : '${budgetMoney(context, -ahead)} under an even pace',
-      noteColor: ahead.isPositive ? c.warning : c.positive,
+          ? '${budgetMoney(context, ahead)} ahead of pace'
+          : '${budgetMoney(context, -ahead)} under pace',
+      noteColor: ahead.isPositive ? c.amber : null,
     );
   }
 
   Widget _historyReadout(BuildContext context, List<BudgetPeriodPoint> points) {
-    final c = context.colors;
+    final c = context.ink;
     final i = _bar;
     if (i != null && i < points.length) {
       final pt = points[i];
+      final pct = formatBps(pt.spent.ratioBps(pt.limit) ?? 0, decimals: 0);
       return _Readout(
         title: periodLabel(pt.period),
         value: budgetMoney(context, pt.spent),
-        note: '${formatBps(pt.spent.ratioBps(pt.limit) ?? 0, decimals: 0)} of limit${pt.isOver ? ' · over' : ''}',
-        noteColor: pt.isOver ? c.negative : null,
+        note: pt.isOver ? 'Over the limit, $pct' : '$pct of the limit',
+        noteColor: pt.isOver ? c.red : null,
       );
     }
     final avg = averageSpentBefore(points);
@@ -648,8 +525,8 @@ class _ChartCardState extends ConsumerState<_ChartCard> {
     return _Readout(
       title: 'Average before',
       value: avg == null ? '—' : budgetMoney(context, avg),
-      note: before == 0 ? 'No earlier periods yet' : 'Over the limit in $over of $before',
-      noteColor: over > 0 ? c.warning : c.positive,
+      note: before == 0 ? 'No earlier months yet' : 'Over the limit in $over of $before',
+      noteColor: over > 0 ? c.amber : null,
     );
   }
 }
@@ -664,8 +541,7 @@ class _Readout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.text;
-    final c = context.colors;
+    final t = context.type;
     return Semantics(
       liveRegion: true,
       child: Row(
@@ -675,16 +551,21 @@ class _Readout extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title.toUpperCase(), style: t.eyebrow),
-                Text(value, style: t.amountMedium),
+                Text(title, style: t.label),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(value, style: t.figure.copyWith(fontSize: 20), maxLines: 1),
+                ),
               ],
             ),
           ),
+          const SizedBox(width: Sp.md),
           Flexible(
-            child: Text(
-              note,
-              textAlign: TextAlign.end,
-              style: t.caption.copyWith(color: noteColor ?? c.textSecondary, fontWeight: FontWeight.w700),
+            child: Align(
+              alignment: Alignment.bottomRight,
+              child: Text(note, textAlign: TextAlign.end, style: t.small.copyWith(color: noteColor)),
             ),
           ),
         ],

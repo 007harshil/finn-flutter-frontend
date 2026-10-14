@@ -1,7 +1,6 @@
 import 'package:finn/core/money/money.dart';
 import 'package:finn/core/money/money_format.dart';
 import 'package:finn/features/emergency_fund/domain/emergency_fund.dart';
-import 'package:finn/features/goals/presentation/savings_widgets.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -10,10 +9,9 @@ import 'journey_helpers.dart';
 
 /// The hero texts that describe [s] on the emergency fund screen.
 void expectHeroShows(EmergencyFundStatus s) {
-  expect(find.text(s.level.label.toUpperCase()), findsOneWidget);
-  expect(find.text('earmarked · covers about ${coverageLabel(s.coverageMonths!)} of essentials'), findsOneWidget);
-  expect(find.text('${formatBps(s.progressBps, decimals: 0)} funded'), findsOneWidget);
-  expect(find.text('Target ${s.target.format()}'), findsOneWidget);
+  final tenths = s.coverageMonths!.toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '');
+  expect(find.text('$tenths of ${s.plan!.targetMonths} months covered'), findsOneWidget);
+  expect(find.text('of ${s.target.format()}'), findsOneWidget);
 }
 
 void main() {
@@ -62,11 +60,12 @@ void main() {
     expect(after.emergency.progressBps, greaterThan(planned.emergency.progressBps));
     expect(after.balance.cash, before.balance.cash);
     expect(after.balance.available, before.balance.available - added);
-    await scrollTo(tester, find.text('EMERGENCY FUND'), up: true);
+    await scrollTo(tester, find.text('Set aside'), up: true);
     expectHeroShows(after.emergency);
 
     // Home: set aside up, available down.
     await tapTab(tester, 'Home');
+    await showHero(tester);
     expect(inHero(rupees(after.balance.available)), findsOneWidget);
     expect(inHero(rupees(after.balance.earmarked)), findsOneWidget);
     expect(tester.takeException(), isNull);

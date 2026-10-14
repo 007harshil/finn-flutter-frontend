@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
-import '../../../design_system/design_system.dart';
+import '../../../core/money/money_format.dart';
+import '../../../core/time/dates.dart';
+import '../../../kit/kit.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../domain/loan_calculator.dart';
 import 'loan_ui.dart';
@@ -32,214 +34,223 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final overview = ref.watch(loansOverviewProvider);
-    return Scaffold(
-      appBar: AppBar(
-        actions: [
-          FinnIconButton(
-            icon: LucideIcons.plus,
-            tooltip: 'Add a loan',
-            variant: FinnIconButtonVariant.filled,
-            onPressed: () => context.push(AppRoutes.newLoan),
-          ),
-          const SizedBox(width: Space.x3),
-        ],
-      ),
-      body: AsyncView<LoansOverview>(
-        value: overview,
-        loading: const _LoansSkeleton(),
-        builder: (context, o) {
-          final items = _tab == _Tab.active ? o.active : o.closed;
-          return CustomScrollView(
-            key: const PageStorageKey('loans-list'),
-            slivers: [
-              _boxed(const StaggeredEntrance(child: _Header())),
-              if (!o.isEmpty) ...[
-                _boxed(StaggeredEntrance(index: 1, child: _SummaryRow(overview: o))),
-                if (o.overdueCount > 0)
-                  _boxed(Padding(
-                    padding: const EdgeInsets.only(top: Space.x3),
-                    child: InfoBanner(
-                      tone: FinnTone.warning,
-                      icon: LucideIcons.triangleAlert,
-                      message: o.overdueCount == 1
-                          ? 'One loan has a payment past its due date. Record it once it is paid.'
-                          : '${o.overdueCount} loans have payments past their due date. Record them once they are paid.',
-                    ),
-                  )),
-                _boxed(Padding(
-                  padding: const EdgeInsets.only(top: Space.x5, bottom: Space.x1),
-                  child: SegmentedTabs<_Tab>(
-                    items: [
-                      SegmentItem(_Tab.active, _Tab.active.label, count: o.active.length),
-                      SegmentItem(_Tab.closed, _Tab.closed.label, count: o.closed.length),
-                    ],
-                    selected: _tab,
-                    onChanged: (t) => setState(() => _tab = t),
+    final header = PageHeader(
+      title: 'Loans',
+      actions: [
+        LedgerButton(
+          label: 'Add a loan',
+          icon: LucideIcons.plus,
+          small: true,
+          onPressed: () => context.push(AppRoutes.newLoan),
+        ),
+      ],
+    );
+    return AsyncView<LoansOverview>(
+      value: ref.watch(loansOverviewProvider),
+      loading: Scaffold(backgroundColor: context.ink.paper, body: const SafeArea(child: LedgerPageSkeleton())),
+      builder: (context, o) {
+        final items = _tab == _Tab.active ? o.active : o.closed;
+        return LedgerPage(
+          storageKey: 'loans-list',
+          slivers: [
+            PageBlock(child: header),
+            if (!o.isEmpty) ...[
+              PageBlock(top: Sp.xxl, child: _Hero(overview: o)),
+              if (o.overdueCount > 0)
+                PageBlock(
+                  top: Sp.lg,
+                  child: LedgerNote(
+                    icon: LucideIcons.triangleAlert,
+                    tone: NoteTone.alert,
+                    text: o.overdueCount == 1
+                        ? 'One loan has a payment past its due date. Record it once it is paid.'
+                        : '${o.overdueCount} loans have payments past their due date. Record them once they are paid.',
                   ),
-                )),
-              ],
-              if (items.isEmpty)
-                _boxed(Padding(
-                  padding: const EdgeInsets.only(top: Space.x6),
-                  child: o.isEmpty || _tab == _Tab.active
-                      ? EmptyState(
-                          icon: LucideIcons.landmark,
-                          title: o.isEmpty ? 'No loans yet' : 'No active loans',
-                          message: 'Add a bank loan with EMIs, or money borrowed from or lent to family and friends. '
-                              'FiNN tracks what is left and what is due next.',
-                          actionLabel: 'Add a loan',
-                          actionIcon: LucideIcons.plus,
-                          onAction: () => context.push(AppRoutes.newLoan),
-                        )
-                      : const EmptyState(
-                          icon: LucideIcons.circleCheck,
-                          title: 'No closed loans',
-                          message: 'Loans you repay in full appear here with their history.',
-                        ),
-                ))
-              else
-                SliverList.builder(
-                  itemCount: items.length,
-                  itemBuilder: (context, i) => _LoanRow(state: items[i]),
                 ),
-              SliverPadding(padding: EdgeInsets.only(bottom: context.bottomClearance)),
+              PageBlock(
+                top: Sp.section,
+                child: LedgerSegmented<_Tab>(
+                  selected: _tab,
+                  onChanged: (t) => setState(() => _tab = t),
+                  segments: [
+                    LedgerSegment(_Tab.active, _Tab.active.label, count: o.active.length),
+                    LedgerSegment(_Tab.closed, _Tab.closed.label, count: o.closed.length),
+                  ],
+                ),
+              ),
             ],
-          );
-        },
-      ),
+            if (items.isEmpty)
+              PageBlock(
+                top: Sp.xl,
+                child: o.isEmpty || _tab == _Tab.active
+                    ? LedgerEmpty(
+                        title: o.isEmpty ? 'No loans yet' : 'No active loans',
+                        message: 'Add a bank loan with EMIs, or money borrowed from or lent to family and friends. '
+                            'FiNN tracks what is left and what is due next.',
+                        actionLabel: 'Add a loan',
+                        onAction: () => context.push(AppRoutes.newLoan),
+                      )
+                    : const LedgerEmpty(
+                        title: 'No closed loans',
+                        message: 'Loans you repay in full appear here with their history.',
+                      ),
+              )
+            else
+              ..._groups(items),
+          ],
+        );
+      },
     );
+  }
+
+  /// Borrowed and lent loans in their own sections when both exist.
+  List<Widget> _groups(List<LoanState> items) {
+    final borrowed = [for (final l in items) if (l.loan.isBorrowed) l];
+    final lent = [for (final l in items) if (!l.loan.isBorrowed) l];
+    Widget panel(List<LoanState> list) => LedgerPanel(
+      dividerIndent: Sp.lg + 40 + Sp.md + 2,
+      children: [for (final l in list) _LoanRow(key: ValueKey(l.loan.id), state: l)],
+    );
+    if (borrowed.isEmpty || lent.isEmpty) {
+      return [PageBlock(top: Sp.md, child: panel(items))];
+    }
+    return [
+      PageBlock(
+        top: Sp.xl,
+        child: LedgerSection(title: 'I owe', count: borrowed.length, child: panel(borrowed)),
+      ),
+      PageBlock(
+        top: Sp.section,
+        child: LedgerSection(title: 'Owed to me', count: lent.length, child: panel(lent)),
+      ),
+    ];
   }
 }
 
-Widget _boxed(Widget child) => SliverToBoxAdapter(
-      child: ResponsiveCenter(padding: const EdgeInsets.symmetric(horizontal: Space.gutter), child: child),
-    );
-
-class _Header extends StatelessWidget {
-  const _Header();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.text;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Space.x4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Semantics(header: true, child: Text('Loans', style: t.pageTitle)),
-          const SizedBox(height: Space.x1),
-          Text('What you have borrowed and lent. Your balance changes only when you record a payment.',
-              style: t.caption),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.overview});
+/// The one number: what is still owed (or, with only lent loans, what is
+/// owed to you), with the other side and what is due soon beside it.
+class _Hero extends StatelessWidget {
+  const _Hero({required this.overview});
 
   final LoansOverview overview;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final o = overview;
-    final borrowed = o.active.where((l) => l.loan.isBorrowed).length;
-    final lent = o.active.length - borrowed;
-    String count(int n) => n == 0 ? 'None active' : '$n active';
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: StatTile(
-              label: 'I owe',
-              icon: LucideIcons.landmark,
-              accent: c.negative,
-              value: AmountText(o.borrowedOutstanding, style: t.amountMedium.copyWith(color: c.negative), fit: true),
-              caption: count(borrowed),
-            ),
+    final hasBorrowed = o.active.any((l) => l.loan.isBorrowed);
+    final hasLent = o.active.any((l) => !l.loan.isBorrowed);
+    final owe = hasBorrowed || !hasLent;
+    final main = owe ? o.borrowedOutstanding : o.lentOutstanding;
+    final stats = <Widget>[
+      if (owe && hasLent)
+        LedgerStat(
+          label: 'Owed to me',
+          value: AmountText(o.lentOutstanding, style: t.figure, decimals: DecimalDisplay.none),
+        ),
+      if (o.dueIn30DaysCount > 0)
+        LedgerStat(
+          label: 'Due in 30 days',
+          value: AmountText(o.dueIn30Days, style: t.figure, decimals: DecimalDisplay.none),
+        ),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(owe ? 'I owe' : 'Owed to me', style: t.label),
+        const SizedBox(height: Sp.xs),
+        AnimatedAmount(main, style: t.figureXL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
+        if (stats.isNotEmpty) ...[
+          const SizedBox(height: Sp.lg),
+          Row(
+            children: [
+              for (var i = 0; i < stats.length; i++) ...[
+                if (i > 0) const SizedBox(width: Sp.xl),
+                stats[i],
+              ],
+            ],
           ),
-          const SizedBox(width: Space.x2),
-          Expanded(
-            child: StatTile(
-              label: 'Owed to me',
-              icon: LucideIcons.handCoins,
-              accent: c.positive,
-              value: AmountText(o.lentOutstanding, style: t.amountMedium.copyWith(color: c.positive), fit: true),
-              caption: count(lent),
-            ),
+        ] else if (o.active.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: Sp.md),
+            child: Text('Nothing due in the next 30 days', style: t.label.copyWith(color: c.inkSoft)),
           ),
-          const SizedBox(width: Space.x2),
-          Expanded(
-            child: StatTile(
-              label: 'Due in 30 days',
-              icon: LucideIcons.calendarClock,
-              accent: o.overdueCount > 0 ? c.attention : c.info,
-              value: AmountText(o.dueIn30Days, style: t.amountMedium, fit: true),
-              caption: o.dueIn30DaysCount == 0
-                  ? 'Nothing due'
-                  : 'Projected · ${o.dueIn30DaysCount} ${o.dueIn30DaysCount == 1 ? 'payment' : 'payments'}',
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
 
+/// One loan: direction icon, name, next payment (red when overdue), what is
+/// left, and a bar for how much of the principal is done.
 class _LoanRow extends StatelessWidget {
-  const _LoanRow({required this.state});
+  const _LoanRow({super.key, required this.state});
 
   final LoanState state;
 
   @override
   Widget build(BuildContext context) {
-    final id = state.loan.id;
-    final days = state.daysUntilNextDue;
-    final showPay = !state.isClosed && days != null && days <= 7;
-    return ResponsiveCenter(
-      key: ValueKey(id),
-      padding: const EdgeInsets.fromLTRB(Space.gutter, Space.x2, Space.gutter, 0),
-      child: LoanCard(
-        state: state,
-        onTap: () => context.push(AppRoutes.loan(id)),
-        onPay: showPay ? () => context.push(AppRoutes.payLoan(id)) : null,
+    final c = context.ink;
+    final t = context.type;
+    final s = state;
+    final l = s.loan;
+    final due = loanDueStatus(context, s);
+    final next = s.nextDue;
+    final String sub;
+    if (s.isClosed) {
+      sub = '${l.counterparty}, ${l.structure.label}';
+    } else if (next == null) {
+      sub = '${l.counterparty}, ${l.rate.label} p.a.';
+    } else if (due.overdue) {
+      sub = '${due.label}, ${DateFormats.dayMonth.format(next.dueDate)}';
+    } else {
+      sub = '${loanDueName(l, next)} ${maskedAmount(context, next.payment)} on ${DateFormats.dayMonth.format(next.dueDate)}';
+    }
+    final days = s.daysUntilNextDue;
+    final showPay = !s.isClosed && days != null && days <= 7;
+    final pct = s.repaidBps ~/ 100;
+    return LedgerRow(
+      leading: IconWell(icon: l.direction.icon),
+      title: l.name,
+      subtitle: sub,
+      subtitleColor: due.overdue ? c.red : null,
+      subtitleLines: 2,
+      trailing: AmountText(
+        s.outstanding,
+        style: t.figure.copyWith(color: s.isClosed ? c.inkSoft : null),
+        decimals: DecimalDisplay.none,
       ),
-    );
-  }
-}
-
-class _LoansSkeleton extends StatelessWidget {
-  const _LoansSkeleton();
-
-  @override
-  Widget build(BuildContext context) => const SkeletonPulse(
-        child: Padding(
-          padding: EdgeInsets.all(Space.gutter),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      trailingSub: Text('left', style: t.small),
+      below: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LedgerBar(value: s.repaidBps / 10000, color: s.isClosed ? c.inkSoft : null),
+          const SizedBox(height: Sp.xs),
+          Row(
             children: [
-              SkeletonBox(width: 120, height: 28),
-              SizedBox(height: Space.x5),
-              Row(children: [
-                Expanded(child: CardSkeleton(height: 104)),
-                SizedBox(width: Space.x2),
-                Expanded(child: CardSkeleton(height: 104)),
-                SizedBox(width: Space.x2),
-                Expanded(child: CardSkeleton(height: 104)),
-              ]),
-              SizedBox(height: Space.x5),
-              SkeletonBox(height: 44, radius: Radii.full),
-              SizedBox(height: Space.x4),
-              CardSkeleton(height: 132),
-              SizedBox(height: Space.x2),
-              CardSkeleton(height: 132),
+              Expanded(
+                child: Text(
+                  showPay ? '$pct% ${l.direction.repaidVerb.toLowerCase()}' : '$pct% ${l.direction.repaidVerb.toLowerCase()} of ${maskedAmount(context, l.principal)}',
+                  style: t.small,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (showPay)
+                LedgerButton(
+                  key: ValueKey('loan-pay:${l.id}'),
+                  label: l.isBorrowed ? 'Record payment' : 'Record receipt',
+                  small: true,
+                  variant: LedgerButtonVariant.secondary,
+                  onPressed: () => context.push(AppRoutes.payLoan(l.id)),
+                ),
             ],
           ),
-        ),
-      );
+        ],
+      ),
+      semanticLabel: '${l.name}, ${l.direction.sentence(l.counterparty)}, '
+          'outstanding ${AmountText.spokenLabel(s.outstanding)}, ${due.label}',
+      onTap: () => context.push(AppRoutes.loan(l.id)),
+    );
+  }
 }

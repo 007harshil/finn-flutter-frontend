@@ -8,86 +8,69 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../application/analytics_providers.dart';
 import '../domain/analytics.dart';
 import 'insight_widgets.dart';
 
-/// Card wrapper used by every Insights chart: a takeaway title, a
-/// subtitle, optional legend, the chart, and an optional "How this is
-/// calculated" disclosure.
+/// A chart in its own section: the section title, then one panel with the
+/// takeaway sentence, the chart, its colour key and an optional "How this
+/// is calculated" disclosure.
 class InsightChartCard extends StatelessWidget {
   const InsightChartCard({
     super.key,
+    required this.heading,
     required this.title,
-    required this.subtitle,
     required this.child,
+    this.subtitle,
     this.howCalculated,
     this.legend = const [],
-    this.icon,
-    this.accent,
   });
+
+  /// Short section title ("Day by day").
+  final String heading;
 
   /// States the takeaway, e.g. "You spent 12% less than September".
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final Widget child;
   final String? howCalculated;
   final List<LegendEntry> legend;
-  final IconData? icon;
-  final Color? accent;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final a = accent ?? c.accentAnalytics;
+    final t = context.type;
     final how = howCalculated;
-    return FinnCard(
-      padding: EdgeInsets.fromLTRB(Space.x4, Space.x4, Space.x4, how == null ? Space.x4 : Space.x1),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    final sub = subtitle;
+    return LedgerSection(
+      title: heading,
+      child: LedgerPanel(
+        padding: EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, how == null ? Sp.lg : 0),
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (icon != null) ...[
-                IconTile(
-                  icon: icon!,
-                  background: a.withValues(alpha: c.isDark ? 0.2 : 0.12),
-                  foreground: a,
-                  size: 32,
-                  radius: Radii.md,
-                  iconSize: 16,
-                ),
-                const SizedBox(width: Space.x3),
+              Text(title, style: t.bodyStrong),
+              if (sub != null) ...[
+                const SizedBox(height: 2),
+                Text(sub, style: t.label),
               ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Semantics(header: true, child: Text(title, style: t.sectionTitle)),
-                    const SizedBox(height: Space.x0_5),
-                    Text(subtitle, style: t.caption.copyWith(color: c.textSecondary)),
-                  ],
+              const SizedBox(height: Sp.lg),
+              child,
+              if (legend.isNotEmpty) ...[
+                const SizedBox(height: Sp.md),
+                Wrap(
+                  spacing: Sp.lg,
+                  runSpacing: Sp.xs,
+                  children: [for (final l in legend) _LegendKey(entry: l)],
                 ),
-              ),
+              ],
+              if (how != null) ...[
+                const SizedBox(height: Sp.xs),
+                HowCalculated(text: how),
+              ],
             ],
           ),
-          if (legend.isNotEmpty) ...[
-            const SizedBox(height: Space.x3),
-            Wrap(
-              spacing: Space.x4,
-              runSpacing: Space.x1,
-              children: [for (final l in legend) _LegendChip(entry: l)],
-            ),
-          ],
-          const SizedBox(height: Space.x4),
-          child,
-          if (how != null) ...[
-            const SizedBox(height: Space.x1),
-            HowCalculated(text: how),
-          ],
         ],
       ),
     );
@@ -102,8 +85,8 @@ class LegendEntry {
   final bool dashed;
 }
 
-class _LegendChip extends StatelessWidget {
-  const _LegendChip({required this.entry});
+class _LegendKey extends StatelessWidget {
+  const _LegendKey({required this.entry});
   final LegendEntry entry;
 
   @override
@@ -111,42 +94,12 @@ class _LegendChip extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (entry.dashed)
-          SizedBox(
-            width: 14,
-            height: 10,
-            child: CustomPaint(painter: _DashPainter(entry.color)),
-          )
-        else
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: entry.color, borderRadius: BorderRadius.circular(3)),
-          ),
-        const SizedBox(width: Space.x1_5),
-        Text(entry.label, style: context.text.caption.copyWith(color: context.colors.textSecondary)),
+        InsightSwatch(color: entry.color, dashed: entry.dashed),
+        const SizedBox(width: Sp.sm - 2),
+        Text(entry.label, style: context.type.small),
       ],
     );
   }
-}
-
-class _DashPainter extends CustomPainter {
-  _DashPainter(this.color);
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..color = color
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round;
-    final y = size.height / 2;
-    canvas.drawLine(Offset(0, y), Offset(size.width * 0.4, y), p);
-    canvas.drawLine(Offset(size.width * 0.6, y), Offset(size.width, y), p);
-  }
-
-  @override
-  bool shouldRepaint(_DashPainter old) => old.color != color;
 }
 
 /// Expandable plain-language explanation of a calculation.
@@ -164,8 +117,8 @@ class _HowCalculatedState extends State<HowCalculated> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -175,21 +128,17 @@ class _HowCalculatedState extends State<HowCalculated> {
           label: widget.label,
           excludeSemantics: true,
           child: InkWell(
-            borderRadius: Radii.rMd,
+            borderRadius: Rad.rSm,
             onTap: () => setState(() => _open = !_open),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: Dimens.minTouch),
+              constraints: const BoxConstraints(minHeight: 44),
               child: Row(
                 children: [
-                  Icon(LucideIcons.info, size: 14, color: c.textSecondary),
-                  const SizedBox(width: Space.x1_5),
-                  Expanded(
-                    child: Text(widget.label, style: t.label.copyWith(color: c.textSecondary, fontWeight: FontWeight.w700)),
-                  ),
+                  Expanded(child: Text(widget.label, style: t.label)),
                   AnimatedRotation(
                     turns: _open ? 0.5 : 0,
                     duration: context.motion.fast,
-                    child: Icon(LucideIcons.chevronDown, size: 16, color: c.textTertiary),
+                    child: Icon(LucideIcons.chevronDown, size: 18, color: c.inkSoft),
                   ),
                 ],
               ),
@@ -199,8 +148,8 @@ class _HowCalculatedState extends State<HowCalculated> {
         MotionAnimatedSize(
           child: _open
               ? Padding(
-                  padding: const EdgeInsets.only(bottom: Space.x3),
-                  child: Text(widget.text, style: t.caption.copyWith(color: c.textSecondary, height: 1.45)),
+                  padding: const EdgeInsets.only(bottom: Sp.md),
+                  child: Text(widget.text, style: t.label.copyWith(color: c.ink)),
                 )
               : const SizedBox(width: double.infinity),
         ),
@@ -235,12 +184,12 @@ const weekdayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'S
 const _weekdayShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 TextStyle _axisStyle(BuildContext context) =>
-    context.text.micro.copyWith(color: context.colors.textTertiary, fontWeight: FontWeight.w700);
+    context.type.small.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
 
 AxisTitles _leftMoneyTitles(BuildContext context, double interval, bool hidden) => AxisTitles(
       sideTitles: SideTitles(
         showTitles: !hidden,
-        reservedSize: 46,
+        reservedSize: 50,
         interval: interval,
         getTitlesWidget: (v, meta) {
           if (v == meta.max && v != meta.min && (meta.max / interval) % 1 != 0) return const SizedBox.shrink();
@@ -264,7 +213,7 @@ FlTitlesData _titles(
     bottomTitles: AxisTitles(
       sideTitles: SideTitles(
         showTitles: true,
-        reservedSize: 24,
+        reservedSize: 26,
         interval: 1,
         getTitlesWidget: (v, meta) {
           final i = v.round();
@@ -289,32 +238,35 @@ FlGridData _grid(BuildContext context, double interval) => FlGridData(
       show: true,
       drawVerticalLine: false,
       horizontalInterval: interval,
-      getDrawingHorizontalLine: (_) => FlLine(color: context.colors.border, strokeWidth: 1, dashArray: const [3, 4]),
+      getDrawingHorizontalLine: (_) => FlLine(color: context.ink.line, strokeWidth: 1),
     );
 
 String _tooltipMoney(Money m, bool hidden, {SignDisplay sign = SignDisplay.auto}) =>
     hidden ? MoneyFormatter.masked : MoneyFormatter.format(m, sign: sign, decimals: DecimalDisplay.none);
 
 /// Dashed "your average" baseline with a compact label at the right edge.
-HorizontalLine _averageLine(BuildContext context, double y, Color color, String label, bool hidden) => HorizontalLine(
-      y: y,
-      color: color,
-      strokeWidth: 1.5,
-      dashArray: const [5, 4],
-      label: HorizontalLineLabel(
-        show: true,
-        alignment: Alignment.topRight,
-        padding: const EdgeInsets.only(right: 2, bottom: 2),
-        style: context.text.micro.copyWith(color: color, fontWeight: FontWeight.w900),
-        labelResolver: (_) => hidden ? label : '$label ${_axisMoney(y)}',
-      ),
-    );
+HorizontalLine _averageLine(BuildContext context, double y, String label, bool hidden) {
+  final c = context.ink;
+  return HorizontalLine(
+    y: y,
+    color: c.inkSoft,
+    strokeWidth: 1,
+    dashArray: const [4, 4],
+    label: HorizontalLineLabel(
+      show: true,
+      alignment: Alignment.topRight,
+      padding: const EdgeInsets.only(right: 2, bottom: 2),
+      style: _axisStyle(context),
+      labelResolver: (_) => hidden ? label : '$label ${_axisMoney(y)}',
+    ),
+  );
+}
 
 BarTouchTooltipData _barTooltip(BuildContext context, BarTooltipItem? Function(int group, int rod) item) {
-  final c = context.colors;
+  final c = context.ink;
   return BarTouchTooltipData(
-    getTooltipColor: (_) => c.primary,
-    tooltipBorderRadius: Radii.rMd,
+    getTooltipColor: (_) => c.ink,
+    tooltipBorderRadius: Rad.rSm,
     fitInsideHorizontally: true,
     fitInsideVertically: true,
     getTooltipItem: (group, gi, rod, ri) => item(group.x, ri),
@@ -322,20 +274,14 @@ BarTouchTooltipData _barTooltip(BuildContext context, BarTooltipItem? Function(i
 }
 
 BarTooltipItem _tip(BuildContext context, String heading, String value, {String? note}) {
-  final c = context.colors;
+  final c = context.ink;
+  final t = context.type;
   return BarTooltipItem(
     '$heading\n',
-    context.text.micro.copyWith(color: c.onPrimary.withValues(alpha: 0.75)),
+    t.small.copyWith(color: c.onInk.withValues(alpha: 0.8)),
     children: [
-      TextSpan(
-        text: value,
-        style: context.text.label.copyWith(color: c.onPrimary, fontWeight: FontWeight.w800),
-      ),
-      if (note != null)
-        TextSpan(
-          text: '\n$note',
-          style: context.text.micro.copyWith(color: c.onPrimary.withValues(alpha: 0.85), fontWeight: FontWeight.w700),
-        ),
+      TextSpan(text: value, style: t.figure.copyWith(color: c.onInk)),
+      if (note != null) TextSpan(text: '\n$note', style: t.small.copyWith(color: c.onInk.withValues(alpha: 0.8))),
     ],
   );
 }
@@ -353,12 +299,16 @@ void _haptic(FlTouchEvent e) {
   if (e is FlTapDownEvent) HapticFeedback.selectionClick();
 }
 
+const _top = BorderRadius.vertical(top: Radius.circular(3));
+
 // ---------------------------------------------------------------------------
-// Charts. Each grows into place once (GrowIn); fl_chart's own swap
-// animation stays off so the entrance is the only motion.
+// Charts. Ink and greys for bars and axes; green only for money in, red
+// only for overspending. Each grows into place once (GrowIn); fl_chart's
+// own swap animation stays off so the entrance is the only motion.
 // ---------------------------------------------------------------------------
 
-/// Grouped bars: income and spending per month, with the average spend.
+/// Grouped bars: income (green) and spending (ink) per month, with the
+/// average spend.
 class IncomeExpenseBarChart extends StatelessWidget {
   const IncomeExpenseBarChart({super.key, required this.months, this.averageExpense, this.height = 210});
   final List<MonthlyCashFlow> months;
@@ -367,7 +317,7 @@ class IncomeExpenseBarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
     final hidden = AmountVisibility.hiddenOf(context);
     final maxV = months.fold<double>(0, (m, x) => math.max(m, math.max(x.income.toDouble(), x.expense.toDouble())));
     final interval = niceStep(maxV == 0 ? 1000 : maxV);
@@ -393,8 +343,7 @@ class IncomeExpenseBarChart extends StatelessWidget {
               borderData: FlBorderData(show: false),
               titlesData: _monthTitles(context, [for (final m in months) m.month], interval, hidden),
               extraLinesData: ExtraLinesData(horizontalLines: [
-                if (avg != null && avg.isPositive)
-                  _averageLine(context, avg.toDouble() * t, c.negative, 'Avg spend', hidden),
+                if (avg != null && avg.isPositive) _averageLine(context, avg.toDouble() * t, 'Avg spend', hidden),
               ]),
               barTouchData: BarTouchData(
                 touchCallback: (e, _) => _haptic(e),
@@ -403,7 +352,7 @@ class IncomeExpenseBarChart extends StatelessWidget {
                   final isIncome = ri == 0;
                   return _tip(
                     context,
-                    '${monthAbbr(m.month)} · ${isIncome ? 'Income' : 'Spending'}',
+                    '${monthAbbr(m.month)}, ${isIncome ? 'income' : 'spending'}',
                     _tooltipMoney(isIncome ? m.income : m.expense, hidden),
                   );
                 }),
@@ -414,18 +363,8 @@ class IncomeExpenseBarChart extends StatelessWidget {
                     x: i,
                     barsSpace: 3,
                     barRods: [
-                      BarChartRodData(
-                        toY: months[i].income.toDouble() * t,
-                        color: c.positive,
-                        width: rodWidth,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
-                      ),
-                      BarChartRodData(
-                        toY: months[i].expense.toDouble() * t,
-                        color: c.negative,
-                        width: rodWidth,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
-                      ),
+                      BarChartRodData(toY: months[i].income.toDouble() * t, color: c.green, width: rodWidth, borderRadius: _top),
+                      BarChartRodData(toY: months[i].expense.toDouble() * t, color: c.ink, width: rodWidth, borderRadius: _top),
                     ],
                   ),
               ],
@@ -439,6 +378,7 @@ class IncomeExpenseBarChart extends StatelessWidget {
 }
 
 /// Monthly net (income − spending) with a zero line and the average.
+/// Kept money is green, overspending red.
 class NetCashFlowChart extends StatelessWidget {
   const NetCashFlowChart({super.key, required this.months, this.average, this.height = 190});
   final List<MonthlyCashFlow> months;
@@ -447,7 +387,7 @@ class NetCashFlowChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
     final hidden = AmountVisibility.hiddenOf(context);
     final values = [for (final m in months) m.net.toDouble()];
     final maxV = values.fold<double>(0, math.max);
@@ -475,9 +415,8 @@ class NetCashFlowChart extends StatelessWidget {
               titlesData: _monthTitles(context, [for (final m in months) m.month], interval, hidden),
               extraLinesData: ExtraLinesData(
                 horizontalLines: [
-                  HorizontalLine(y: 0, color: c.borderStrong, strokeWidth: 1.5),
-                  if (avg != null && !avg.isZero)
-                    _averageLine(context, avg.toDouble() * t, c.accentNetWorth, 'Avg', hidden),
+                  HorizontalLine(y: 0, color: c.lineStrong, strokeWidth: 1),
+                  if (avg != null && !avg.isZero) _averageLine(context, avg.toDouble() * t, 'Avg', hidden),
                 ],
               ),
               barTouchData: BarTouchData(
@@ -486,7 +425,7 @@ class NetCashFlowChart extends StatelessWidget {
                   final m = months[x];
                   return _tip(
                     context,
-                    '${monthAbbr(m.month)} · ${m.net.isNegative ? 'Overspent' : 'Saved'}',
+                    '${monthAbbr(m.month)}, ${m.net.isNegative ? 'overspent' : 'saved'}',
                     _tooltipMoney(m.net, hidden, sign: SignDisplay.always),
                   );
                 }),
@@ -498,11 +437,9 @@ class NetCashFlowChart extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: values[i] * t,
-                        color: values[i] < 0 ? c.negative : c.positive,
+                        color: values[i] < 0 ? c.red : c.green,
                         width: months.length > 6 ? 10 : 16,
-                        borderRadius: values[i] < 0
-                            ? const BorderRadius.vertical(bottom: Radius.circular(3))
-                            : const BorderRadius.vertical(top: Radius.circular(3)),
+                        borderRadius: values[i] < 0 ? const BorderRadius.vertical(bottom: Radius.circular(3)) : _top,
                       ),
                     ],
                   ),
@@ -516,8 +453,8 @@ class NetCashFlowChart extends StatelessWidget {
   }
 }
 
-/// Bar per day of the month. Days well above the daily average turn
-/// amber/red so expensive days pop out; the dashed line is the average.
+/// Bar per day of the month. Days above the daily average are ink, the
+/// rest a quiet grey; the dashed line is the average.
 class DailySpendChart extends StatelessWidget {
   const DailySpendChart({super.key, required this.days, required this.average, this.height = 200});
   final List<DaySpend> days;
@@ -526,19 +463,12 @@ class DailySpendChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
     final hidden = AmountVisibility.hiddenOf(context);
     final maxV = days.fold<double>(0, (m, d) => math.max(m, d.amount.toDouble()));
     final interval = niceStep(maxV == 0 ? 1000 : maxV);
     final maxY = math.max(interval, (maxV / interval).ceil() * interval);
     final avg = average.toDouble();
-    Color colorOf(DaySpend d) {
-      final v = d.amount.toDouble();
-      if (avg > 0 && v >= avg * 2) return c.negative;
-      if (avg > 0 && v > avg) return c.warning;
-      return c.info;
-    }
-
     final spent = days.where((d) => !d.isFuture && d.amount.isPositive);
     final label = hidden
         ? 'Amounts hidden.'
@@ -565,7 +495,7 @@ class DailySpendChart extends StatelessWidget {
                 hidden: hidden,
               ),
               extraLinesData: ExtraLinesData(horizontalLines: [
-                if (avg > 0) _averageLine(context, avg * t, c.textPrimary, 'Avg', hidden),
+                if (avg > 0) _averageLine(context, avg * t, 'Avg', hidden),
               ]),
               barTouchData: BarTouchData(
                 touchCallback: (e, _) => _haptic(e),
@@ -588,13 +518,13 @@ class DailySpendChart extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: days[i].amount.toDouble() * t,
-                        color: colorOf(days[i]),
+                        color: avg > 0 && days[i].amount.toDouble() > avg ? c.ink : c.lineStrong,
                         width: 5,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
                         backDrawRodData: BackgroundBarChartRodData(
                           show: days[i].isFuture,
                           toY: maxY,
-                          color: c.surfaceMuted.withValues(alpha: 0.6),
+                          color: c.sunken,
                         ),
                       ),
                     ],
@@ -610,6 +540,7 @@ class DailySpendChart extends StatelessWidget {
 }
 
 /// Spending per month with the monthly average (multi-month views).
+/// Months more than 10% above the average are ink.
 class MonthlySpendChart extends StatelessWidget {
   const MonthlySpendChart({super.key, required this.months, required this.average, this.height = 200});
   final List<MonthlyCashFlow> months;
@@ -618,7 +549,7 @@ class MonthlySpendChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
     final hidden = AmountVisibility.hiddenOf(context);
     final maxV = months.fold<double>(0, (m, x) => math.max(m, x.expense.toDouble()));
     final interval = niceStep(maxV == 0 ? 1000 : maxV);
@@ -640,7 +571,7 @@ class MonthlySpendChart extends StatelessWidget {
               borderData: FlBorderData(show: false),
               titlesData: _monthTitles(context, [for (final m in months) m.month], interval, hidden),
               extraLinesData: ExtraLinesData(horizontalLines: [
-                if (avg > 0) _averageLine(context, avg * t, c.textPrimary, 'Avg', hidden),
+                if (avg > 0) _averageLine(context, avg * t, 'Avg', hidden),
               ]),
               barTouchData: BarTouchData(
                 touchCallback: (e, _) => _haptic(e),
@@ -657,9 +588,9 @@ class MonthlySpendChart extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: months[i].expense.toDouble() * t,
-                        color: avg > 0 && months[i].expense.toDouble() > avg * 1.1 ? c.warning : c.info,
+                        color: avg > 0 && months[i].expense.toDouble() > avg * 1.1 ? c.ink : c.lineStrong,
                         width: months.length > 6 ? 12 : 20,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        borderRadius: _top,
                       ),
                     ],
                   ),
@@ -673,16 +604,15 @@ class MonthlySpendChart extends StatelessWidget {
   }
 }
 
-/// Average spend on each weekday; the priciest day is highlighted.
+/// Average spend on each weekday; the priciest day is ink.
 class WeekdayChart extends StatelessWidget {
-  const WeekdayChart({super.key, required this.averages, required this.color, this.height = 170});
+  const WeekdayChart({super.key, required this.averages, this.height = 170});
   final List<Money> averages;
-  final Color color;
   final double height;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
     final hidden = AmountVisibility.hiddenOf(context);
     final values = [for (final m in averages) m.toDouble()];
     final maxV = values.fold<double>(0, math.max);
@@ -727,9 +657,9 @@ class WeekdayChart extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: values[i] * t,
-                        color: i == peak ? color : color.withValues(alpha: c.isDark ? 0.4 : 0.3),
-                        width: 22,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                        color: i == peak ? c.ink : c.lineStrong,
+                        width: 18,
+                        borderRadius: _top,
                       ),
                     ],
                   ),
@@ -743,24 +673,29 @@ class WeekdayChart extends StatelessWidget {
   }
 }
 
-/// Month-end balance trend (savings, debt) with a highlighted latest point.
+/// Month-end balance trend (savings, debt): a plain line with the latest
+/// point marked.
 class TrendLineChart extends StatelessWidget {
   const TrendLineChart({
     super.key,
     required this.points,
-    required this.color,
     required this.seriesLabel,
+    this.color,
     this.height = 180,
   });
 
   final List<TrendPoint> points;
-  final Color color;
+
+  /// Line colour; ink by default.
+  final Color? color;
   final String seriesLabel;
   final double height;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
+    final type = context.type;
+    final line = color ?? c.ink;
     final hidden = AmountVisibility.hiddenOf(context);
     final values = [for (final p in points) p.value.toDouble()];
     final maxV = values.fold<double>(0, math.max);
@@ -784,20 +719,30 @@ class TrendLineChart extends StatelessWidget {
               titlesData: _monthTitles(context, [for (final p in points) p.month], interval, hidden),
               lineTouchData: LineTouchData(
                 touchCallback: (e, _) => _haptic(e),
+                getTouchedSpotIndicator: (bar, idx) => [
+                  for (var i = 0; i < idx.length; i++)
+                    TouchedSpotIndicatorData(
+                      FlLine(color: c.inkSoft, strokeWidth: 1),
+                      FlDotData(
+                        getDotPainter: (_, _, _, _) =>
+                            FlDotCirclePainter(radius: 4, color: line, strokeColor: c.surface, strokeWidth: 2),
+                      ),
+                    ),
+                ],
                 touchTooltipData: LineTouchTooltipData(
-                  getTooltipColor: (_) => c.primary,
-                  tooltipBorderRadius: Radii.rMd,
+                  getTooltipColor: (_) => c.ink,
+                  tooltipBorderRadius: Rad.rSm,
                   fitInsideHorizontally: true,
                   fitInsideVertically: true,
                   getTooltipItems: (spots) => [
                     for (final s in spots)
                       LineTooltipItem(
-                        '${monthAbbr(points[s.x.round()].month)} · $seriesLabel\n',
-                        context.text.micro.copyWith(color: c.onPrimary.withValues(alpha: 0.75)),
+                        '${monthAbbr(points[s.x.round()].month)}, ${seriesLabel.toLowerCase()}\n',
+                        type.small.copyWith(color: c.onInk.withValues(alpha: 0.8)),
                         children: [
                           TextSpan(
                             text: _tooltipMoney(points[s.x.round()].value, hidden),
-                            style: context.text.label.copyWith(color: c.onPrimary, fontWeight: FontWeight.w800),
+                            style: type.figure.copyWith(color: c.onInk),
                           ),
                         ],
                       ),
@@ -807,147 +752,21 @@ class TrendLineChart extends StatelessWidget {
               lineBarsData: [
                 LineChartBarData(
                   spots: [for (var i = 0; i < values.length; i++) FlSpot(i.toDouble(), values[i] * t)],
-                  color: color,
-                  barWidth: 3,
-                  isCurved: true,
-                  curveSmoothness: 0.25,
-                  preventCurveOverShooting: true,
+                  color: line,
+                  barWidth: 2,
+                  isCurved: false,
                   dotData: FlDotData(
                     show: true,
-                    getDotPainter: (spot, _, _, i) => FlDotCirclePainter(
-                      radius: i == values.length - 1 ? 5 : 3,
-                      color: i == values.length - 1 ? color : c.surface,
-                      strokeColor: i == values.length - 1 ? c.surface : color,
-                      strokeWidth: 2,
-                    ),
+                    checkToShowDot: (spot, _) => spot.x.round() == values.length - 1,
+                    getDotPainter: (_, _, _, _) =>
+                        FlDotCirclePainter(radius: 4, color: line, strokeColor: c.surface, strokeWidth: 2),
                   ),
-                  belowBarData: BarAreaData(
-                    show: true,
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [color.withValues(alpha: c.isDark ? 0.3 : 0.2), color.withValues(alpha: 0)],
-                    ),
-                  ),
+                  belowBarData: BarAreaData(show: false),
                 ),
               ],
             ),
             duration: Duration.zero,
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// One slice of the category donut (already grouped and coloured).
-@immutable
-class DonutSlice {
-  const DonutSlice({required this.label, required this.amount, required this.color});
-  final String label;
-  final Money amount;
-  final Color color;
-}
-
-/// Category donut that sweeps in. Tap a slice to select it: the centre
-/// then shows that slice instead of the total. Tap again to clear.
-class CategoryDonut extends StatelessWidget {
-  const CategoryDonut({
-    super.key,
-    required this.slices,
-    required this.total,
-    this.selected,
-    this.onSelect,
-    this.size = 200,
-  });
-
-  final List<DonutSlice> slices;
-  final Money total;
-  final int? selected;
-  final ValueChanged<int?>? onSelect;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.text;
-    final c = context.colors;
-    final hidden = AmountVisibility.hiddenOf(context);
-    final ring = size * 0.14;
-    final sel = selected != null && selected! < slices.length ? slices[selected!] : null;
-    final sum = slices.fold<double>(0, (a, s) => a + s.amount.toDouble());
-    return Semantics(
-      label: 'Donut chart of spending by category, total ${hidden ? 'hidden' : total.whole}. '
-          '${slices.map((s) => '${s.label} ${formatBps(s.amount.ratioBps(total) ?? 0, decimals: 0)}').join(', ')}',
-      excludeSemantics: true,
-      child: SizedBox.square(
-        dimension: size,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            GrowIn(
-              builder: (context, p) => PieChart(
-                PieChartData(
-                  startDegreeOffset: -90,
-                  sectionsSpace: slices.length > 1 ? 2 : 0,
-                  centerSpaceRadius: size / 2 - ring - 6,
-                  pieTouchData: PieTouchData(
-                    enabled: onSelect != null,
-                    touchCallback: (e, r) {
-                      if (e is! FlTapUpEvent) return;
-                      final i = r?.touchedSection?.touchedSectionIndex;
-                      HapticFeedback.selectionClick();
-                      if (i == null || i < 0 || i >= slices.length) {
-                        onSelect?.call(null);
-                      } else {
-                        onSelect?.call(i == selected ? null : i);
-                      }
-                    },
-                  ),
-                  borderData: FlBorderData(show: false),
-                  sections: [
-                    for (var i = 0; i < slices.length; i++)
-                      PieChartSectionData(
-                        value: slices[i].amount.toDouble() * p,
-                        color: selected == null || selected == i
-                            ? slices[i].color
-                            : slices[i].color.withValues(alpha: 0.3),
-                        radius: selected == i ? ring + 6 : ring,
-                        showTitle: false,
-                      ),
-                    // Transparent filler so the ring sweeps round as it grows.
-                    if (p < 1) PieChartSectionData(value: sum * (1 - p), color: Colors.transparent, radius: ring, showTitle: false),
-                  ],
-                ),
-                duration: Duration.zero,
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.all(ring + Space.x3),
-              child: AnimatedSwitcher(
-                duration: context.motion.fast,
-                child: Column(
-                  key: ValueKey(selected),
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      sel == null ? 'SPENT' : sel.label.toUpperCase(),
-                      style: t.eyebrow.copyWith(color: sel?.color),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: Space.x0_5),
-                    AmountText(sel?.amount ?? total, style: t.amountMedium, compact: true, fit: true, textAlign: TextAlign.center),
-                    if (sel != null)
-                      Text(
-                        '${formatBps(sel.amount.ratioBps(total) ?? 0, decimals: 0)} of spending',
-                        style: t.micro.copyWith(color: c.textSecondary, fontWeight: FontWeight.w700),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ],
         ),
       ),
     );

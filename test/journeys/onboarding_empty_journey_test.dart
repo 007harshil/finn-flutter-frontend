@@ -41,9 +41,9 @@ void main() {
     await tapTab(tester, 'Activity');
     expect(find.textContaining(RegExp('nothing recorded', caseSensitive: false)), findsOneWidget);
     await tapTab(tester, 'Budgets');
-    expect(find.text('NO BUDGETS YET'), findsOneWidget);
+    expect(find.text('No budgets yet'), findsOneWidget);
     await tapTab(tester, 'Goals');
-    expect(find.text('START YOUR FIRST GOAL'), findsOneWidget);
+    expect(find.text('Start your first goal'), findsOneWidget);
 
     // Record the first transaction from the welcome card.
     await tapTab(tester, 'Home');

@@ -10,20 +10,19 @@ import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/money/money.dart';
+import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/async_view.dart';
-import '../../../shared/presentation/category_icons.dart';
 import '../application/goal_actions.dart';
 import '../application/goal_view.dart';
 import '../domain/goal.dart';
-import 'savings_visuals.dart';
-import 'savings_widgets.dart';
+import 'goal_parts.dart';
 
-/// One savings goal: a milestone ring (with a "where you should be" notch),
-/// add / withdraw, the path to the target with a live "what if I add more"
-/// slider, the saved-over-time chart and the history.
+/// One savings goal: what is saved and whether it is on time, add or
+/// withdraw, a monthly plan with a "what if I put in" slider, and the
+/// history of money in and out.
 class GoalDetailScreen extends ConsumerWidget {
   const GoalDetailScreen({super.key, required this.id});
 
@@ -71,49 +70,45 @@ class GoalDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final value = ref.watch(goalProgressProvider(id));
     final g = value.value;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(g?.goal.name ?? 'Goal', maxLines: 1, overflow: TextOverflow.ellipsis),
+    return LedgerPage(
+      appBar: LedgerAppBar(
+        title: g?.goal.name ?? 'Goal',
         actions: [
           if (g != null) ...[
-            FinnIconButton(
+            LedgerIconButton(
               icon: LucideIcons.pencil,
               tooltip: 'Edit goal',
               onPressed: () => context.push(AppRoutes.editGoal(id)),
             ),
-            FinnIconButton(
+            LedgerIconButton(
               key: const ValueKey('goal-more'),
               icon: LucideIcons.ellipsisVertical,
               tooltip: 'More actions',
               onPressed: () => _menu(context, ref, g),
             ),
           ],
-          const SizedBox(width: Space.x2),
         ],
       ),
-      body: AsyncView<GoalProgress?>(
-        value: value,
-        loading: const SkeletonPulse(
-          child: Padding(
-            padding: EdgeInsets.all(Space.gutter),
-            child: Column(children: [CardSkeleton(height: 240), SizedBox(height: Space.x4), CardSkeleton(height: 220)]),
+      storageKey: 'goal-$id',
+      slivers: [
+        SliverToBoxAdapter(
+          child: AsyncView<GoalProgress?>(
+            value: value,
+            loading: const LedgerPageSkeleton(rows: 3),
+            builder: (context, g) => g == null
+                ? PageColumn(
+                    top: Sp.xxl,
+                    child: LedgerEmpty(
+                      title: 'Goal not found',
+                      message: 'It may have been deleted.',
+                      actionLabel: 'Back to goals',
+                      onAction: () => context.go(AppRoutes.goals),
+                    ),
+                  )
+                : _GoalBody(progress: g),
           ),
         ),
-        builder: (context, g) => g == null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(Space.x6),
-                  child: EmptyState(
-                    icon: LucideIcons.target,
-                    title: 'Goal not found',
-                    message: 'It may have been deleted.',
-                    actionLabel: 'Back to goals',
-                    onAction: () => context.go(AppRoutes.goals),
-                  ),
-                ),
-              )
-            : _GoalBody(progress: g),
-      ),
+      ],
     );
   }
 }
@@ -127,62 +122,24 @@ class _GoalBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final g = progress;
     final today = ref.watch(todayProvider);
-    final accent = AccentSwatches.solid(g.goal.colorIndex);
-    final growth = savedOverTime(g.movements);
-    Widget box(Widget child, {double top = Space.x3}) => SliverToBoxAdapter(
-          child: ResponsiveCenter(padding: EdgeInsets.fromLTRB(Space.gutter, top, Space.gutter, 0), child: child),
-        );
-    return CustomScrollView(
-      key: PageStorageKey('goal-${g.goal.id}'),
-      slivers: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         if (g.goal.status == GoalStatus.archived)
-          box(
-            const InfoBanner(
-              message: 'This goal is archived. Its money stays earmarked. Restore it to add or withdraw.',
+          const PageColumn(
+            top: Sp.sm,
+            child: LedgerNote(
               icon: LucideIcons.archive,
-            ),
-            top: Space.x2,
-          ),
-        box(StaggeredEntrance(child: _HeroCard(progress: g, today: today)), top: Space.x2),
-        if (!g.isAchieved) box(StaggeredEntrance(index: 1, child: _PathCard(progress: g, today: today))),
-        if (growth.length >= 2)
-          box(
-            StaggeredEntrance(
-              index: 2,
-              child: FinnCard(
-                radius: Radii.xxl,
-                padding: const EdgeInsets.fromLTRB(Space.x4, Space.x3, Space.x4, Space.x3),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(child: Text('SAVED OVER TIME', style: context.text.eyebrow)),
-                        Text('dashed = target', style: context.text.micro),
-                      ],
-                    ),
-                    const SizedBox(height: Space.x2),
-                    SavedGrowthChart(
-                      points: growth,
-                      target: g.goal.target,
-                      color: accent,
-                      today: today,
-                      targetDate: g.goal.targetDate,
-                    ),
-                  ],
-                ),
-              ),
+              text: 'This goal is archived. Its money stays earmarked. Restore it to add or withdraw.',
             ),
           ),
-        box(
-          SavingsHistory(
-            movements: g.movements,
-            accent: accent,
-            emptyText: 'No money added yet. Your first contribution will show here.',
+        PageColumn(top: Sp.xl, child: _Hero(progress: g, today: today)),
+        if (!g.isAchieved)
+          PageColumn(
+            top: Sp.section,
+            child: LedgerSection(title: 'Monthly plan', child: _PlanSection(progress: g, today: today)),
           ),
-          top: Space.section,
-        ),
-        const SliverToBoxAdapter(child: SizedBox(height: Space.x12)),
+        PageColumn(top: Sp.section, child: _History(movements: g.movements)),
       ],
     );
   }
@@ -192,8 +149,8 @@ class _GoalBody extends ConsumerWidget {
 // Hero
 // ---------------------------------------------------------------------------
 
-class _HeroCard extends StatelessWidget {
-  const _HeroCard({required this.progress, required this.today});
+class _Hero extends StatelessWidget {
+  const _Hero({required this.progress, required this.today});
 
   final GoalProgress progress;
   final DateTime today;
@@ -201,191 +158,100 @@ class _HeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final g = progress;
-    final c = context.colors;
-    final t = context.text;
-    final pace = goalPaceOf(g);
+    final c = context.ink;
+    final t = context.type;
     final active = g.goal.status == GoalStatus.active;
-    final date = g.goal.targetDate;
     final expected = active && !g.isAchieved ? expectedShare(g, today) : null;
-    final months = date == null ? null : monthsUntil(today, date);
-    return FinnCard(
-      radius: Radii.xxl,
-      padding: const EdgeInsets.all(Space.x4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  GoalRing(
-                    progress: g.progress,
-                    colors: AccentSwatches.of(g.goal.colorIndex),
-                    expected: expected,
-                    size: 136,
-                    semanticsLabel: '${g.goal.name}, ${formatPct(g.progress)} saved'
-                        '${expected == null ? '' : '. By now you planned ${formatPct(expected)}'}',
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (g.isAchieved) ...[
-                          const SuccessCheck(size: 30),
-                          const SizedBox(height: Space.x1),
-                        ],
-                        AnimatedAmount(g.saved, style: t.amountMedium, animateOnMount: true),
-                        Text('of ${savingsMoney(context, g.goal.target)}', style: t.micro),
-                      ],
-                    ),
-                  ),
-                  if (g.isAchieved && !context.reduceMotion)
-                    const IgnorePointer(child: SizedBox.square(dimension: 136, child: _Confetti())),
-                ],
-              ),
-              const SizedBox(width: Space.x4),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(CategoryIcons.of(g.goal.category.iconKey), size: 13, color: c.textTertiary),
-                        const SizedBox(width: Space.x1),
-                        Text(g.goal.category.label, style: t.micro),
-                      ],
-                    ),
-                    const SizedBox(height: Space.x2),
-                    if (g.isAchieved) ...[
-                      Text('GOAL REACHED', style: t.eyebrow.copyWith(color: c.positive)),
-                      Text('Well done!', style: t.title),
-                    ] else ...[
-                      Text('TO GO', style: t.eyebrow),
-                      AmountText(g.remaining, style: t.amountLarge, fit: true),
-                    ],
-                    const SizedBox(height: Space.x1),
-                    Text(
-                      date == null
-                          ? 'No target date'
-                          : 'by ${DateFormats.monthYear.format(date)}'
-                              '${g.isAchieved || months == null ? '' : ' · ${months == 0 ? 'this month' : '$months mo left'}'}',
-                      style: t.caption,
-                    ),
-                    const SizedBox(height: Space.x2),
-                    StatusPill(label: pace.label, color: pace.color(c), icon: pace.icon),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (expected != null) ...[
-            const SizedBox(height: Space.x2),
-            Row(
-              children: [
-                Container(width: 2, height: 10, color: c.textPrimary),
-                const SizedBox(width: Space.x1_5),
-                Expanded(
-                  child: Text(
-                    'Notch = where your date says you should be (${formatPct(expected)}). Dots mark 25 · 50 · 75%.',
-                    style: t.micro,
-                  ),
-                ),
-              ],
+    final (status, tone) = _status(context, g, c);
+    final hidden = AmountVisibility.hiddenOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Saved', style: t.label),
+        const SizedBox(height: Sp.xs),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Flexible(
+              child: AnimatedAmount(g.saved, style: t.figureXL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
+            ),
+            const SizedBox(width: Sp.sm),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 5),
+              child: Text('of ${goalMoney(context, g.goal.target)}', style: t.figureSmall),
             ),
           ],
-          const SizedBox(height: Space.x3),
-          Row(
-            children: [
-              Expanded(
-                child: FinnButton(
-                  label: 'Add money',
-                  icon: LucideIcons.plus,
-                  variant: FinnButtonVariant.positive,
-                  expand: true,
-                  onPressed: active ? () => context.push(AppRoutes.goalContribute(g.goal.id)) : null,
-                ),
+        ),
+        const SizedBox(height: Sp.lg),
+        LedgerBar(
+          value: g.progress,
+          marker: expected,
+          semanticLabel: '${goalPercent(g.progress)} saved'
+              '${expected == null || hidden ? '' : '. By now your date needs ${goalPercent(expected)}'}',
+        ),
+        const SizedBox(height: Sp.md),
+        Text(status, style: t.label.copyWith(color: tone)),
+        const SizedBox(height: Sp.xl),
+        Row(
+          children: [
+            Expanded(
+              child: LedgerButton(
+                label: 'Add money',
+                icon: LucideIcons.plus,
+                expand: true,
+                onPressed: active ? () => context.push(AppRoutes.goalContribute(g.goal.id)) : null,
               ),
-              const SizedBox(width: Space.x3),
-              Expanded(
-                child: FinnButton(
-                  label: 'Withdraw',
-                  icon: LucideIcons.minus,
-                  variant: FinnButtonVariant.outline,
-                  expand: true,
-                  onPressed:
-                      active && g.saved.isPositive ? () => context.push(AppRoutes.goalWithdraw(g.goal.id)) : null,
-                ),
+            ),
+            const SizedBox(width: Sp.md),
+            Expanded(
+              child: LedgerButton(
+                label: 'Withdraw',
+                icon: LucideIcons.minus,
+                variant: LedgerButtonVariant.secondary,
+                expand: true,
+                onPressed: active && g.saved.isPositive ? () => context.push(AppRoutes.goalWithdraw(g.goal.id)) : null,
               ),
-            ],
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+      ],
     );
   }
-}
 
-/// One finite burst for a reached goal.
-class _Confetti extends StatelessWidget {
-  const _Confetti();
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final colors = [c.positive, c.accentGoals, c.warning, c.primary, c.accentEmergency];
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 1600),
-      builder: (context, t, _) => CustomPaint(painter: _ConfettiPainter(t: t, colors: colors)),
-    );
-  }
-}
-
-class _ConfettiPainter extends CustomPainter {
-  const _ConfettiPainter({required this.t, required this.colors});
-
-  final double t;
-  final List<Color> colors;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (t >= 1) return;
-    final center = size.center(Offset.zero);
-    final rnd = math.Random(7);
-    final ease = Curves.easeOutCubic.transform(t);
-    for (var i = 0; i < 26; i++) {
-      final a = rnd.nextDouble() * 2 * math.pi;
-      final dist = size.width * (0.35 + rnd.nextDouble() * 0.45) * ease;
-      final p = center + Offset(math.cos(a), math.sin(a)) * dist + Offset(0, 40 * t * t);
-      final paint = Paint()..color = colors[i % colors.length].withValues(alpha: (1 - t).clamp(0.0, 1.0));
-      canvas.save();
-      canvas.translate(p.dx, p.dy);
-      canvas.rotate(a + t * 6);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(const Rect.fromLTWH(-3, -1.5, 6, 3), const Radius.circular(1)),
-        paint,
-      );
-      canvas.restore();
+  /// One line on where the goal stands, coloured only when it matters.
+  static (String, Color?) _status(BuildContext context, GoalProgress g, LedgerColors c) {
+    if (g.isAchieved) return ('Target reached', c.green);
+    final date = g.goal.targetDate;
+    final finish = g.estimatedCompletion;
+    if (g.onTrack == true && finish != null) return ('On track, done by ${goalMonth.format(finish)}', null);
+    if (g.onTrack == false && finish != null && date != null) {
+      final late = monthsApart(finish, date);
+      return (late <= 0 ? 'Behind, finishing just after your date' : 'Behind, ${aboutMonths(late)} late', c.amber);
     }
+    final need = g.requiredMonthly;
+    if (date != null && need != null) {
+      return ('Needs ${goalMoney(context, need)} a month to finish by ${goalMonth.format(date)}', null);
+    }
+    if (finish != null) return ('Done around ${goalMonth.format(finish)} at your pace', null);
+    return ('No target date', null);
   }
-
-  @override
-  bool shouldRepaint(_ConfettiPainter old) => old.t != t;
 }
 
 // ---------------------------------------------------------------------------
-// Path to the goal
+// Monthly plan
 // ---------------------------------------------------------------------------
 
-class _PathCard extends ConsumerStatefulWidget {
-  const _PathCard({required this.progress, required this.today});
+class _PlanSection extends ConsumerStatefulWidget {
+  const _PlanSection({required this.progress, required this.today});
 
   final GoalProgress progress;
   final DateTime today;
 
   @override
-  ConsumerState<_PathCard> createState() => _PathCardState();
+  ConsumerState<_PlanSection> createState() => _PlanSectionState();
 }
 
-class _PathCardState extends ConsumerState<_PathCard> {
+class _PlanSectionState extends ConsumerState<_PlanSection> {
   static const _step = 500;
 
   late int _monthly = _initial();
@@ -415,7 +281,7 @@ class _PathCardState extends ConsumerState<_PathCard> {
   }
 
   @override
-  void didUpdateWidget(_PathCard old) {
+  void didUpdateWidget(_PlanSection old) {
     super.didUpdateWidget(old);
     if (old.progress.goal.plannedMonthlyContribution != widget.progress.goal.plannedMonthlyContribution) {
       _monthly = _initial();
@@ -448,28 +314,47 @@ class _PathCardState extends ConsumerState<_PathCard> {
     if (mounted) setState(() => _saving = false);
   }
 
+  int _roundUp(Money m) => math.max(_step, ((m.paise / 100) / _step).ceil() * _step);
+
+  void _try(Money m) {
+    HapticFeedback.selectionClick();
+    setState(() => _monthly = _roundUp(m));
+  }
+
+  /// Plan (else recent average) against what the date needs.
+  (String, Color?) _verdict(BuildContext context) {
+    final g = widget.progress;
+    final c = context.ink;
+    final plan = g.goal.plannedMonthlyContribution;
+    final rate = plan ?? g.averageMonthlyContribution;
+    final has = rate != null && rate.isPositive;
+    final need = g.requiredMonthly;
+    final date = g.goal.targetDate;
+    final which = plan != null ? 'Your plan' : 'Your average';
+    if (date == null || need == null) {
+      return ('No target date. Move the slider to see when you would finish.', null);
+    }
+    if (!has) return ('${goalMoney(context, need)} a month gets you there by ${goalMonth.format(date)}.', null);
+    if (rate >= need) {
+      return ('$which of ${goalMoney(context, rate)} a month covers the ${goalMoney(context, need)} needed.', null);
+    }
+    return ('You need ${goalMoney(context, need)} a month. $which is ${goalMoney(context, rate)}.', c.amber);
+  }
+
   @override
   Widget build(BuildContext context) {
     final g = widget.progress;
-    final today = widget.today;
-    final c = context.colors;
-    final t = context.text;
-    final accent = AccentSwatches.solid(g.goal.colorIndex);
+    final c = context.ink;
+    final t = context.type;
     final date = g.goal.targetDate;
     final rate = Money.rupees(_monthly);
-    final finish = finishWith(g.remaining, rate, today);
+    final finish = finishWith(g.remaining, rate, widget.today);
     final plan = g.goal.plannedMonthlyContribution;
+    final need = g.requiredMonthly;
+    final avg = g.averageMonthlyContribution;
     final max = _max;
     final value = _monthly.clamp(_step, max);
-
-    // The honest current estimate (plan, else recent average).
-    final current = g.estimatedCompletion;
-    final (String verdict, Color tone) = switch (g.onTrack) {
-      true when date != null && current != null => (_timing(monthsApart(date, current), early: true), c.positive),
-      false when date != null && current != null => (_timing(monthsApart(current, date), early: false), c.warning),
-      _ when current != null => ('Done around ${DateFormats.monthYear.format(current)} at your current pace', c.textPrimary),
-      _ => ('Set a monthly amount to see when you finish', c.textSecondary),
-    };
+    final (verdict, tone) = _verdict(context);
 
     String whatIf() {
       if (finish == null) return 'Too slow to estimate';
@@ -477,337 +362,181 @@ class _PathCardState extends ConsumerState<_PathCard> {
       if (date == null) return base;
       final diff = monthsApart(date, finish);
       return switch (diff) {
-        0 => '$base · right on time',
-        > 0 => '$base · $diff mo early',
-        _ => '$base · ${-diff} mo late',
+        0 => '$base, right on time',
+        1 => '$base, a month early',
+        > 0 => '$base, $diff months early',
+        -1 => '$base, a month late',
+        _ => '$base, ${-diff} months late',
       };
     }
 
     final late = finish != null && date != null && finish.isAfter(date);
-    return FinnCard(
-      radius: Radii.xxl,
-      padding: const EdgeInsets.fromLTRB(Space.x4, Space.x3, Space.x4, Space.x4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('PATH TO YOUR GOAL', style: t.eyebrow),
-          const SizedBox(height: Space.x1),
-          Text(verdict, style: t.bodyStrong.copyWith(color: tone)),
-          const SizedBox(height: Space.x3),
-          _PathLine(
-            start: g.goal.createdAt,
-            today: today,
-            target: date,
-            finish: finish,
-            color: accent,
+    Widget money(Money? m, String empty) => m == null
+        ? Text(empty, style: t.figure.copyWith(color: c.inkSoft))
+        : AmountText(m, style: t.figure, decimals: DecimalDisplay.none);
+    bool at(Money? m) => m != null && _roundUp(m) == value;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(verdict, style: t.body.copyWith(color: tone)),
+        const SizedBox(height: Sp.xl),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(child: Text('What if I put in', style: t.label, maxLines: 1, overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: Sp.sm),
+            AmountText(rate, style: t.figure, decimals: DecimalDisplay.none),
+            Text(' a month', style: t.label),
+          ],
+        ),
+        const SizedBox(height: Sp.xs),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor: c.ink,
+            inactiveTrackColor: c.sunken,
+            thumbColor: c.ink,
+            overlayColor: c.ink.withValues(alpha: 0.08),
+            activeTickMarkColor: Colors.transparent,
+            inactiveTickMarkColor: Colors.transparent,
+            trackHeight: 4,
+            showValueIndicator: ShowValueIndicator.never,
           ),
-          const SizedBox(height: Space.x3),
-          const FinnDivider(),
-          const SizedBox(height: Space.x2_5),
-          Row(
-            children: [
-              Flexible(child: Text('WHAT IF I PUT IN', maxLines: 1, overflow: TextOverflow.ellipsis, style: t.eyebrow)),
-              const Spacer(),
-              Text(
-                '${savingsMoney(context, rate)}/mo',
-                style: t.bodyStrong.copyWith(fontWeight: FontWeight.w900, color: accent),
+          child: Slider(
+            key: const ValueKey('goal-whatif-slider'),
+            // Keep the thumb inside the text column instead of the default inset.
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
+            value: value.toDouble(),
+            min: _step.toDouble(),
+            max: max.toDouble(),
+            divisions: ((max - _step) / _step).round().clamp(1, 400),
+            semanticFormatterCallback: (v) => '${goalMoney(context, Money.rupees(v.round()))} a month. ${whatIf()}',
+            onChanged: (v) {
+              final next = v.round();
+              if (next != _monthly) HapticFeedback.selectionClick();
+              setState(() => _monthly = next);
+            },
+          ),
+        ),
+        Text(whatIf(), style: t.bodyStrong.copyWith(color: late ? c.amber : null)),
+        const SizedBox(height: Sp.xl),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: LedgerStat(
+                label: 'Needed',
+                value: money(need, '—'),
+                selected: at(need),
+                semanticLabel: need == null ? null : 'Needed, ${goalMoney(context, need)} a month. Try this amount',
+                onTap: need == null ? null : () => _try(need),
               ),
-            ],
-          ),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: accent,
-              thumbColor: accent,
-              inactiveTrackColor: accent.withValues(alpha: 0.18),
-              overlayColor: accent.withValues(alpha: 0.12),
-              trackHeight: 6,
-              showValueIndicator: ShowValueIndicator.never,
             ),
-            child: Slider(
-              key: const ValueKey('goal-whatif-slider'),
-              value: value.toDouble(),
-              min: _step.toDouble(),
-              max: max.toDouble(),
-              divisions: ((max - _step) / _step).round().clamp(1, 400),
-              semanticFormatterCallback: (v) => '${savingsMoney(context, Money.rupees(v.round()))} a month. ${whatIf()}',
-              onChanged: (v) {
-                final next = v.round();
-                if (next != _monthly) HapticFeedback.selectionClick();
-                setState(() => _monthly = next);
-              },
+            const SizedBox(width: Sp.md),
+            Expanded(
+              // Tappable stats carry vertical padding; match it so labels line up.
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: Sp.xs),
+                child: LedgerStat(label: 'Your average', value: money(avg, '—')),
+              ),
             ),
-          ),
-          Row(
-            children: [
-              Icon(late ? LucideIcons.clock : LucideIcons.flag, size: 14, color: late ? c.warning : c.positive),
-              const SizedBox(width: Space.x1_5),
-              Expanded(
-                child: Text(
-                  whatIf(),
-                  style: t.label.copyWith(fontWeight: FontWeight.w800, color: late ? c.warning : c.textPrimary),
-                ),
+            const SizedBox(width: Sp.md),
+            Expanded(
+              child: LedgerStat(
+                label: 'Plan',
+                value: money(plan, 'Not set'),
+                selected: at(plan),
+                semanticLabel: plan == null ? null : 'Plan, ${goalMoney(context, plan)} a month. Try this amount',
+                onTap: plan == null ? null : () => _try(plan),
               ),
-              if (plan != rate && g.goal.status == GoalStatus.active)
-                FinnButton(
-                  key: const ValueKey('goal-use-plan'),
-                  label: 'Make it my plan',
-                  size: FinnButtonSize.sm,
-                  variant: FinnButtonVariant.secondary,
-                  loading: _saving,
-                  onPressed: _saving ? null : _usePlan,
-                ),
-            ],
-          ),
-          const SizedBox(height: Space.x3),
-          Row(
-            children: [
-              _Mini(
-                label: 'NEEDED',
-                value: g.requiredMonthly == null ? '—' : '${savingsMoney(context, g.requiredMonthly!)}/mo',
-                onTap: g.requiredMonthly == null
-                    ? null
-                    : () => setState(() => _monthly = _roundUp(g.requiredMonthly!)),
-              ),
-              _Mini(
-                label: 'YOUR AVERAGE',
-                value: g.averageMonthlyContribution == null
-                    ? '—'
-                    : '${savingsMoney(context, g.averageMonthlyContribution!)}/mo',
-              ),
-              _Mini(
-                label: 'PLAN',
-                value: plan == null ? 'Not set' : '${savingsMoney(context, plan)}/mo',
-                onTap: plan == null ? null : () => setState(() => _monthly = _roundUp(plan)),
-              ),
-            ],
+            ),
+          ],
+        ),
+        if (plan != rate && g.goal.status == GoalStatus.active) ...[
+          const SizedBox(height: Sp.lg),
+          LedgerButton(
+            key: const ValueKey('goal-use-plan'),
+            label: 'Make it my plan',
+            variant: LedgerButtonVariant.secondary,
+            expand: true,
+            loading: _saving,
+            onPressed: _saving ? null : _usePlan,
           ),
         ],
-      ),
-    );
-  }
-
-  int _roundUp(Money m) => math.max(_step, ((m.paise / 100) / _step).ceil() * _step);
-
-  String _timing(int months, {required bool early}) => switch (months) {
-        0 => 'On track — right on time',
-        1 => early ? 'On track — about a month early' : 'Behind — about a month late',
-        _ => early ? 'On track — about $months months early' : 'Behind — about $months months late',
-      };
-}
-
-class _Mini extends StatelessWidget {
-  const _Mini({required this.label, required this.value, this.onTap});
-
-  final String label;
-  final String value;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.text;
-    final c = context.colors;
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, maxLines: 1, style: t.eyebrow.copyWith(fontSize: 10)),
-        const SizedBox(height: 2),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            value,
-            maxLines: 1,
-            style: t.label.copyWith(fontWeight: FontWeight.w800, color: onTap == null ? c.textPrimary : c.primary),
-          ),
-        ),
       ],
     );
-    return Expanded(
-      child: Semantics(
-        button: onTap != null,
-        hint: onTap == null ? null : 'Try this amount',
-        child: InkWell(
-          borderRadius: Radii.rMd,
-          onTap: onTap,
-          child: Padding(padding: const EdgeInsets.symmetric(vertical: Space.x1, horizontal: 2), child: body),
-        ),
-      ),
-    );
   }
 }
 
-/// Timeline from the day the goal began to whichever comes last of its
-/// target date and the finish date at the chosen monthly amount. The gap
-/// between target and a later finish is shown in warning colour. The
-/// finish marker glides as the slider moves.
-class _PathLine extends StatelessWidget {
-  const _PathLine({required this.start, required this.today, required this.target, required this.finish, required this.color});
+// ---------------------------------------------------------------------------
+// History
+// ---------------------------------------------------------------------------
 
-  final DateTime start;
-  final DateTime today;
-  final DateTime? target;
-  final DateTime? finish;
-  final Color color;
+/// Money in and out, newest first, grouped by month with each month's net.
+class _History extends StatelessWidget {
+  const _History({required this.movements});
+
+  final List<SavingsMovement> movements;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    var end = today.add(const Duration(days: 30));
-    for (final d in [target, finish]) {
-      if (d != null && d.isAfter(end)) end = d;
+    final c = context.ink;
+    final t = context.type;
+    final groups = <MonthKey, List<SavingsMovement>>{};
+    for (final m in movements) {
+      groups.putIfAbsent(m.date.monthKey, () => []).add(m);
     }
-    final span = math.max(1, daysBetween(start, end)).toDouble();
-    double at(DateTime d) => (daysBetween(start, d) / span).clamp(0.0, 1.0);
-    return Semantics(
-      label: [
-        'Today',
-        if (target != null) 'target ${DateFormats.monthYear.format(target!)}',
-        if (finish != null) 'finish ${DateFormats.monthYear.format(finish!)}',
-      ].join(', '),
-      excludeSemantics: true,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(end: finish == null ? 1 : at(finish!)),
-        duration: context.motion.slow,
-        curve: Curves2.emphasized,
-        builder: (context, f, _) => CustomPaint(
-          size: const Size(double.infinity, 52),
-          painter: _PathPainter(
-            today: at(today),
-            target: target == null ? null : at(target!),
-            finish: finish == null ? null : f,
-            startLabel: DateFormats.shortMonthYear.format(start),
-            targetLabel: target == null ? null : 'Target ${DateFormats.shortMonthYear.format(target!)}',
-            finishLabel: finish == null ? null : 'Done ${DateFormats.shortMonthYear.format(finish!)}',
-            color: color,
-            late: c.warning,
-            track: c.surfaceMuted,
-            ink: c.textPrimary,
-            muted: c.textTertiary,
-            labelStyle: t.micro,
-          ),
-        ),
-      ),
+    return LedgerSection(
+      title: 'History',
+      count: movements.isEmpty ? null : movements.length,
+      child: movements.isEmpty
+          ? Text('No money added yet. Your first contribution will show here.', style: t.label)
+          : LedgerPanel(
+              children: [
+                for (final e in groups.entries) ...[
+                  // Month header inside the one panel: month and its net.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.md),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            child: Text(DateFormats.monthYear.format(e.key.start), style: t.labelStrong),
+                          ),
+                        ),
+                        AmountText(
+                          Money.sum(e.value.map((m) => m.signedAmount)),
+                          sign: SignDisplay.always,
+                          decimals: DecimalDisplay.none,
+                          style: t.figureSmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  for (final m in e.value)
+                    LedgerRow(
+                      key: ValueKey(m.id),
+                      leading: IconWell(
+                        icon: m.kind == SavingsMovementKind.contribution ? LucideIcons.plus : LucideIcons.minus,
+                      ),
+                      title: m.kind == SavingsMovementKind.contribution ? 'Added' : 'Withdrawn',
+                      subtitle: [
+                        DateFormats.dayMonthYear.format(m.date),
+                        if (m.note != null && m.note!.trim().isNotEmpty) m.note!.trim(),
+                      ].join(', '),
+                      subtitleLines: 2,
+                      trailing: AmountText(
+                        m.signedAmount,
+                        sign: SignDisplay.always,
+                        style: t.figure.copyWith(
+                          color: m.kind == SavingsMovementKind.contribution ? c.green : c.ink,
+                        ),
+                      ),
+                    ),
+                ],
+              ],
+            ),
     );
   }
-}
-
-class _PathPainter extends CustomPainter {
-  const _PathPainter({
-    required this.today,
-    required this.target,
-    required this.finish,
-    required this.startLabel,
-    required this.targetLabel,
-    required this.finishLabel,
-    required this.color,
-    required this.late,
-    required this.track,
-    required this.ink,
-    required this.muted,
-    required this.labelStyle,
-  });
-
-  final double today;
-  final double? target;
-  final double? finish;
-  final String startLabel;
-  final String? targetLabel;
-  final String? finishLabel;
-  final Color color;
-  final Color late;
-  final Color track;
-  final Color ink;
-  final Color muted;
-  final TextStyle labelStyle;
-
-  void _label(Canvas canvas, String s, double x, double y, double w, {Color? color, bool bold = false}) {
-    final tp = TextPainter(
-      text: TextSpan(text: s, style: labelStyle.copyWith(color: color ?? muted, fontWeight: bold ? FontWeight.w800 : null)),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final dx = (x - tp.width / 2).clamp(0.0, math.max(0.0, w - tp.width)).toDouble();
-    tp.paint(canvas, Offset(dx, y));
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    const lineY = 22.0;
-    const bar = 6.0;
-    double x(double v) => v * w;
-    final rr = RRect.fromRectAndRadius(Rect.fromLTWH(0, lineY - bar / 2, w, bar), const Radius.circular(bar / 2));
-    canvas.drawRRect(rr, Paint()..color = track);
-
-    // Travelled so far.
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(0, lineY - bar / 2, x(today), bar), const Radius.circular(bar / 2)),
-      Paint()..color = color,
-    );
-    // Planned stretch to the finish.
-    final f = finish;
-    if (f != null && f > today) {
-      final p = Paint()
-        ..color = color.withValues(alpha: 0.55)
-        ..strokeWidth = bar
-        ..strokeCap = StrokeCap.round;
-      for (var d = x(today) + 4.0; d < x(f); d += 10) {
-        canvas.drawLine(Offset(d, lineY), Offset(math.min(d + 4, x(f)), lineY), p);
-      }
-    }
-    // Late gap.
-    final tg = target;
-    if (tg != null && f != null && f > tg) {
-      canvas.drawRect(Rect.fromLTRB(x(tg), lineY - bar / 2, x(f), lineY + bar / 2), Paint()..color = late.withValues(alpha: 0.45));
-    }
-
-    // Target flag above the line.
-    if (tg != null) {
-      final tx = x(tg);
-      canvas.drawLine(Offset(tx, 4), Offset(tx, lineY + bar), Paint()
-        ..color = ink
-        ..strokeWidth = 1.6);
-      final flag = Path()
-        ..moveTo(tx, 4)
-        ..lineTo(tx + 9, 7.5)
-        ..lineTo(tx, 11)
-        ..close();
-      canvas.drawPath(flag, Paint()..color = ink);
-    }
-    // Today dot.
-    canvas.drawCircle(Offset(x(today), lineY), 5.5, Paint()..color = ink);
-    canvas.drawCircle(Offset(x(today), lineY), 2.5, Paint()..color = track);
-    // Finish marker.
-    if (f != null) {
-      final fx = x(f);
-      final c = tg != null && f > tg ? late : color;
-      canvas.drawCircle(Offset(fx, lineY), 8, Paint()..color = c.withValues(alpha: 0.25));
-      canvas.drawCircle(Offset(fx, lineY), 5, Paint()..color = c);
-    }
-
-    // Labels: start + today under the line at the left, target and finish
-    // under their markers (target above when the two would collide).
-    const below = lineY + 10;
-    _label(canvas, startLabel, 0, below, w);
-    final fl = finishLabel;
-    if (f != null && fl != null) _label(canvas, fl, x(f), below, w, color: ink, bold: true);
-    final tl = targetLabel;
-    if (tg != null && tl != null) {
-      final collide = f != null && (x(f) - x(tg)).abs() < 80;
-      if (collide) {
-        _label(canvas, tl, x(tg) + 46, 0, w, color: ink);
-      } else {
-        _label(canvas, tl, x(tg), below, w, color: ink);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_PathPainter old) =>
-      old.today != today ||
-      old.target != target ||
-      old.finish != finish ||
-      old.finishLabel != finishLabel ||
-      old.color != color ||
-      old.ink != ink;
 }

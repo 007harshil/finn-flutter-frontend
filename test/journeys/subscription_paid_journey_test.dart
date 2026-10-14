@@ -41,7 +41,7 @@ void main() {
 
     // Detail: next renewal moved forward; payment history lists the new expense.
     await scrollTo(tester, find.text('Next renewal'), up: true);
-    expect(find.textContaining('${DateFormats.dayMonthYear.format(expectedNext)} ·'), findsOneWidget);
+    expect(find.textContaining(DateFormats.dayMonthYear.format(expectedNext)), findsOneWidget);
     final row = find.byKey(ValueKey(newTx.single.id));
     await scrollTo(tester, row);
     expect(row, findsOneWidget);
@@ -52,6 +52,7 @@ void main() {
     await scrollTo(tester, txRow);
     expect(txRow, findsOneWidget);
     await tapTab(tester, 'Home');
+    await showHero(tester);
     expect(inHero(rupees(after.balance.available)), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

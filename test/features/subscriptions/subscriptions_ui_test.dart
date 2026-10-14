@@ -36,8 +36,8 @@ void main() {
     await env.pumpWidget(tester, const SubscriptionsScreen());
     await tester.pumpAndSettle();
     expect(find.text('Subscriptions'), findsOneWidget);
-    expect(find.text('MONTHLY COMMITMENT'), findsOneWidget);
-    expect(find.text('EXPECTED RENEWALS'), findsOneWidget);
+    expect(find.text('Per month'), findsOneWidget);
+    expect(find.textContaining('Due soon', findRichText: true), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Mark paid'), 300, scrollable: find.byType(Scrollable).first);
     expect(find.text('Mark paid'), findsWidgets);
     expect(tester.takeException(), isNull);
@@ -49,9 +49,9 @@ void main() {
     await env.pumpWidget(tester, SubscriptionDetailScreen(id: sub.id));
     await tester.pumpAndSettle();
     expect(find.text('Next renewal'), findsOneWidget);
-    expect(find.text('Expected · not paid yet'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('PAYMENT HISTORY'), 300, scrollable: find.byType(Scrollable).first);
-    expect(find.text('PAYMENT HISTORY'), findsOneWidget);
+    expect(find.text('Mark paid'), findsOneWidget);
+    await tester.scrollUntilVisible(find.textContaining('Payment history', findRichText: true), 300, scrollable: find.byType(Scrollable).first);
+    expect(find.textContaining('Payment history', findRichText: true), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -61,7 +61,7 @@ void main() {
     await env.pumpWidget(tester, SubscriptionDetailScreen(id: sub.id));
     await tester.pumpAndSettle();
     expect(find.text('Mark paid'), findsNothing);
-    expect(find.text('RESUME'), findsOneWidget);
+    expect(find.text('Resume'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

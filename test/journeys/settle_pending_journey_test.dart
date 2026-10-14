@@ -24,7 +24,7 @@ void main() {
     await scrollTo(tester, item);
     expect(item, findsOneWidget, reason: 'listed under Active before settling');
     await scrollAndTap(tester, find.descendant(of: item, matching: find.text('Priya Nair')));
-    await tapButton(tester, 'Settle · Priya Nair paid me');
+    await tapButton(tester, 'Settle');
     await tester.pumpAndSettle();
     expect(find.text('OUTSTANDING'), findsOneWidget);
     await tapButton(tester, 'Record money from Priya Nair'); // "Full" is pre-selected
@@ -53,6 +53,7 @@ void main() {
 
     // Home hero shows the higher cash and available balance.
     await tapTab(tester, 'Home');
+    await showHero(tester);
     expect(inHero(rupees(after.balance.cash)), findsOneWidget);
     expect(inHero(rupees(after.balance.available)), findsOneWidget);
     expect(tester.takeException(), isNull);

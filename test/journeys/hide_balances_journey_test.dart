@@ -30,6 +30,7 @@ void main() {
 
     // Home: available, cash and set-aside are all masked.
     await tapTab(tester, 'Home');
+    await showHero(tester);
     expect(inHero(MoneyFormatter.masked), findsNWidgets(3));
     expect(inHero(rupees(b.available)), findsNothing);
     expect(inHero(rupees(b.cash)), findsNothing);

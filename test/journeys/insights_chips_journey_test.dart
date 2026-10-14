@@ -27,7 +27,7 @@ void main() {
     await tester.tap(find.byKey(const Key('insights-chip:spending')));
     await tester.pumpAndSettle();
     expect(find.text('Money health check'), findsNothing);
-    expect(find.text('DAILY AVERAGE'), findsOneWidget);
+    expect(find.text('Daily average'), findsOneWidget);
     await scrollTo(tester, find.textContaining('cost you the most'));
     expect(find.textContaining('cost you the most'), findsOneWidget);
 
@@ -35,7 +35,7 @@ void main() {
     await tester.tap(find.byKey(const Key('insights-chip:cashFlow')));
     await tester.pumpAndSettle();
     expect(find.textContaining('of every ₹100 you earned'), findsOneWidget);
-    expect(find.text('AVG INCOME'), findsOneWidget);
+    expect(find.text('Avg income'), findsOneWidget);
 
     // An overview tile jumps straight to its topic.
     await tester.ensureVisible(find.byKey(const Key('insights-chip:overview')));
