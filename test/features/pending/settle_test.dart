@@ -115,7 +115,7 @@ void main() {
       await env.pumpWidget(tester, const PendingScreen());
       await tester.pumpAndSettle();
       expect(find.text('Money owed'), findsOneWidget);
-      expect(find.text('2 items'), findsOneWidget); // Rahul has two items
+      expect(find.textContaining('separate items'), findsOneWidget); // Rahul has two items
       expect(tester.takeException(), isNull);
     });
 
@@ -125,12 +125,12 @@ void main() {
       final v = await item('Concert tickets');
       await env.pumpWidget(tester, PendingDetailScreen(id: v.payment.id));
       await tester.pumpAndSettle();
-      expect(find.text('You owe Rahul Verma'), findsOneWidget);
-      expect(find.textContaining('Waiting 24 days'), findsOneWidget);
-      expect(find.text('Settle up'), findsOneWidget);
-      final left = find.textContaining('₹2,000 left');
-      await tester.scrollUntilVisible(left, 300, scrollable: find.byType(Scrollable).first);
-      expect(left, findsOneWidget, reason: 'remaining after the settlement');
+      expect(find.text('You have not paid Rahul Verma back yet. 24 days have passed.'), findsOneWidget);
+      expect(find.text('Settle · I paid Rahul Verma'), findsOneWidget);
+      final note = find.textContaining('Creating this did not change your balance');
+      await tester.scrollUntilVisible(note, 300, scrollable: find.byType(Scrollable).first);
+      expect(note, findsOneWidget);
+      expect(find.text('₹2,000 left'), findsOneWidget, reason: 'remaining after the settlement');
       expect(tester.takeException(), isNull);
 
       await env.pumpWidget(tester, SettlePendingSheet(pendingId: v.payment.id));

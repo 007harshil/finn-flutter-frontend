@@ -133,7 +133,7 @@ void main() {
       await env.pumpWidget(tester, const LoansScreen());
       await tester.pumpAndSettle();
       expect(find.text('Loans'), findsOneWidget);
-      expect(find.text('You owe'), findsOneWidget);
+      expect(find.text('I OWE'), findsOneWidget);
       expect(find.text('Car loan'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -142,10 +142,10 @@ void main() {
       await sized(tester);
       await env.pumpWidget(tester, const LoanDetailScreen(id: 'loan_seed_car'));
       await tester.pumpAndSettle();
-      expect(find.text('Upcoming'), findsOneWidget);
+      expect(find.text('TERMS'), findsOneWidget);
       expect(find.text('Record a payment'), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('Terms'), 300, scrollable: find.byType(Scrollable).first);
-      expect(find.text('Terms'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('UPCOMING SCHEDULE'), 300, scrollable: find.byType(Scrollable).first);
+      expect(find.text('UPCOMING SCHEDULE'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

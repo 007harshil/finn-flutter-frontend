@@ -13,7 +13,6 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../design_system/design_system.dart';
-import '../../../ui/ui.dart';
 import '../../transactions/domain/transaction.dart';
 import '../domain/pending_payment.dart';
 
@@ -402,141 +401,69 @@ String pendingInitials(String name) {
 // Widgets
 // ---------------------------------------------------------------------------
 
-/// Short status for a row or hero: how long it has been open (warm once
-/// it passes three weeks), how much is settled, or how it closed. Colour
-/// only when it needs attention.
-({String label, Color? color}) pendingStatus(UiColors c, PendingView v) {
-  switch (v.status) {
+/// Colour for how long an item has waited: quiet when recent, warmer as it
+/// ages. Informative, never alarming red.
+Color pendingAgeColor(PendingView v, FinnColors c) => switch (PendingAge.of(v)) {
+      PendingAge.fresh => c.textTertiary,
+      PendingAge.weeks => c.textSecondary,
+      PendingAge.long => c.warning,
+    };
+
+/// Label, colour and icon for an item's age or closed state (never colour
+/// alone).
+({String label, Color color, IconData icon}) pendingAgeInfo(PendingView view, FinnColors c) {
+  switch (view.status) {
     case PendingStatus.settled:
-      final on = v.settledOn;
-      return (label: on == null ? 'Settled' : 'Settled ${DateFormats.dayMonth.format(on)}', color: null);
+      final on = view.settledOn;
+      return (
+        label: on == null ? 'Settled' : 'Settled ${DateFormats.dayMonth.format(on)}',
+        color: c.positive,
+        icon: LucideIcons.circleCheck,
+      );
     case PendingStatus.cancelled:
-      return (label: 'Written off', color: null);
+      return (label: 'Written off', color: c.textSecondary, icon: LucideIcons.ban);
     case PendingStatus.open || PendingStatus.partiallySettled:
-      final age = pendingDays(v.daysOpen);
-      final label = v.status == PendingStatus.partiallySettled ? '${v.settledBps ~/ 100}% settled · $age' : age;
-      return (label: label, color: PendingAge.of(v) == PendingAge.long ? c.warning : null);
+      return (label: pendingDays(view.daysOpen), color: pendingAgeColor(view, c), icon: LucideIcons.hourglass);
   }
 }
 
-/// One pending item as a list row: who (or what, inside a person group),
-/// how long it has waited, and the amount signed from the user's side.
-/// Swipe right to settle; long-press for quick actions.
-class PendingRow extends StatelessWidget {
-  const PendingRow({
-    super.key,
-    required this.view,
-    required this.onTap,
-    this.onSettle,
-    this.onLongPress,
-    this.grouped = false,
-    this.inSplit = false,
-  });
+/// Age / status chip for a pending item (icon + text, not colour only).
+class PendingAgeChip extends StatelessWidget {
+  const PendingAgeChip({super.key, required this.view});
 
   final PendingView view;
-  final VoidCallback onTap;
-  final VoidCallback? onSettle;
-  final VoidCallback? onLongPress;
-
-  /// Inside a person group: the purpose leads and the person is implied.
-  final bool grouped;
-
-  /// Inside a split: the person leads and the bill is implied.
-  final bool inSplit;
 
   @override
   Widget build(BuildContext context) {
-    final c = UiColors.of(context);
-    final t = UiType.of(context);
-    final p = view.payment;
-    final dir = p.direction;
-    final active = view.status.isActive;
-    final status = pendingStatus(c, view);
-    final shown = pendingShownAmount(view);
-    final semantics =
-        '${dir.sentence(p.counterparty)} ${MoneyFormatter.spoken(shown)} for ${p.purpose}. '
-        '${view.status.label}. ${active ? '${pendingDays(view.daysOpen)} open' : status.label}'
-        '${p.isShared ? '. Shared on FiNN' : ''}';
-    final lead = switch ((grouped, inSplit)) {
-      (true, _) => const SizedBox(width: 36),
-      _ => UiInitials(name: p.counterparty),
-    };
-    final subtitle = grouped
-        ? status.label
-        : '${inSplit ? p.split!.partLabel : p.purpose} · ${status.label}';
-    final long = onLongPress;
-    Widget child = UiListRow(
-      leading: lead,
-      title: grouped ? p.purpose : p.counterparty,
-      subtitle: subtitle,
-      subtitleColor: status.color,
-      trailing: AmountText(
-        active && dir.isOwe ? -shown : shown,
-        sign: active ? SignDisplay.always : SignDisplay.auto,
-        decimals: DecimalDisplay.none,
-        style: t.figureSmall.copyWith(color: !active ? c.inkSoft : (dir.isOwe ? c.ink : c.positive)),
-      ),
-      onTap: onTap,
-      onLongPress: long == null
-          ? null
-          : () {
-              HapticFeedback.mediumImpact();
-              long();
-            },
-    );
-    final settle = onSettle;
-    if (active && settle != null) {
-      child = Dismissible(
-        key: ValueKey('swipe-${p.id}'),
-        direction: DismissDirection.startToEnd,
-        dismissThresholds: const {DismissDirection.startToEnd: 0.32},
-        confirmDismiss: (_) async {
-          HapticFeedback.mediumImpact();
-          settle();
-          return false;
-        },
-        background: _SwipeSettleBackground(direction: dir),
-        child: child,
-      );
-    }
-    return Semantics(
-      button: true,
-      label: semantics,
-      excludeSemantics: true,
-      onTap: onTap,
-      onLongPressHint: long == null ? null : 'Quick actions',
-      customSemanticsActions: active && settle != null
-          ? {CustomSemanticsAction(label: dir.isOwe ? 'Settle, I paid' : 'Settle, I received'): settle}
-          : null,
-      child: child,
-    );
+    final i = pendingAgeInfo(view, context.colors);
+    return StatusPill(label: i.label, color: i.color, icon: i.icon);
   }
 }
 
-class _SwipeSettleBackground extends StatelessWidget {
-  const _SwipeSettleBackground({required this.direction});
+class PendingDirectionLabel extends StatelessWidget {
+  const PendingDirectionLabel({super.key, required this.direction, this.onGradient = false});
 
   final PendingDirection direction;
+  final bool onGradient;
 
   @override
   Widget build(BuildContext context) {
-    final c = UiColors.of(context);
-    final t = UiType.of(context);
-    return ColoredBox(
-      color: c.positive,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: UiSpace.xl),
-        child: Row(
-          children: [
-            Icon(LucideIcons.check, color: c.page, size: 20),
-            const SizedBox(width: UiSpace.sm),
-            Text(
-              direction.isOwe ? 'Settle · I paid' : 'Settle · I received',
-              style: t.label.copyWith(color: c.page, fontWeight: FontWeight.w600),
-            ),
-          ],
+    final c = context.colors;
+    final color = onGradient ? Colors.white : direction.color(c);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(direction.icon, size: 13, color: color),
+        const SizedBox(width: Space.x1),
+        Flexible(
+          child: Text(
+            direction.label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: context.text.micro.copyWith(color: color, fontWeight: FontWeight.w900, letterSpacing: 0.6),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -653,6 +580,194 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RingPainter old) => old.progress != progress || old.color != color || old.track != track;
+}
+
+/// One pending item as a compact two-line row: who, what, how much and
+/// when. Swipe right to settle; long-press for quick actions.
+class PendingRow extends StatelessWidget {
+  const PendingRow({
+    super.key,
+    required this.view,
+    required this.onTap,
+    this.onSettle,
+    this.onLongPress,
+    this.grouped = false,
+    this.inSplit = false,
+  });
+
+  final PendingView view;
+  final VoidCallback onTap;
+  final VoidCallback? onSettle;
+  final VoidCallback? onLongPress;
+
+  /// Inside a person card: the purpose leads and the person is implied.
+  final bool grouped;
+
+  /// Inside a split card: the person leads and the bill is implied.
+  final bool inSplit;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final t = context.text;
+    final p = view.payment;
+    final dir = p.direction;
+    final active = view.status.isActive;
+    final tone = active ? dir.color(c) : c.textSecondary;
+    final age = pendingAgeInfo(view, c);
+    final shown = pendingShownAmount(view);
+    final partial = view.status == PendingStatus.partiallySettled;
+    final semantics = '${dir.sentence(p.counterparty)} ${MoneyFormatter.spoken(shown)} for ${p.purpose}. '
+        '${view.status.label}. ${active ? '${pendingDays(view.daysOpen)} open' : age.label}';
+    final shared = p.isShared ? ' Shared on FiNN.' : '';
+
+    final leading = grouped
+        ? IconTile(
+            icon: active ? dir.icon : (view.status == PendingStatus.settled ? LucideIcons.check : LucideIcons.ban),
+            background: active ? dir.soft(c) : c.surfaceMuted,
+            foreground: tone,
+            size: 30,
+            radius: Radii.md,
+            iconSize: 15,
+          )
+        : PendingAvatar(
+            size: inSplit ? 32 : 40,
+            name: p.counterparty,
+            color: tone,
+            progress: view.settledBps / 10000,
+            direction: active ? dir : null,
+          );
+
+    final row = Padding(
+      padding: EdgeInsets.symmetric(horizontal: Space.x3, vertical: grouped || inSplit ? Space.x2_5 : Space.x3),
+      child: Row(
+        children: [
+          leading,
+          const SizedBox(width: Space.x3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              grouped ? p.purpose : p.counterparty,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: grouped ? t.body.copyWith(fontWeight: FontWeight.w700) : t.bodyStrong,
+                            ),
+                          ),
+                          if (p.isSplit && !grouped && !inSplit) ...[
+                            const SizedBox(width: Space.x1),
+                            Icon(LucideIcons.users, size: 13, color: c.textTertiary),
+                          ],
+                          if (p.isShared && !grouped) ...[
+                            const SizedBox(width: Space.x1),
+                            Icon(LucideIcons.link2, size: 13, color: c.info),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: Space.x2),
+                    AmountText(shown, style: t.amountSmall.copyWith(color: tone)),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        partial
+                            ? '${grouped || inSplit ? '' : '${p.purpose} · '}${view.settledBps ~/ 100}% settled'
+                            : (grouped ? p.kind.label : (inSplit ? p.split!.partLabel : p.purpose)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: t.caption,
+                      ),
+                    ),
+                    const SizedBox(width: Space.x2),
+                    Icon(age.icon, size: 12, color: age.color),
+                    const SizedBox(width: 3),
+                    Text(age.label, style: t.micro.copyWith(color: age.color, fontWeight: FontWeight.w800)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    Widget child = Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress == null
+            ? null
+            : () {
+                HapticFeedback.mediumImpact();
+                onLongPress!();
+              },
+        child: row,
+      ),
+    );
+
+    if (active && onSettle != null) {
+      child = Dismissible(
+        key: ValueKey('swipe-${p.id}'),
+        direction: DismissDirection.startToEnd,
+        dismissThresholds: const {DismissDirection.startToEnd: 0.32},
+        confirmDismiss: (_) async {
+          HapticFeedback.mediumImpact();
+          onSettle!();
+          return false;
+        },
+        background: _SwipeSettleBackground(direction: dir),
+        child: child,
+      );
+    }
+    return Semantics(
+      button: true,
+      label: '$semantics$shared',
+      excludeSemantics: true,
+      onLongPressHint: onLongPress == null ? null : 'Quick actions',
+      customSemanticsActions: active && onSettle != null
+          ? {CustomSemanticsAction(label: dir.isOwe ? 'Settle, I paid' : 'Settle, I received'): onSettle!}
+          : null,
+      child: child,
+    );
+  }
+}
+
+class _SwipeSettleBackground extends StatelessWidget {
+  const _SwipeSettleBackground({required this.direction});
+
+  final PendingDirection direction;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return ColoredBox(
+      color: c.positive,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Space.x5),
+        child: Row(
+          children: [
+            Icon(LucideIcons.circleCheckBig, color: c.onSolid, size: 20),
+            const SizedBox(width: Space.x2),
+            Text(
+              direction.isOwe ? 'Settle · I paid' : 'Settle · I received',
+              style: context.text.label.copyWith(color: c.onSolid, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Single-select payment method chips.

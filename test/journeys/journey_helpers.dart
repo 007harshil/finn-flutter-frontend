@@ -2,7 +2,6 @@ import 'package:finn/core/money/money.dart';
 import 'package:finn/core/money/money_format.dart';
 import 'package:finn/design_system/design_system.dart';
 import 'package:finn/features/home/presentation/widgets/hero_balance_card.dart';
-import 'package:finn/ui/ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -113,16 +112,10 @@ Future<void> confirmReview(WidgetTester tester) async {
   await settle(tester);
 }
 
-/// Taps the button ([FinnButton] or a UI-kit button) labelled [label];
-/// when several match (a sheet over its screen), the top-most (last built)
-/// one.
+/// Taps the [FinnButton] labelled [label]; when several match (a sheet over
+/// its screen), the top-most (last built) one.
 Future<void> tapButton(WidgetTester tester, String label) async {
-  final button = find.ancestor(
-    of: find.text(label),
-    matching: find.byWidgetPredicate(
-      (w) => w is FinnButton || w is UiPrimaryButton || w is UiSecondaryButton || w is UiChipButton,
-    ),
-  );
+  final button = find.widgetWithText(FinnButton, label);
   expect(button, findsWidgets, reason: 'button "$label"');
   await tester.ensureVisible(button.last);
   await tester.pumpAndSettle();

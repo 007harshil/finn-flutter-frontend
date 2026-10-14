@@ -10,9 +10,10 @@ import 'journey_helpers.dart';
 
 /// The hero texts that describe [s] on the emergency fund screen.
 void expectHeroShows(EmergencyFundStatus s) {
-  expect(find.text(s.level.label), findsOneWidget);
-  expect(find.text('Covers about ${coverageLabel(s.coverageMonths!)} of essentials'), findsOneWidget);
-  expect(find.text('${formatBps(s.progressBps, decimals: 0)} of ${s.target.format()}'), findsOneWidget);
+  expect(find.text(s.level.label.toUpperCase()), findsOneWidget);
+  expect(find.text('earmarked · covers about ${coverageLabel(s.coverageMonths!)} of essentials'), findsOneWidget);
+  expect(find.text('${formatBps(s.progressBps, decimals: 0)} funded'), findsOneWidget);
+  expect(find.text('Target ${s.target.format()}'), findsOneWidget);
 }
 
 void main() {
@@ -61,7 +62,7 @@ void main() {
     expect(after.emergency.progressBps, greaterThan(planned.emergency.progressBps));
     expect(after.balance.cash, before.balance.cash);
     expect(after.balance.available, before.balance.available - added);
-    await scrollTo(tester, find.text('Set aside'), up: true);
+    await scrollTo(tester, find.text('EMERGENCY FUND'), up: true);
     expectHeroShows(after.emergency);
 
     // Home: set aside up, available down.

@@ -225,8 +225,7 @@ void main() {
       await tester.pumpAndSettle();
       final card = find.byKey(const ValueKey('pending-shared-card'));
       await tester.scrollUntilVisible(card, 300, scrollable: find.byType(Scrollable).first);
-      expect(find.text('Added by'), findsOneWidget);
-      expect(find.text('Rahul'), findsOneWidget);
+      expect(find.text('ADDED BY RAHUL'), findsOneWidget);
       expect(find.text('Aarav owes you'), findsOneWidget, reason: 'Rahul sees me owing him');
       expect(find.text('Both sides match'), findsOneWidget);
       expect(tester.takeException(), isNull);
