@@ -279,8 +279,8 @@ class LoanFieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: Space.x1_5),
-    child: Text(text, style: context.text.label),
+    padding: EdgeInsets.only(bottom: VaultScope.isActive(context) ? 10 : Space.x1_5),
+    child: Text(text, style: VaultScope.isActive(context) ? context.vt.label : context.text.label),
   );
 }
 
@@ -327,6 +327,9 @@ class LoanSwitchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (VaultScope.isActive(context)) {
+      return VaultSwitchRow(title: title, message: message, value: value, onChanged: onChanged);
+    }
     final t = context.text;
     return FinnCard(
       variant: FinnCardVariant.outlined,

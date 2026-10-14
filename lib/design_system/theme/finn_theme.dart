@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import '../components/safe_insets.dart';
 import '../tokens/finn_colors.dart';
 import '../tokens/tokens.dart';
 import '../tokens/typography.dart';
@@ -73,7 +73,7 @@ abstract final class FinnTheme {
         scrolledUnderElevation: 0,
         centerTitle: false,
         titleTextStyle: type.title,
-        systemOverlayStyle: c.isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+        systemOverlayStyle: SystemBars.styleFor(c.brightness),
       ),
       dividerTheme: DividerThemeData(color: c.border, thickness: 1, space: 1),
       iconTheme: IconThemeData(color: c.textPrimary, size: 20),

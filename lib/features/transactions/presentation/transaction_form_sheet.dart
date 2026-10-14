@@ -10,6 +10,7 @@ import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/money/money_format.dart';
+import '../../../core/time/dates.dart';
 import '../../../core/result/result.dart';
 import '../../../design_system/design_system.dart';
 import '../../../features/transactions/domain/transaction.dart';
@@ -114,6 +115,9 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
   String? _retiredCategoryName;
   Map<String, String> _errors = const {};
   bool _submitting = false;
+
+  /// Set once saved, so the sheet can close without the discard prompt.
+  bool _done = false;
 
   bool get _editing => widget.initial != null;
 
@@ -243,23 +247,77 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       return;
     }
     ref.read(lastPaymentMethodProvider.notifier).remember(_type, _method);
-    await Navigator.of(context).maybePop(saved.id);
+    setState(() => _done = true);
+    // `pop` (not `maybePop`): the discard guard has not rebuilt yet.
+    Navigator.of(context).pop(saved.id);
+  }
+
+  Future<void> _pickDate(DateTime today) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date.isAfter(today) ? today : _date,
+      firstDate: DateTime(2000),
+      lastDate: today,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _date = picked.dateOnly;
+      _errors = Map.of(_errors)..remove('date');
+    });
+  }
+
+  void _setDate(DateTime d) => setState(() {
+    _date = d;
+    _errors = Map.of(_errors)..remove('date');
+  });
+
+  /// A new entry with something typed in would be lost by a stray swipe.
+  bool get _dirty =>
+      !_editing && !_done && (_amount.text.isNotEmpty || _counterparty.text.isNotEmpty || _note.text.isNotEmpty);
+
+  Future<void> _confirmDiscard() async {
+    final discard = await showFinnConfirm(
+      context,
+      title: 'Discard this entry?',
+      message: 'What you typed will not be saved.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep editing',
+      destructive: true,
+    );
+    if (!discard || !mounted) return;
+    setState(() => _done = true);
+    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    return ListenableBuilder(
+      listenable: Listenable.merge([_amount, _counterparty, _note]),
+      builder: (context, child) => PopScope(
+        canPop: !_dirty,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _confirmDiscard();
+        },
+        child: child!,
+      ),
+      child: Builder(builder: _buildForm),
+    );
+  }
+
+  Widget _buildForm(BuildContext context) {
+    final p = context.vault;
+    final t = context.vt;
     final today = ref.watch(todayProvider);
     final income = _type.isIncome;
     final categories = ref.watch(pickableCategoriesProvider(_type));
     final submitLabel = _editing ? 'Save changes' : 'Record ${_type.label.toLowerCase()}';
+    final yesterday = today.subtract(const Duration(days: 1));
+    final customDate = !DateUtils.isSameDay(_date, today) && !DateUtils.isSameDay(_date, yesterday);
 
     return FinnSheetScaffold(
+      eyebrow: _editing ? 'Editing' : 'New entry',
       title: _editing ? 'Edit transaction' : 'Record transaction',
-      description: _editing
-          ? 'Balances, budgets and insights update automatically.'
-          : 'Money that has already moved in or out.',
+      description: _editing ? 'Balances, budgets and insights update automatically.' : 'Money that has already moved.',
       footer: FinnButton(
         label: submitLabel,
         icon: LucideIcons.check,
@@ -272,73 +330,98 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SegmentedTabs<TransactionType>(
-            items: const [
-              SegmentItem(TransactionType.expense, 'Expense'),
-              SegmentItem(TransactionType.income, 'Income'),
-            ],
+          // Direction first: it colours everything that follows.
+          VaultSegmented<TransactionType>(
+            values: const [TransactionType.expense, TransactionType.income],
+            labels: const ['Expense', 'Income'],
             selected: _type,
-            onChanged: _submitting ? (_) {} : _setType,
+            enabled: !_submitting,
+            capsuleColor: income ? p.positive : p.ink,
+            selectedTextColor: p.isDark ? p.surface : p.onInk,
+            onChanged: _setType,
           ),
-          const SizedBox(height: Space.x5),
+          const SizedBox(height: 26),
           AmountField(
-            label: 'Amount',
+            label: income ? 'Amount received' : 'Amount spent',
             controller: _amount,
             autofocus: !_editing,
+            prominent: true,
+            tone: income ? p.positive : null,
             errorText: _errors['amount'],
             textInputAction: TextInputAction.next,
             onChanged: (_) => _clearError('amount'),
           ),
-          const SizedBox(height: Space.x5),
-          Text('Category', style: t.label),
-          const SizedBox(height: Space.x1_5),
+          VaultSection(
+            index: 1,
+            title: 'Category',
+            hint: income ? 'Where it came from' : 'What it was for',
+            trailing: TextButton.icon(
+              onPressed: _submitting ? null : _createCategory,
+              icon: const Icon(LucideIcons.plus, size: 15),
+              label: const Text('New'),
+            ),
+          ),
           if (_retiredCategoryName != null && _categoryId == null) ...[
             InfoBanner(
               tone: FinnTone.warning,
               message: '$_retiredCategoryName is no longer available. Choose another category to save changes.',
             ),
-            const SizedBox(height: Space.x2),
+            const SizedBox(height: 12),
           ],
-          switch (categories) {
-            AsyncValue(:final value?) => _CategoryPicker(
-                categories: value,
-                selectedId: _categoryId,
-                onSelected: (id) => setState(() {
-                  _categoryId = id;
-                  _errors = Map.of(_errors)..remove('categoryId');
-                }),
-              ),
-            AsyncValue(hasError: true) => Text('Categories could not be loaded.', style: t.caption),
-            _ => const SkeletonBox(height: 160, radius: Radii.lg),
-          },
-          if (_errors['categoryId'] != null)
-            Padding(
-              padding: const EdgeInsets.only(top: Space.x1_5, left: Space.x1),
-              child: Text(_errors['categoryId']!, style: t.caption.copyWith(color: c.negative)),
-            ),
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton.icon(
-              onPressed: _submitting ? null : _createCategory,
-              icon: const Icon(LucideIcons.plus, size: 16),
-              label: const Text('Create a category'),
-            ),
+          VaultShake(
+            trigger: _errors['categoryId'],
+            child: switch (categories) {
+              AsyncValue(:final value?) => _CategoryPicker(
+                  categories: value,
+                  selectedId: _categoryId,
+                  accent: income ? p.positive : p.accent,
+                  onSelected: (id) => setState(() {
+                    _categoryId = id;
+                    _errors = Map.of(_errors)..remove('categoryId');
+                  }),
+                ),
+              AsyncValue(hasError: true) => VaultNote(
+                  message: 'Categories could not be loaded. Close and reopen to try again.',
+                  color: p.negative,
+                  icon: LucideIcons.circleAlert,
+                ),
+              _ => const SkeletonBox(height: 180, radius: VaultShape.group),
+            },
           ),
-          const SizedBox(height: Space.x3),
-          DateField(
+          VaultFieldError(_errors['categoryId']),
+          const VaultSection(index: 2, title: 'When & how'),
+          Semantics(
             label: 'Date',
-            value: _date,
-            firstDate: DateTime(2000),
-            lastDate: today,
-            errorText: _errors['date'],
-            onChanged: (d) => setState(() {
-              _date = d;
-              _errors = Map.of(_errors)..remove('date');
-            }),
+            container: true,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                VaultChip(
+                  label: 'Today',
+                  icon: LucideIcons.sun,
+                  selected: DateUtils.isSameDay(_date, today),
+                  onTap: () => _setDate(today),
+                ),
+                VaultChip(
+                  label: 'Yesterday',
+                  icon: LucideIcons.history,
+                  selected: DateUtils.isSameDay(_date, yesterday),
+                  onTap: () => _setDate(yesterday),
+                ),
+                VaultChip(
+                  label: customDate ? DateFormats.dayMonthYear.format(_date) : 'Pick a date',
+                  icon: LucideIcons.calendarDays,
+                  selected: customDate,
+                  onTap: () => _pickDate(today),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: Space.x5),
+          VaultFieldError(_errors['date']),
+          const SizedBox(height: 22),
           Text(income ? 'Received via' : 'Paid via', style: t.label),
-          const SizedBox(height: Space.x1),
+          const SizedBox(height: 10),
           FilterChipBar<PaymentMethod>(
             padding: EdgeInsets.zero,
             multiSelect: false,
@@ -349,10 +432,10 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
               _methodTouched = true;
             }),
           ),
-          const SizedBox(height: Space.x5),
+          const VaultSection(index: 3, title: 'Details', hint: 'Optional, but it sharpens search and insights'),
           FinnTextField(
             label: income ? 'Received from' : 'Paid to',
-            hint: income ? 'e.g. Employer, client, Priya' : 'e.g. Swiggy, DMart, landlord',
+            hint: income ? 'Employer, client, Priya' : 'Swiggy, DMart, landlord',
             controller: _counterparty,
             prefixIcon: income ? LucideIcons.user : LucideIcons.store,
             textCapitalization: TextCapitalization.words,
@@ -360,11 +443,12 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
             errorText: _errors['counterparty'],
             onChanged: (_) => _clearError('counterparty'),
           ),
-          const SizedBox(height: Space.x5),
+          const SizedBox(height: 12),
           FinnTextField(
             label: 'Note (optional)',
             hint: 'Anything to remember about this',
             controller: _note,
+            prefixIcon: LucideIcons.notebookPen,
             minLines: 2,
             maxLines: 4,
             textCapitalization: TextCapitalization.sentences,
@@ -388,11 +472,17 @@ IconData _methodIcon(PaymentMethod m) => switch (m) {
 
 /// Searchable grid of category tiles.
 class _CategoryPicker extends StatefulWidget {
-  const _CategoryPicker({required this.categories, required this.selectedId, required this.onSelected});
+  const _CategoryPicker({
+    required this.categories,
+    required this.selectedId,
+    required this.onSelected,
+    required this.accent,
+  });
 
   final List<TransactionCategory> categories;
   final String? selectedId;
   final ValueChanged<String> onSelected;
+  final Color accent;
 
   @override
   State<_CategoryPicker> createState() => _CategoryPickerState();
@@ -418,31 +508,37 @@ class _CategoryPickerState extends State<_CategoryPicker> {
             debounce: Duration.zero,
             onChanged: (v) => setState(() => _query = v),
           ),
-          const SizedBox(height: Space.x2),
+          const SizedBox(height: 12),
         ],
         if (visible.isEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: Space.x6),
-            child: Text('No matching categories', textAlign: TextAlign.center, style: context.text.caption),
+            padding: const EdgeInsets.symmetric(vertical: 28),
+            child: Text('No matching categories', textAlign: TextAlign.center, style: context.vt.caption),
           )
         else
           LayoutBuilder(
             builder: (context, box) {
-              const gap = Space.x2;
-              final cols = math.max(3, (box.maxWidth / 92).floor());
+              const gap = 6.0;
+              final cols = math.max(4, (box.maxWidth / 84).floor());
               final width = (box.maxWidth - gap * (cols - 1)) / cols;
               return Wrap(
                 spacing: gap,
                 runSpacing: gap,
                 children: [
-                  for (final cat in visible)
+                  for (var i = 0; i < visible.length; i++)
                     SizedBox(
-                      key: ValueKey(cat.id),
+                      key: ValueKey(visible[i].id),
                       width: width,
-                      child: _CategoryTile(
-                        category: cat,
-                        selected: cat.id == widget.selectedId,
-                        onTap: () => widget.onSelected(cat.id),
+                      child: VaultRise(
+                        index: i,
+                        offset: 8,
+                        duration: const Duration(milliseconds: 460),
+                        child: _CategoryTile(
+                          category: visible[i],
+                          selected: visible[i].id == widget.selectedId,
+                          accent: widget.accent,
+                          onTap: () => widget.onSelected(visible[i].id),
+                        ),
                       ),
                     ),
                 ],
@@ -454,66 +550,100 @@ class _CategoryPickerState extends State<_CategoryPicker> {
   }
 }
 
+/// A category as an avatar that gains a ring (and a check that pops in)
+/// when chosen, on a softly tinted plate.
 class _CategoryTile extends StatelessWidget {
-  const _CategoryTile({required this.category, required this.selected, required this.onTap});
+  const _CategoryTile({required this.category, required this.selected, required this.onTap, required this.accent});
 
   final TransactionCategory category;
   final bool selected;
   final VoidCallback onTap;
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final p = context.vault;
+    final t = context.vt;
+    final reduced = context.reduceMotion;
+    final pop = reduced ? Duration.zero : const Duration(milliseconds: 420);
     return Semantics(
       button: true,
       selected: selected,
       label: category.name,
       excludeSemantics: true,
-      child: InkWell(
-        borderRadius: Radii.rLg,
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
-        child: AnimatedContainer(
-          duration: context.motion.fast,
-          constraints: const BoxConstraints(minHeight: 88),
-          padding: const EdgeInsets.symmetric(horizontal: Space.x1, vertical: Space.x2),
-          decoration: BoxDecoration(
-            color: selected ? c.surfaceMuted : c.surface,
-            borderRadius: Radii.rLg,
-            border: Border.all(color: selected ? c.primary : c.border, width: selected ? 2 : 1),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  CategoryAvatar(category: category, size: 36),
-                  if (selected)
-                    Positioned(
-                      right: -6,
-                      top: -6,
-                      child: Container(
-                        decoration: BoxDecoration(color: c.surface, shape: BoxShape.circle),
-                        child: Icon(LucideIcons.circleCheck, size: 16, color: c.primary),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          splashColor: accent.withValues(alpha: 0.08),
+          highlightColor: Colors.transparent,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onTap();
+          },
+          child: AnimatedContainer(
+            duration: reduced ? Duration.zero : VaultMotion.state,
+            curve: VaultMotion.settle,
+            constraints: const BoxConstraints(minHeight: 92),
+            padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
+            decoration: BoxDecoration(
+              color: selected ? p.tint(accent, 0.09) : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    AnimatedContainer(
+                      duration: reduced ? Duration.zero : VaultMotion.state,
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: selected ? accent : Colors.transparent, width: 1.6),
+                      ),
+                      child: AnimatedScale(
+                        scale: selected ? 1.0 : 0.94,
+                        duration: pop,
+                        curve: VaultMotion.pop,
+                        child: CategoryAvatar(category: category, size: 40),
                       ),
                     ),
-                ],
-              ),
-              const SizedBox(height: Space.x1_5),
-              Text(
-                category.name,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: context.text.micro.copyWith(
-                  color: c.textPrimary,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    Positioned(
+                      right: -4,
+                      top: -4,
+                      child: AnimatedScale(
+                        scale: selected ? 1 : 0,
+                        duration: pop,
+                        curve: VaultMotion.pop,
+                        child: Container(
+                          width: 18,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: accent,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: p.surface, width: 2),
+                          ),
+                          child: Icon(LucideIcons.check, size: 10, color: p.surface),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 7),
+                Text(
+                  category.name,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.caption
+                      .copyWith(fontSize: 11.5, height: 1.25)
+                      .vw(selected ? 720 : 580)
+                      .vc(selected ? p.ink : p.inkSoft),
+                ),
+              ],
+            ),
           ),
         ),
       ),

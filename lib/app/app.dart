@@ -37,11 +37,16 @@ class FinnApp extends ConsumerWidget {
         // Cap extreme text scaling so financial figures stay legible
         // without breaking layouts (still allows 1.6× for accessibility).
         final mq = MediaQuery.of(context);
+        // SafeFrame captures the device's safe insets once, at the root,
+        // so every screen, sheet and toast derives its clearance of the
+        // status bar, cutouts and gesture bar from one source.
         return MediaQuery(
           data: mq.copyWith(textScaler: mq.textScaler.clamp(maxScaleFactor: 1.6)),
-          child: MotionScope(
-            reduceMotion: reduce,
-            child: AmountVisibility(hidden: hidden, child: child ?? const SizedBox.shrink()),
+          child: SafeFrame(
+            child: MotionScope(
+              reduceMotion: reduce,
+              child: AmountVisibility(hidden: hidden, child: child ?? const SizedBox.shrink()),
+            ),
           ),
         );
       },

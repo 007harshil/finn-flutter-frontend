@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -7,7 +8,7 @@ import 'package:flutter/services.dart';
 import '../motion/motion.dart';
 import '../theme/finn_theme.dart';
 import '../tokens/tokens.dart';
-import 'tone.dart';
+import '../vault/vault.dart';
 
 /// Animated emerald checkmark (circle scales in, check draws on).
 class SuccessCheck extends StatefulWidget {
@@ -65,7 +66,7 @@ class _SuccessCheckState extends State<SuccessCheck> with SingleTickerProviderSt
               animation: _controller,
               color: color,
               halo: color.withValues(alpha: 0.16),
-              checkColor: Colors.white,
+              checkColor: c.isDark ? c.background : Colors.white,
             ),
           ),
         ),
@@ -217,47 +218,55 @@ class _SuccessOverlayState extends State<_SuccessOverlay> with SingleTickerProvi
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final p = context.vault;
+    final t = context.vt;
     final sub = widget.subtitle;
-    return FadeTransition(
-      opacity: _fade,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _close,
-        child: ColoredBox(
-          color: c.scrim.withValues(alpha: c.scrim.a * 0.5),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(Space.x8),
-              child: Material(
-                type: MaterialType.transparency,
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 320),
-                  padding: const EdgeInsets.symmetric(horizontal: Space.x6, vertical: Space.x8),
-                  decoration: BoxDecoration(
-                    color: c.surface,
-                    borderRadius: Radii.rXxxl,
-                    border: Border.all(color: FinnTone.positive.color(c).withValues(alpha: 0.25), width: 2),
-                    boxShadow: Elevation.xl,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SuccessCheck(size: 88),
-                      const SizedBox(height: Space.x4),
-                      Text(
-                        widget.title,
-                        textAlign: TextAlign.center,
-                        style: t.title.copyWith(fontWeight: FontWeight.w900),
-                      ),
-                      if (sub != null) ...[
-                        const SizedBox(height: Space.x1),
-                        Text(sub, textAlign: TextAlign.center, style: t.caption),
-                      ],
-                    ],
-                  ),
-                ),
+    return AnimatedBuilder(
+      animation: _fade,
+      builder: (context, child) {
+        final v = _fade.value;
+        final sigma = context.reduceMotion ? 0.0 : 8 * v;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _close,
+          child: BackdropFilter(
+            enabled: sigma > 0.4,
+            filter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+            child: ColoredBox(
+              color: p.scrim.withValues(alpha: p.scrim.a * 0.7 * v),
+              child: Opacity(
+                opacity: v,
+                child: Transform.scale(scale: 0.92 + 0.08 * VaultMotion.spring.transform(v), child: child),
+              ),
+            ),
+          ),
+        );
+      },
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(Space.x8),
+          child: Material(
+            type: MaterialType.transparency,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 320),
+              padding: const EdgeInsets.fromLTRB(28, 32, 28, 30),
+              decoration: BoxDecoration(
+                color: p.surface,
+                borderRadius: BorderRadius.circular(VaultShape.dialog),
+                border: Border.all(color: p.hairline),
+                boxShadow: p.float,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SuccessCheck(size: 84, color: p.positive),
+                  const SizedBox(height: 18),
+                  Text(widget.title, textAlign: TextAlign.center, style: t.dialogTitle.copyWith(fontSize: 26)),
+                  if (sub != null) ...[
+                    const SizedBox(height: 6),
+                    Text(sub, textAlign: TextAlign.center, style: t.bodySoft),
+                  ],
+                ],
               ),
             ),
           ),

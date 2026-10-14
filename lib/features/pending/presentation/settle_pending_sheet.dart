@@ -147,6 +147,7 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
           ],
           const SizedBox(height: Space.x4),
           AmountField(
+            prominent: true,
             label: owe ? 'Amount paid' : 'Amount received',
             controller: _amount,
             errorText: _errors['amount'],

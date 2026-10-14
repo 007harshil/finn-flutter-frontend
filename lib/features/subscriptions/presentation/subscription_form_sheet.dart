@@ -193,6 +193,7 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
           ),
           const SizedBox(height: Space.x3),
           AmountField(
+            prominent: true,
             label: 'Amount per renewal',
             controller: _amount,
             errorText: _errors['amount'],

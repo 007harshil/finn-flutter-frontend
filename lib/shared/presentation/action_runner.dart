@@ -79,9 +79,9 @@ Future<bool> showActionReview(BuildContext context, ActionPreview preview) async
   final result = await showFinnSheet<bool>(
     context,
     builder: (ctx) {
-      final c = ctx.colors;
-      final t = ctx.text;
+      final t = ctx.vt;
       return FinnSheetScaffold(
+        eyebrow: 'Review before it happens',
         title: preview.title,
         description: preview.summary,
         footer: Row(
@@ -94,7 +94,7 @@ Future<bool> showActionReview(BuildContext context, ActionPreview preview) async
                 onPressed: () => Navigator.of(ctx).pop(false),
               ),
             ),
-            const SizedBox(width: Space.x3),
+            const SizedBox(width: 10),
             Expanded(
               flex: 2,
               child: FinnButton(
@@ -109,31 +109,15 @@ Future<bool> showActionReview(BuildContext context, ActionPreview preview) async
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final line in preview.lines)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: Space.x2),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: Text(line.label, style: t.label)),
-                    const SizedBox(width: Space.x3),
-                    Flexible(
-                      flex: 2,
-                      child: Text(
-                        line.value,
-                        textAlign: TextAlign.end,
-                        style: line.emphasis ? t.amountMedium : t.bodyStrong,
-                      ),
-                    ),
-                  ],
-                ),
+            if (preview.lines.isNotEmpty)
+              VaultReceipt(
+                lines: [for (final l in preview.lines) VaultReceiptLine(l.label, l.value, emphasis: l.emphasis)],
               ),
             for (final w in preview.warnings) ...[
-              const SizedBox(height: Space.x3),
+              const SizedBox(height: 12),
               InfoBanner(message: w, tone: FinnTone.warning),
             ],
-            if (preview.lines.isEmpty && preview.warnings.isEmpty)
-              Text(preview.summary, style: t.body.copyWith(color: c.textSecondary)),
+            if (preview.lines.isEmpty && preview.warnings.isEmpty) Text(preview.summary, style: t.bodySoft),
           ],
         ),
       );

@@ -192,6 +192,7 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
           ),
           const SizedBox(height: Space.x5),
           AmountField(
+            prominent: true,
             label: borrowed ? 'Amount paid' : 'Amount received',
             controller: _amount,
             errorText: _errors['amount'],

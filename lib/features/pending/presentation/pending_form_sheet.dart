@@ -403,6 +403,7 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
           ),
           const SizedBox(height: Space.x4),
           AmountField(
+            prominent: true,
             label: _editing ? 'Original amount' : (_splitting ? (_direction.isOwe ? 'Total you owe' : 'Total bill') : 'Amount'),
             controller: _amount,
             errorText: _errors['amount'],
@@ -486,7 +487,6 @@ class _DirectionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final t = context.text;
     final color = direction.color(c);
     return Semantics(
       button: true,
@@ -497,7 +497,7 @@ class _DirectionTile extends StatelessWidget {
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
-          borderRadius: Radii.rLg,
+          borderRadius: BorderRadius.circular(VaultShape.well),
           onTap: () {
             if (selected) return;
             HapticFeedback.selectionClick();
@@ -505,37 +505,37 @@ class _DirectionTile extends StatelessWidget {
           },
           child: AnimatedContainer(
             duration: context.motion.normal,
-            curve: Curves2.emphasized,
-            padding: const EdgeInsets.symmetric(horizontal: Space.x3, vertical: Space.x2_5),
+            curve: VaultMotion.settle,
+            constraints: const BoxConstraints(minHeight: 60),
+            padding: const EdgeInsets.fromLTRB(10, 10, 14, 10),
             decoration: BoxDecoration(
-              color: selected ? direction.soft(c) : c.surface,
-              borderRadius: Radii.rLg,
-              border: Border.all(color: selected ? color : c.border, width: selected ? 1.5 : 1),
+              color: selected ? context.vault.tint(color, 0.09) : context.vault.well,
+              borderRadius: BorderRadius.circular(VaultShape.well),
+              border: Border.all(color: selected ? color.withValues(alpha: 0.55) : context.vault.well, width: 1.3),
             ),
             child: Row(
               children: [
                 AnimatedScale(
-                  scale: selected ? 1 : 0.85,
+                  scale: selected ? 1 : 0.88,
                   duration: context.motion.normal,
-                  curve: Curves.easeOutBack,
-                  child: IconTile(
-                    icon: direction.icon,
-                    background: selected ? color : c.surfaceMuted,
-                    foreground: selected ? c.onSolid : c.textSecondary,
-                    size: 30,
-                    iconSize: 16,
+                  curve: VaultMotion.pop,
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: selected ? color : context.vault.surface,
+                    ),
+                    child: Icon(direction.icon, size: 16, color: selected ? context.vault.surface : c.textSecondary),
                   ),
                 ),
-                const SizedBox(width: Space.x2),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     direction.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: t.label.copyWith(
-                      color: selected ? c.textPrimary : c.textSecondary,
-                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                    ),
+                    style: context.vt.chip.vw(selected ? 720 : 600).vc(selected ? c.textPrimary : c.textSecondary),
                   ),
                 ),
               ],

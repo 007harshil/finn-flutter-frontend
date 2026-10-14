@@ -8,8 +8,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/money/money.dart';
 import '../components/layout.dart';
 import '../motion/motion.dart';
+import '../vault/vault.dart';
 import 'luxe_motion.dart';
-import 'luxe_sheets.dart';
 import 'luxe_tokens.dart';
 import 'luxe_widgets.dart';
 
@@ -880,7 +880,7 @@ class LuxePageSkeleton extends StatelessWidget {
 // Dialogs
 // ---------------------------------------------------------------------------
 
-/// A Luxe confirmation sheet. Resolves to true only on confirm.
+/// A confirmation card (Vault). Resolves to true only on confirm.
 Future<bool> showLuxeConfirm(
   BuildContext context, {
   required String title,
@@ -889,45 +889,12 @@ Future<bool> showLuxeConfirm(
   String cancelLabel = 'Not now',
   IconData icon = LucideIcons.circleHelp,
   bool destructive = false,
-}) async {
-  final ok = await showLuxeSheet<bool>(
-    context,
-    builder: (context) {
-      final p = context.luxe;
-      final t = context.lt;
-      return LuxeSheet(
-        footer: Row(
-          children: [
-            Expanded(
-              child: LuxeButton(
-                label: cancelLabel,
-                variant: LuxeButtonVariant.outline,
-                expand: true,
-                onPressed: () => Navigator.of(context).pop(false),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: LuxeButton(label: confirmLabel, expand: true, onPressed: () => Navigator.of(context).pop(true)),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Reveal(
-              scale: 0.8,
-              blur: 0,
-              child: LuxeIconDisc(icon: icon, size: 52, color: destructive ? p.negative : p.goldInk),
-            ),
-            const SizedBox(height: 18),
-            Semantics(header: true, child: Text(title, style: t.title.copyWith(fontSize: 26))),
-            const SizedBox(height: 10),
-            Text(message, style: t.bodySoft),
-          ],
-        ),
-      );
-    },
-  );
-  return ok ?? false;
-}
+}) => showVaultConfirm(
+  context,
+  title: title,
+  message: message,
+  confirmLabel: confirmLabel,
+  cancelLabel: cancelLabel,
+  icon: icon,
+  destructive: destructive,
+);

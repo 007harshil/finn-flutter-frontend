@@ -229,7 +229,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
           ),
         SliverToBoxAdapter(
           child: ResponsiveCenter(
-            padding: const EdgeInsets.fromLTRB(Space.gutter, Space.x3, Space.gutter, Space.x10),
+            padding: EdgeInsets.fromLTRB(Space.gutter, Space.x3, Space.gutter, Space.x10 + context.safeBottom),
             child: Column(
               children: [
                 if (entries.isNotEmpty)

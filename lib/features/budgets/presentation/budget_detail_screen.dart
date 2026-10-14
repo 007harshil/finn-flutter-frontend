@@ -274,7 +274,7 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
               ),
             ),
           ),
-        const SliverToBoxAdapter(child: SizedBox(height: Space.x12)),
+        SliverToBoxAdapter(child: SizedBox(height: Space.x12 + context.safeBottom)),
       ],
     );
   }

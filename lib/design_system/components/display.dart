@@ -9,6 +9,7 @@ import 'buttons.dart';
 import 'cards.dart';
 import 'tiles.dart';
 import 'tone.dart';
+import '../vault/vault.dart';
 
 const List<String> _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June', //
@@ -226,6 +227,16 @@ class InfoBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    if (VaultScope.isActive(context)) {
+      return VaultNote(
+        message: message,
+        title: title,
+        icon: icon ?? tone.icon,
+        color: tone.color(c),
+        actionLabel: actionLabel,
+        onAction: onAction,
+      );
+    }
     final t = context.text;
     final accent = tone.color(c);
     final heading = title;

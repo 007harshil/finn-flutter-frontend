@@ -102,7 +102,7 @@ class _Body extends StatelessWidget {
       key: const PageStorageKey('net-worth'),
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(0, Space.x2, 0, Space.x10),
+          padding: EdgeInsets.fromLTRB(0, Space.x2, 0, Space.x10 + context.safeBottom),
           sliver: SliverList.separated(
             itemCount: sections.length,
             separatorBuilder: (_, _) => const SizedBox(height: Space.x5),

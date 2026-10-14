@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../design_system/design_system.dart';
 
-/// A go_router page that presents its child as a modal bottom sheet, so
+/// A go_router page that presents its child as a floating Vault sheet, so
 /// forms keep sheet ergonomics while remaining addressable by URL.
 class SheetPage<T> extends Page<T> {
   const SheetPage({required this.child, super.key, super.name, super.arguments, super.restorationId});
@@ -10,29 +10,14 @@ class SheetPage<T> extends Page<T> {
   final Widget child;
 
   @override
-  Route<T> createRoute(BuildContext context) {
-    final c = context.colors;
-    return ModalBottomSheetRoute<T>(
-      settings: this,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: false,
-      backgroundColor: c.surface,
-      modalBarrierColor: c.scrim,
-      constraints: const BoxConstraints(maxWidth: Space.maxContentWidth),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xxxl)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      builder: (_) => child,
-    );
-  }
+  Route<T> createRoute(BuildContext context) => VaultSheetRoute<T>(settings: this, builder: (_) => child);
 }
 
 /// Subtle fade + scale transition for full-screen pages.
 class FadeScalePage<T> extends CustomTransitionPage<T> {
-  FadeScalePage({required super.child, super.key, super.name})
+  FadeScalePage({required Widget child, super.key, super.name})
       : super(
+          child: SafeSides(child: child),
           transitionDuration: const Duration(milliseconds: 300),
           reverseTransitionDuration: const Duration(milliseconds: 240),
           transitionsBuilder: (context, animation, secondary, child) {

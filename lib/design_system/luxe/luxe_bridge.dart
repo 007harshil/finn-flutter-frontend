@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/finn_theme.dart';
 import '../tokens/finn_colors.dart';
 import '../tokens/typography.dart';
+import '../vault/vault_tokens.dart';
 import 'luxe_tokens.dart';
 
 /// Re-skins a subtree in Luxe: every legacy component below it (cards,
@@ -29,6 +30,8 @@ class LuxeScope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Modal surfaces carry their own (Vault) theme and paint.
+    if (VaultScope.isActive(context)) return child;
     final theme = themeFor(Theme.of(context).brightness);
     final body = Theme(data: theme, child: child);
     if (!paint) return body;

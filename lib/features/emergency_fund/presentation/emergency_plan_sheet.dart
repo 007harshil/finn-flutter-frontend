@@ -157,6 +157,7 @@ class _EmergencyPlanSheetState extends ConsumerState<EmergencyPlanSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AmountField(
+            prominent: true,
           controller: _essentials,
           label: 'Essential spending per month',
           hint: 'Rent, groceries, bills, EMIs',

@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../motion/motion.dart';
 import '../theme/finn_theme.dart';
 import '../tokens/tokens.dart';
+import '../vault/vault.dart';
 
 /// One option in a [SegmentedTabs].
 @immutable
@@ -35,6 +36,15 @@ class SegmentedTabs<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (VaultScope.isActive(context)) {
+      return VaultSegmented<T>(
+        values: [for (final i in items) i.value],
+        labels: [for (final i in items) i.label],
+        counts: items.any((i) => i.count != null) ? [for (final i in items) i.count] : null,
+        selected: selected,
+        onChanged: (v) => onChanged(v),
+      );
+    }
     final c = context.colors;
     final n = items.length;
     final index = items.indexWhere((i) => i.value == selected);
@@ -203,6 +213,17 @@ class FilterChipBar<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (VaultScope.isActive(context)) {
+      return Padding(
+        padding: padding,
+        child: VaultChips<T>(
+          items: [for (final i in items) VaultChipItem(i.value, i.label, icon: i.icon)],
+          selected: selected,
+          multiSelect: multiSelect,
+          onChanged: onChanged,
+        ),
+      );
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: padding,

@@ -182,7 +182,7 @@ class _GoalBody extends ConsumerWidget {
           ),
           top: Space.section,
         ),
-        const SliverToBoxAdapter(child: SizedBox(height: Space.x12)),
+        SliverToBoxAdapter(child: SizedBox(height: Space.x12 + context.safeBottom)),
       ],
     );
   }

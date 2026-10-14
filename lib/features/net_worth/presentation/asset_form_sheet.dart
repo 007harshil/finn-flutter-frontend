@@ -195,6 +195,7 @@ class _AssetFormSheetState extends ConsumerState<AssetFormSheet> {
         ),
         const SizedBox(height: Space.x5),
         AmountField(
+            prominent: true,
           controller: _value,
           label: 'Current value',
           hint: 'What it would fetch today',
