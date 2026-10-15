@@ -220,11 +220,14 @@ class _DetailsState extends ConsumerState<_Details> {
                 text:
                     '${DateFormats.weekdayDayMonth.format(t.date)} ${t.date.year}',
               ),
-              if (t.paymentMethod != null)
-                LedgerFact(
-                  label: t.isIncome ? 'Received via' : 'Paid via',
-                  text: t.paymentMethod!.label,
-                ),
+              LedgerFact(
+                label: 'Account',
+                text:
+                    ref.watch(financeSnapshotProvider).value?.account(t.accountId)?.name ??
+                    'Unknown account',
+              ),
+              if ((t.channel ?? '').isNotEmpty)
+                LedgerFact(label: 'Channel', text: t.channel!),
               if ((t.counterparty ?? '').trim().isNotEmpty)
                 LedgerFact(
                   label: t.isIncome ? 'Received from' : 'Paid to',

@@ -161,19 +161,21 @@ void main() {
       expect(s.transactionCount, 2);
     });
 
-    test('per-category and per-method totals are sorted descending; missing method is "other"', () {
+    test('per-category, per-account and per-channel totals are sorted descending', () {
       final s = cashFlow.summarize([
-        tx(300, d(2026, 10, 1), category: SeedCategoryIds.food, method: PaymentMethod.upi),
-        tx(700, d(2026, 10, 2), category: SeedCategoryIds.rent, method: PaymentMethod.bankTransfer),
-        tx(200, d(2026, 10, 3), category: SeedCategoryIds.food, method: PaymentMethod.upi),
+        tx(300, d(2026, 10, 1), category: SeedCategoryIds.food, accountId: 'acc_sbi', channel: 'UPI'),
+        tx(700, d(2026, 10, 2), category: SeedCategoryIds.rent, accountId: 'acc_axis', channel: 'NEFT'),
+        tx(200, d(2026, 10, 3), category: SeedCategoryIds.food, accountId: 'acc_sbi', channel: 'UPI'),
         tx(50, d(2026, 10, 4), category: SeedCategoryIds.travel),
         tx(9999, d(2026, 10, 4), income: true),
       ], october);
       expect(s.byCategory.map((e) => e.key), [SeedCategoryIds.rent, SeedCategoryIds.food, SeedCategoryIds.travel]);
       expect(s.byCategory.map((e) => e.value), [rs(700), rs(500), rs(50)]);
-      expect(s.byMethod.map((e) => e.key), [PaymentMethod.bankTransfer, PaymentMethod.upi, PaymentMethod.other]);
+      expect(s.byAccount.map((e) => e.key), ['acc_axis', 'acc_sbi', 'acc_cash']);
+      expect(s.byChannel.map((e) => e.key), ['NEFT', 'UPI']);
+      expect(s.byChannel.map((e) => e.value), [rs(700), rs(500)]);
       expect(Money.sum(s.byCategory.map((e) => e.value)), s.expense);
-      expect(Money.sum(s.byMethod.map((e) => e.value)), s.expense);
+      expect(Money.sum(s.byAccount.map((e) => e.value)), s.expense);
     });
 
     test('savings rate in basis points; null without income', () {

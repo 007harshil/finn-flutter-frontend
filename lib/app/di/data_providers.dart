@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/money/money.dart';
 import '../../core/time/dates.dart';
+import '../../features/accounts/domain/money_account.dart';
+import '../../features/accounts/domain/transfer.dart';
 import '../../features/alerts/domain/alert.dart';
 import '../../features/alerts/domain/alert_engine.dart';
 import '../../features/analytics/domain/analytics.dart';
@@ -49,6 +51,10 @@ final settlementsStreamProvider = StreamProvider<List<PendingSettlement>>(
     (ref) => ref.watch(financeRepositoriesProvider).settlements.watchAll());
 final assetsStreamProvider =
     StreamProvider<List<Asset>>((ref) => ref.watch(financeRepositoriesProvider).assets.watchAll());
+final moneyAccountsStreamProvider = StreamProvider<List<MoneyAccount>>(
+    (ref) => ref.watch(financeRepositoriesProvider).moneyAccounts.watchAll());
+final transfersStreamProvider =
+    StreamProvider<List<Transfer>>((ref) => ref.watch(financeRepositoriesProvider).transfers.watchAll());
 final profileStreamProvider =
     StreamProvider<FinancialProfile?>((ref) => ref.watch(financeRepositoriesProvider).profile.watch());
 final emergencyPlanStreamProvider =
@@ -88,6 +94,8 @@ final financeSnapshotProvider = Provider<AsyncValue<FinanceSnapshot>>((ref) {
     ref.watch(assetsStreamProvider),
     ref.watch(profileStreamProvider),
     ref.watch(emergencyPlanStreamProvider),
+    ref.watch(moneyAccountsStreamProvider),
+    ref.watch(transfersStreamProvider),
   ];
   for (final p in parts) {
     if (p.hasError) return AsyncError(p.error!, p.stackTrace ?? StackTrace.current);
@@ -109,6 +117,8 @@ final financeSnapshotProvider = Provider<AsyncValue<FinanceSnapshot>>((ref) {
     assets: parts[10].requireValue! as List<Asset>,
     profile: parts[11].value as FinancialProfile?,
     emergencyPlan: parts[12].value as EmergencyFundPlan?,
+    accounts: parts[13].requireValue! as List<MoneyAccount>,
+    transfers: parts[14].requireValue! as List<Transfer>,
   ));
 });
 
@@ -118,6 +128,7 @@ void refreshFinanceData(WidgetRef ref) {
     categoriesStreamProvider, transactionsStreamProvider, budgetsStreamProvider, goalsStreamProvider,
     savingsMovementsStreamProvider, loansStreamProvider, loanPaymentsStreamProvider,
     subscriptionsStreamProvider, pendingStreamProvider, settlementsStreamProvider, assetsStreamProvider,
+    moneyAccountsStreamProvider, transfersStreamProvider,
   ]) {
     ref.invalidate(p);
   }
@@ -134,6 +145,29 @@ void refreshFinanceData(WidgetRef ref) {
 AsyncValue<T> _derive<T>(Ref ref, T Function(FinanceSnapshot s) f) => ref.watch(financeSnapshotProvider).whenData(f);
 
 final balanceProvider = Provider<AsyncValue<BalanceSnapshot>>((ref) => _derive(ref, (s) => s.balance));
+
+/// Every account (archived included) in display order.
+final moneyAccountsProvider = Provider<AsyncValue<List<MoneyAccount>>>((ref) => _derive(ref, (s) => s.accounts));
+
+/// Accounts for pickers and Home (not archived), in display order.
+final activeAccountsProvider =
+    Provider<AsyncValue<List<MoneyAccount>>>((ref) => _derive(ref, (s) => s.activeAccounts));
+
+/// Balance (owed for credit cards) of every account, sorted by sortOrder.
+final accountBalancesProvider =
+    Provider<AsyncValue<List<AccountBalance>>>((ref) => _derive(ref, (s) => s.accountBalances));
+
+/// One account with its balance; null when it does not exist.
+final accountBalanceProvider = Provider.family<AsyncValue<AccountBalance?>, String>(
+    (ref, id) => _derive(ref, (s) => s.accountBalances.where((b) => b.account.id == id).firstOrNull));
+
+/// The default account (preselected in forms).
+final defaultAccountProvider = Provider<AsyncValue<MoneyAccount?>>((ref) => _derive(ref, (s) => s.defaultAccount));
+
+final transfersProvider = Provider<AsyncValue<List<Transfer>>>((ref) => _derive(ref, (s) => s.transfers));
+
+/// Total owed on credit cards.
+final creditOwedProvider = Provider<AsyncValue<Money>>((ref) => _derive(ref, (s) => s.balance.creditOwed));
 
 final categoriesByIdProvider =
     Provider<AsyncValue<Map<String, TransactionCategory>>>((ref) => _derive(ref, (s) => s.categoryById));

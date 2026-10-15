@@ -3,6 +3,8 @@ import 'dart:math';
 import '../../core/money/money.dart';
 import '../../core/time/dates.dart';
 import '../../core/time/frequency.dart';
+import '../../features/accounts/domain/money_account.dart';
+import '../../features/accounts/domain/transfer.dart';
 import '../../features/budgets/domain/budget.dart';
 import '../../features/categories/domain/category.dart';
 import '../../features/emergency_fund/domain/emergency_fund.dart';
@@ -43,6 +45,14 @@ abstract final class SeedCategoryIds {
   static const rental = 'cat_rental';
 }
 
+/// Ids of the seeded money accounts (stable so tests can reference them).
+abstract final class SeedAccountIds {
+  static const cash = cashAccountId;
+  static const sbi = 'acc_sbi';
+  static const axis = 'acc_axis';
+  static const hdfcCard = 'acc_hdfc_cc';
+}
+
 /// A complete dataset for the local mock backend.
 class SeedData {
   SeedData._();
@@ -61,6 +71,8 @@ class SeedData {
   /// Other people's side of shared pending items (mock network).
   List<MirrorEntry> mirrors = [];
   List<Asset> assets = [];
+  List<MoneyAccount> moneyAccounts = [];
+  List<Transfer> transfers = [];
   FinancialProfile? profile;
   EmergencyFundPlan? emergencyPlan;
 
@@ -107,7 +119,22 @@ class SeedData {
 
   static SeedData build(DataScenario scenario, DateTime today) {
     final s = SeedData._()..categories = standardCategories();
-    if (scenario == DataScenario.empty) return s;
+    if (scenario == DataScenario.empty) {
+      final now = today.dateOnly;
+      s.moneyAccounts = [
+        MoneyAccount(
+          id: cashAccountId,
+          name: 'Cash',
+          kind: MoneyAccountKind.cash,
+          opening: Money.zero,
+          openingDate: now,
+          isDefault: true,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ];
+      return s;
+    }
     _Builder(s, today.dateOnly, stressed: scenario == DataScenario.stressed).run();
     return s;
   }
@@ -138,7 +165,8 @@ class _Builder {
     DateTime date, {
     String? who,
     String? note,
-    PaymentMethod method = PaymentMethod.upi,
+    String account = SeedAccountIds.sbi,
+    String? channel = 'UPI',
     TransactionOrigin origin = TransactionOrigin.manual,
     String? ref,
   }) {
@@ -148,7 +176,8 @@ class _Builder {
       amount: amount,
       categoryId: cat,
       date: date,
-      paymentMethod: method,
+      accountId: account,
+      channel: channel,
       counterparty: who,
       note: note,
       origin: origin,
@@ -160,8 +189,8 @@ class _Builder {
     return t;
   }
 
-  Transaction _out(int min, int max, String cat, DateTime d, String who, {PaymentMethod m = PaymentMethod.upi, String? note}) =>
-      _tx(TransactionType.expense, _rs(min, max), cat, d, who: who, method: m, note: note);
+  Transaction _out(int min, int max, String cat, DateTime d, String who, {String account = SeedAccountIds.sbi, String? channel = 'UPI', String? note}) =>
+      _tx(TransactionType.expense, _rs(min, max), cat, d, who: who, account: account, channel: channel, note: note);
 
   bool _inPast(DateTime d) => !d.isAfter(today);
 
@@ -172,6 +201,7 @@ class _Builder {
       openingDate: opening,
       monthlyIncomeEstimate: Money.rupees(125000),
     );
+    _accounts();
     _monthlyActivity();
     _subscriptions();
     _loans();
@@ -180,7 +210,92 @@ class _Builder {
     _emergency();
     _budgets();
     _assets();
+    _transfers();
     s.transactions.sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  void _accounts() {
+    MoneyAccount a(
+      String id,
+      String name,
+      MoneyAccountKind kind,
+      int openingRupees, {
+      String? institution,
+      String? last4,
+      int? limitRupees,
+      bool isDefault = false,
+      int order = 0,
+    }) =>
+        MoneyAccount(
+          id: id,
+          name: name,
+          kind: kind,
+          institution: institution,
+          last4: last4,
+          opening: Money.rupees(openingRupees),
+          openingDate: opening,
+          creditLimit: limitRupees == null ? null : Money.rupees(limitRupees),
+          isDefault: isDefault,
+          sortOrder: order,
+          createdAt: stamp,
+          updatedAt: stamp,
+        );
+    // The asset openings add up to the profile's opening balance (Rs 3,60,000).
+    s.moneyAccounts = [
+      a(SeedAccountIds.cash, 'Cash', MoneyAccountKind.cash, 15000, order: 0),
+      a(SeedAccountIds.sbi, 'SBI', MoneyAccountKind.debitCard, 120000,
+          institution: 'SBI', last4: '4821', isDefault: true, order: 1),
+      a(SeedAccountIds.axis, 'Axis', MoneyAccountKind.bank, 225000, institution: 'Axis Bank', order: 2),
+      a(SeedAccountIds.hdfcCard, 'HDFC Millennia', MoneyAccountKind.creditCard, 0,
+          institution: 'HDFC Bank', last4: '7730', limitRupees: 200000, order: 3),
+    ];
+  }
+
+  Transfer _transfer(String from, String to, Money amount, DateTime date, {String? channel, String? note}) {
+    final t = Transfer(
+      id: _id('trf'),
+      fromAccountId: from,
+      toAccountId: to,
+      amount: amount,
+      date: date,
+      channel: channel,
+      note: note,
+      createdAt: date.add(const Duration(hours: 13)),
+      updatedAt: date.add(const Duration(hours: 13)),
+    );
+    s.transfers.add(t);
+    return t;
+  }
+
+  /// Monthly top-up of the SBI card account, ATM cash withdrawals and the
+  /// credit-card bill (previous month's spend, paid on the 10th).
+  void _transfers() {
+    for (var m = 0; m <= 6; m++) {
+      final month = DateTime(opening.year, opening.month + m);
+      DateTime d(int day) => DateTime(month.year, month.month, day.clamp(1, month.daysInMonth));
+      if (_inPast(d(2))) {
+        _transfer(SeedAccountIds.axis, SeedAccountIds.sbi, Money.rupees(40000), d(2), channel: 'IMPS', note: 'Monthly top-up');
+      }
+      if (_inPast(d(6))) {
+        _transfer(SeedAccountIds.sbi, SeedAccountIds.cash, Money.rupees(5000), d(6), channel: 'ATM', note: 'ATM withdrawal');
+      }
+    }
+    final spendByMonth = <int, int>{};
+    for (final t in s.transactions) {
+      if (t.accountId != SeedAccountIds.hdfcCard || t.isIncome) continue;
+      final key = t.date.year * 12 + t.date.month;
+      spendByMonth[key] = (spendByMonth[key] ?? 0) + t.amount.paise;
+    }
+    for (final e in spendByMonth.entries) {
+      if (e.key >= today.year * 12 + today.month) continue; // this month's spend is still owed
+      final y = (e.key - 1) ~/ 12;
+      final mo = (e.key - 1) % 12 + 1;
+      final payDate = DateTime(y, mo + 1, 10);
+      if (_inPast(payDate)) {
+        _transfer(SeedAccountIds.axis, SeedAccountIds.hdfcCard, Money.fromPaise(e.value), payDate,
+            channel: 'Net banking', note: 'Credit card bill');
+      }
+    }
   }
 
   void _monthlyActivity() {
@@ -195,12 +310,12 @@ class _Builder {
       final isCurrent = month.isSameMonth(today);
       if (!(stressed && isCurrent)) {
         at(1, (x) => _tx(TransactionType.income, Money.rupees(125000), SeedCategoryIds.salary, x,
-            who: 'Acme Technologies Pvt Ltd', note: 'Salary credit', method: PaymentMethod.bankTransfer));
+            who: 'Acme Technologies Pvt Ltd', note: 'Salary credit', account: SeedAccountIds.axis, channel: 'NEFT'));
       }
       at(3, (x) => _tx(TransactionType.expense, Money.rupees(28000), SeedCategoryIds.rent, x,
-          who: 'Mr. Sharma (Landlord)', note: 'House rent', method: PaymentMethod.bankTransfer));
+          who: 'Mr. Sharma (Landlord)', note: 'House rent', account: SeedAccountIds.axis, channel: 'IMPS'));
       at(5, (x) => _tx(TransactionType.expense, Money.rupees(10000), SeedCategoryIds.family, x,
-          who: 'Mom', note: 'Monthly support', method: PaymentMethod.bankTransfer));
+          who: 'Mom', note: 'Monthly support'));
       at(8, (x) => _tx(TransactionType.expense, Money.rupees(1178), SeedCategoryIds.utilities, x, who: 'Airtel Xstream', note: 'Broadband'));
       at(12, (x) => _out(1750, 2650, SeedCategoryIds.utilities, x, 'BESCOM', note: 'Electricity bill'));
       for (final day in [2, 7, 13, 19, 26]) {
@@ -213,39 +328,39 @@ class _Builder {
         at(day, (x) => _out(120, 640, SeedCategoryIds.transport, x, _pick(['Uber', 'Ola', 'Rapido', 'Namma Metro'])));
       }
       for (final day in [10, 24]) {
-        at(day, (x) => _out(2000, 3000, SeedCategoryIds.transport, x, 'Indian Oil', m: PaymentMethod.card, note: 'Fuel'));
+        at(day, (x) => _out(2000, 3000, SeedCategoryIds.transport, x, 'Indian Oil', account: SeedAccountIds.hdfcCard, channel: 'Tap / swipe', note: 'Fuel'));
       }
       if (!isCurrent) {
-        at(15, (x) => _out(800, 4200, SeedCategoryIds.shopping, x, _pick(['Amazon', 'Flipkart', 'Myntra', 'Croma']), m: PaymentMethod.card));
-        at(25, (x) => _out(600, 2600, SeedCategoryIds.shopping, x, _pick(['Amazon', 'Nykaa', 'Decathlon']), m: PaymentMethod.card));
+        at(15, (x) => _out(800, 4200, SeedCategoryIds.shopping, x, _pick(['Amazon', 'Flipkart', 'Myntra', 'Croma']), account: SeedAccountIds.hdfcCard, channel: null));
+        at(25, (x) => _out(600, 2600, SeedCategoryIds.shopping, x, _pick(['Amazon', 'Nykaa', 'Decathlon']), account: SeedAccountIds.hdfcCard, channel: null));
         at(17, (x) => _out(450, 1300, SeedCategoryIds.entertainment, x, 'BookMyShow'));
       }
-      at(21, (x) => _out(280, 1200, SeedCategoryIds.health, x, 'Apollo Pharmacy'));
-      at(18, (x) => _out(499, 1499, SeedCategoryIds.personalCare, x, 'Urban Company'));
+      at(21, (x) => _out(280, 1200, SeedCategoryIds.health, x, 'Apollo Pharmacy', account: SeedAccountIds.cash, channel: null));
+      at(18, (x) => _out(499, 1499, SeedCategoryIds.personalCare, x, 'Urban Company', account: SeedAccountIds.cash, channel: null));
       if (m.isOdd) {
         at(20, (x) => _tx(TransactionType.income, _rs(18000, 34000), SeedCategoryIds.freelance, x,
-            who: _pick(['Northwind Studio', 'Pixel Labs', 'Kite Media']), note: 'Design project', method: PaymentMethod.bankTransfer));
+            who: _pick(['Northwind Studio', 'Pixel Labs', 'Kite Media']), note: 'Design project', account: SeedAccountIds.axis, channel: 'NEFT'));
       }
       if (m == 2 || m == 5) {
-        at(28, (x) => _tx(TransactionType.income, _rs(2100, 3400), SeedCategoryIds.interest, x, who: 'HDFC Bank', note: 'Savings interest', method: PaymentMethod.bankTransfer));
+        at(28, (x) => _tx(TransactionType.income, _rs(2100, 3400), SeedCategoryIds.interest, x, who: 'HDFC Bank', note: 'Savings interest', account: SeedAccountIds.axis, channel: 'NEFT'));
       }
       if (m == 3) {
-        at(11, (x) => _out(9500, 9500, SeedCategoryIds.insurance, x, 'Star Health', m: PaymentMethod.card, note: 'Health insurance premium'));
-        at(14, (x) => _out(14500, 18500, SeedCategoryIds.travel, x, 'IndiGo', m: PaymentMethod.card, note: 'Diwali trip flights'));
-        at(16, (x) => _out(3500, 6500, SeedCategoryIds.gifts, x, 'Tanishq', m: PaymentMethod.card, note: 'Festival gifts'));
+        at(11, (x) => _out(9500, 9500, SeedCategoryIds.insurance, x, 'Star Health', account: SeedAccountIds.hdfcCard, channel: null, note: 'Health insurance premium'));
+        at(14, (x) => _out(14500, 18500, SeedCategoryIds.travel, x, 'IndiGo', account: SeedAccountIds.hdfcCard, channel: null, note: 'Diwali trip flights'));
+        at(16, (x) => _out(3500, 6500, SeedCategoryIds.gifts, x, 'Tanishq', account: SeedAccountIds.hdfcCard, channel: null, note: 'Festival gifts'));
       }
       if (m == 4) at(9, (x) => _tx(TransactionType.income, Money.rupees(1240), SeedCategoryIds.refunds, x, who: 'Amazon', note: 'Return refund'));
     }
     // Current-month spending that pushes budgets into warning / breach.
     final cm = today.startOfMonth;
     DateTime cd(int day) => DateTime(cm.year, cm.month, min(day, today.day));
-    _tx(TransactionType.expense, Money.rupees(5420), SeedCategoryIds.shopping, cd(6), who: 'Myntra', note: 'Festive kurta set', method: PaymentMethod.card);
+    _tx(TransactionType.expense, Money.rupees(5420), SeedCategoryIds.shopping, cd(6), who: 'Myntra', note: 'Festive kurta set', account: SeedAccountIds.hdfcCard, channel: null);
     _tx(TransactionType.expense, Money.rupees(2350), SeedCategoryIds.entertainment, cd(4), who: 'BookMyShow', note: 'Coldplay tribute night');
   }
 
   void _subscriptions() {
     const cat = SeedCategoryIds.subscriptions;
-    void sub(String name, int rupees, Frequency f, int dueInDays, {String category = cat, PaymentMethod method = PaymentMethod.card, SubscriptionStatus status = SubscriptionStatus.active, int historyMonths = 6}) {
+    void sub(String name, int rupees, Frequency f, int dueInDays, {String category = cat, String account = SeedAccountIds.hdfcCard, SubscriptionStatus status = SubscriptionStatus.active, int historyMonths = 6}) {
       final id = _id('sub');
       final next = today.add(Duration(days: dueInDays)).dateOnly;
       final amount = Money.rupees(rupees);
@@ -254,7 +369,8 @@ class _Builder {
       while (!paid.isBefore(opening) && count < historyMonths && status != SubscriptionStatus.cancelled) {
         if (_inPast(paid)) {
           _tx(TransactionType.expense, amount, category, paid, who: name, note: '${f.label} renewal',
-              method: method, origin: TransactionOrigin.subscription, ref: id);
+              account: account, channel: account == SeedAccountIds.hdfcCard ? null : 'UPI',
+              origin: TransactionOrigin.subscription, ref: id);
         }
         count++;
         paid = f.nth(next, -(count + 1));
@@ -268,16 +384,16 @@ class _Builder {
         nextDueDate: next,
         startDate: DateTime(opening.year - 1, opening.month, next.day.clamp(1, 28)),
         status: status,
-        paymentMethod: method,
+        accountId: account,
         createdAt: stamp,
         updatedAt: stamp,
       ));
     }
 
     sub('Netflix Premium', 649, Frequency.monthly, 3);
-    sub('Spotify Premium', 119, Frequency.monthly, 11, method: PaymentMethod.upi);
+    sub('Spotify Premium', 119, Frequency.monthly, 11, account: SeedAccountIds.sbi);
     sub('YouTube Premium', 149, Frequency.monthly, 19);
-    sub('Jio Postpaid', 399, Frequency.monthly, 15, category: SeedCategoryIds.utilities, method: PaymentMethod.upi);
+    sub('Jio Postpaid', 399, Frequency.monthly, 15, category: SeedCategoryIds.utilities, account: SeedAccountIds.sbi);
     sub('Cult.fit Elite', 1999, Frequency.monthly, stressed ? -9 : -2, category: SeedCategoryIds.fitness);
     sub('Amazon Prime', 1499, Frequency.yearly, 142);
     sub('Google One 2TB', 650, Frequency.quarterly, 37);
@@ -358,7 +474,7 @@ class _Builder {
       updatedAt: stamp,
     );
     final disb = _tx(TransactionType.expense, lent.principal, SystemCategories.loanGiven, lentStart,
-        who: 'Karan Mehta', note: 'Loan given', method: PaymentMethod.bankTransfer,
+        who: 'Karan Mehta', note: 'Loan given', account: SeedAccountIds.axis, channel: 'NEFT',
         origin: TransactionOrigin.loanDisbursement, ref: lent.id);
     s.loans.add(Loan(
       id: lent.id, name: lent.name, counterparty: lent.counterparty, direction: lent.direction,
@@ -382,7 +498,7 @@ class _Builder {
         date,
         who: loan.counterparty,
         note: '${loan.name} · ${kind.label}${period != null ? ' #$period' : ''}',
-        method: PaymentMethod.bankTransfer,
+        account: SeedAccountIds.axis, channel: 'NEFT',
         origin: TransactionOrigin.loanRepayment,
         ref: loan.id,
       ).id;
@@ -429,7 +545,7 @@ class _Builder {
       return item;
     }
 
-    void settle(PendingPayment item, int rupees, int daysAgo, {PaymentMethod method = PaymentMethod.upi}) {
+    void settle(PendingPayment item, int rupees, int daysAgo, {String account = SeedAccountIds.sbi}) {
       final date = today.subtract(Duration(days: daysAgo));
       final owe = item.direction == PendingDirection.iOwe;
       final tx = _tx(
@@ -439,7 +555,8 @@ class _Builder {
         date,
         who: item.counterparty,
         note: 'Settlement · ${item.purpose}',
-        method: method,
+        account: account,
+        channel: 'UPI',
         origin: TransactionOrigin.pendingSettlement,
         ref: item.id,
       );
@@ -448,7 +565,8 @@ class _Builder {
         pendingId: item.id,
         amount: Money.rupees(rupees),
         date: date,
-        method: method,
+        accountId: account,
+        channel: 'UPI',
         transactionId: tx.id,
         createdAt: date,
       ));

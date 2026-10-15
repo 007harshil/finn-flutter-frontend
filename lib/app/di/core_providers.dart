@@ -64,6 +64,8 @@ final financeRepositoriesProvider = Provider<FinanceRepositories>((ref) {
     pending: store.pending,
     settlements: store.settlements,
     assets: store.assets,
+    moneyAccounts: store.moneyAccounts,
+    transfers: store.transfers,
     profile: store.profile,
     emergencyPlan: store.emergencyPlan,
     alertInbox: store.alertInbox,

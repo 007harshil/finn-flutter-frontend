@@ -50,13 +50,13 @@ void main() {
       expect(filter().categoryIds, isEmpty);
     }
 
-    // Filter sheet: amount preset, payment method, live count, apply.
+    // Filter sheet: amount preset, account, live count, apply.
     await tester.tap(find.byKey(const ValueKey('activity-filters')));
     await tester.pumpAndSettle();
     expect(find.text('Filters'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('filter-amount:500-2000')));
     await tester.pumpAndSettle();
-    await scrollAndTap(tester, find.byKey(const ValueKey('filter-method:upi')));
+    await scrollAndTap(tester, find.byKey(const ValueKey('filter-account:acc_sbi')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('activity-filter-apply')));
     await tester.pumpAndSettle();
@@ -65,13 +65,13 @@ void main() {
     expect(f.amount, const AmountRange(minPaise: 50000, maxPaise: 200000));
     expect(f.advancedCount, 2);
     expect(find.byKey(const ValueKey('active-filter:amount')), findsOneWidget);
-    expect(find.byKey(const ValueKey('active-filter:methods')), findsOneWidget);
+    expect(find.byKey(const ValueKey('active-filter:accounts')), findsOneWidget);
 
     // Removing a chip clears just that filter.
     await tester.tap(find.byKey(const ValueKey('active-filter:amount')));
     await tester.pumpAndSettle();
     expect(filter().amount, isNull);
-    expect(filter().methods, isNotEmpty);
+    expect(filter().accountIds, isNotEmpty);
     expect(tester.takeException(), isNull);
   });
 

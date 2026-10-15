@@ -123,7 +123,6 @@ MirrorEntry mirrorOf(PendingPayment p, List<PendingSettlement> settlements, {req
           pendingId: 'mir_${link.sharedId}',
           amount: s.amount,
           date: s.date,
-          method: s.method,
           note: s.note,
           createdAt: s.createdAt,
         ),

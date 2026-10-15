@@ -173,6 +173,7 @@ class ExportService {
     }
 
     String cat(String id) => s.category(id)?.name ?? 'Uncategorised';
+    String acct(String id) => s.account(id)?.name ?? id;
     String d(DateTime? v) => v == null ? '' : DateFormats.iso.format(v);
     String amt(Money m) => m.toDecimalString();
     String fmt(Money m) => MoneyFormatter.format(m, decimals: DecimalDisplay.always);
@@ -182,12 +183,12 @@ class ExportService {
         case ExportModule.transactions:
           add('transactions', const [
             'date', 'type', 'category', 'amount', 'amount_formatted', 'signed_amount', //
-            'payment_method', 'counterparty', 'note', 'source', 'id',
+            'account', 'channel', 'counterparty', 'note', 'source', 'id',
           ], [
             for (final t in transactionsFor(s, r))
               [
                 d(t.date), t.type.label, Csv.text(cat(t.categoryId)), amt(t.amount), fmt(t.amount),
-                amt(t.signedAmount), t.paymentMethod?.label ?? '', Csv.text(t.counterparty), Csv.text(t.note),
+                amt(t.signedAmount), Csv.text(acct(t.accountId)), Csv.text(t.channel), Csv.text(t.counterparty), Csv.text(t.note),
                 t.origin.label, t.id,
               ],
           ]);
@@ -258,12 +259,12 @@ class ExportService {
         case ExportModule.subscriptions:
           add('subscriptions', const [
             'name', 'category', 'amount', 'amount_formatted', 'frequency', 'monthly_equivalent', //
-            'next_due_date', 'status', 'payment_method', 'id',
+            'next_due_date', 'status', 'account', 'id',
           ], [
             for (final x in s.subscriptions)
               [
                 Csv.text(x.name), Csv.text(cat(x.categoryId)), amt(x.amount), fmt(x.amount), x.frequency.label,
-                amt(x.monthlyEquivalent), d(x.nextDueDate), x.status.label, x.paymentMethod?.label ?? '', x.id,
+                amt(x.monthlyEquivalent), d(x.nextDueDate), x.status.label, x.accountId == null ? '' : Csv.text(acct(x.accountId!)), x.id,
               ],
           ]);
         case ExportModule.pending:
@@ -281,11 +282,11 @@ class ExportService {
                 views[p.id]?.status.label ?? '', p.id,
               ],
           ]);
-          add('pending_settlements', const ['date', 'counterparty', 'amount', 'amount_formatted', 'method', 'note', 'id'], [
+          add('pending_settlements', const ['date', 'counterparty', 'amount', 'amount_formatted', 'account', 'channel', 'note', 'id'], [
             for (final x in _settlements(s, r))
               [
                 d(x.date), Csv.text(names[x.pendingId] ?? 'Deleted record'), amt(x.amount), fmt(x.amount),
-                x.method?.label ?? '', Csv.text(x.note), x.id,
+                x.accountId == null ? '' : Csv.text(acct(x.accountId!)), Csv.text(x.channel), Csv.text(x.note), x.id,
               ],
           ]);
         case ExportModule.assets:
@@ -319,6 +320,8 @@ class ExportService {
       final usedCats = txs.map((t) => t.categoryId).toSet();
       data['categories'] = s.categories.where((c) => usedCats.contains(c.id)).map(CategoryDto.toJson).toList();
       data['transactions'] = rows(txs, TransactionDto.toJson);
+      data['moneyAccounts'] = rows(s.accounts, MoneyAccountDto.toJson);
+      data['transfers'] = rows(s.transfers.where((t) => r.range.contains(t.date)), TransferDto.toJson);
     }
     if (has(ExportModule.budgets)) data['budgets'] = rows(s.budgets, BudgetDto.toJson);
     if (has(ExportModule.goals)) {

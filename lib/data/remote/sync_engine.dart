@@ -20,6 +20,8 @@ abstract final class SyncCollections {
   static const pending = 'pending';
   static const settlements = 'settlements';
   static const assets = 'assets';
+  static const moneyAccounts = 'moneyAccounts';
+  static const transfers = 'transfers';
 
   static const all = [
     transactions,
@@ -33,6 +35,8 @@ abstract final class SyncCollections {
     pending,
     settlements,
     assets,
+    moneyAccounts,
+    transfers,
   ];
 }
 

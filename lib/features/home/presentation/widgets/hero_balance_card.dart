@@ -133,6 +133,24 @@ class _BalanceState extends State<_Balance> {
                   ),
                 ],
         ),
+        if (b.creditOwed.isPositive) ...[
+          const SizedBox(height: Sp.sm),
+          MergeSemantics(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text('Credit card owed', style: t.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(width: Sp.sm),
+                AmountText(
+                  b.creditOwed,
+                  style: t.figureSmall.copyWith(color: c.red),
+                  decimals: DecimalDisplay.none,
+                ),
+              ],
+            ),
+          ),
+        ],
         if (over && !hidden) ...[
           const SizedBox(height: Sp.md),
           LedgerNote(

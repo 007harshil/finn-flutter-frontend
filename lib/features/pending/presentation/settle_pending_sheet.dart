@@ -9,7 +9,8 @@ import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
-import '../../transactions/domain/transaction.dart';
+import '../../accounts/presentation/widgets/account_picker_field.dart';
+import '../../accounts/presentation/widgets/channel_field.dart';
 import '../application/pending_actions.dart';
 import '../domain/pending_payment.dart';
 import 'pending_ui.dart';
@@ -46,7 +47,9 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
   final _note = TextEditingController();
   bool _full = true;
   DateTime? _date;
-  PaymentMethod _method = PaymentMethod.upi;
+  // Null until picked: the form shows the default account and sends it.
+  String? _accountId;
+  String? _channel;
   bool _recordCash = true;
   bool _busy = false;
   bool _prefilled = false;
@@ -86,7 +89,8 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
         pendingId: v.payment.id,
         amount: amount,
         date: _date ?? ref.read(todayProvider),
-        method: _method,
+        accountId: _recordCash ? (_accountId ?? ref.read(defaultAccountProvider).value?.id) : null,
+        channel: _recordCash ? _channel : null,
         recordCashMovement: _recordCash,
         note: note.isEmpty ? null : note,
       ),
@@ -190,18 +194,6 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
             onChanged: (d) => setState(() => _date = d),
           ),
           const SizedBox(height: LedgerForm.gap),
-          LedgerField(
-            label: 'Method',
-            child: LedgerChoiceChips<PaymentMethod>(
-              options: [
-                for (final m in PaymentMethod.values)
-                  LedgerOption(m, m.label, icon: _methodIcons[m]),
-              ],
-              selected: _method,
-              onChanged: (m) => setState(() => _method = m),
-            ),
-          ),
-          const SizedBox(height: LedgerForm.gap),
           LedgerSwitchRow(
             title: 'Record as cash movement',
             subtitle: _recordCash
@@ -212,6 +204,24 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
             value: _recordCash,
             onChanged: (b) => setState(() => _recordCash = b),
           ),
+          if (_recordCash) ...[
+            const SizedBox(height: LedgerForm.gap),
+            AccountPickerField(
+              label: owe ? 'Paid from' : 'Received in',
+              value: _accountId ?? ref.watch(defaultAccountProvider).value?.id,
+              errorText: _errors['accountId'],
+              onChanged: (id) => setState(() {
+                _accountId = id;
+                _errors = Map.of(_errors)..remove('accountId');
+              }),
+            ),
+            const SizedBox(height: LedgerForm.gap),
+            ChannelField(
+              value: _channel,
+              errorText: _errors['channel'],
+              onChanged: (v) => _channel = v,
+            ),
+          ],
           const SizedBox(height: LedgerForm.gap),
           LedgerTextField(
             label: 'Note (optional)',
@@ -225,15 +235,6 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
     );
   }
 }
-
-const _methodIcons = {
-  PaymentMethod.upi: LucideIcons.smartphone,
-  PaymentMethod.card: LucideIcons.creditCard,
-  PaymentMethod.cash: LucideIcons.banknote,
-  PaymentMethod.bankTransfer: LucideIcons.landmark,
-  PaymentMethod.wallet: LucideIcons.wallet,
-  PaymentMethod.other: LucideIcons.circleDot,
-};
 
 class _FormSkeleton extends StatelessWidget {
   const _FormSkeleton();

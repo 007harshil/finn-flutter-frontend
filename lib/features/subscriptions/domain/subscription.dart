@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import '../../../core/money/money.dart';
 import '../../../core/time/dates.dart';
 import '../../../core/time/frequency.dart';
-import '../../transactions/domain/transaction.dart';
 
 enum SubscriptionStatus {
   active('Active'),
@@ -30,7 +29,7 @@ class Subscription {
     this.startDate,
     this.status = SubscriptionStatus.active,
     this.autoRenews = true,
-    this.paymentMethod,
+    this.accountId,
     this.note,
     this.version = 1,
   });
@@ -46,7 +45,8 @@ class Subscription {
 
   /// Whether the provider renews automatically (informational).
   final bool autoRenews;
-  final PaymentMethod? paymentMethod;
+  /// Account it is usually charged to.
+  final String? accountId;
   final String? note;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -66,7 +66,7 @@ class Subscription {
     DateTime? Function()? startDate,
     SubscriptionStatus? status,
     bool? autoRenews,
-    PaymentMethod? Function()? paymentMethod,
+    String? Function()? accountId,
     String? Function()? note,
     DateTime? updatedAt,
     int? version,
@@ -81,7 +81,7 @@ class Subscription {
         startDate: startDate != null ? startDate() : this.startDate,
         status: status ?? this.status,
         autoRenews: autoRenews ?? this.autoRenews,
-        paymentMethod: paymentMethod != null ? paymentMethod() : this.paymentMethod,
+        accountId: accountId != null ? accountId() : this.accountId,
         note: note != null ? note() : this.note,
         createdAt: createdAt,
         updatedAt: updatedAt ?? this.updatedAt,

@@ -8,6 +8,8 @@ import '../../core/persistence/entity_collection.dart';
 import '../../core/persistence/json_utils.dart';
 import '../../core/time/dates.dart';
 import '../../core/time/frequency.dart';
+import '../../features/accounts/domain/money_account.dart';
+import '../../features/accounts/domain/transfer.dart';
 import '../../features/alerts/domain/alert.dart';
 import '../../features/budgets/domain/budget.dart';
 import '../../features/categories/domain/category.dart';
@@ -20,6 +22,16 @@ import '../../features/settings/domain/financial_profile.dart';
 import '../../features/subscriptions/domain/subscription.dart';
 import '../../features/transactions/domain/transaction.dart';
 
+/// Channel label for a legacy `paymentMethod` value (old device data and
+/// payloads). `cash`, `other` and unknown values have no channel.
+String? legacyChannelOf(Object? method) => switch (method) {
+      'upi' => 'UPI',
+      'bankTransfer' => 'Bank transfer',
+      'card' => 'Card',
+      'wallet' => 'Wallet',
+      _ => null,
+    };
+
 abstract final class TransactionDto {
   static JsonMap toJson(Transaction t) => {
         'id': t.id,
@@ -27,7 +39,8 @@ abstract final class TransactionDto {
         'amountPaise': J.money(t.amount),
         'categoryId': t.categoryId,
         'date': J.date(t.date),
-        'paymentMethod': t.paymentMethod?.name,
+        'accountId': t.accountId,
+        'channel': t.channel,
         'counterparty': t.counterparty,
         'note': t.note,
         'origin': t.origin.name,
@@ -43,7 +56,12 @@ abstract final class TransactionDto {
         amount: J.toMoney(j['amountPaise']),
         categoryId: j['categoryId'] as String,
         date: J.toDate(j['date']),
-        paymentMethod: J.enumOrNull(PaymentMethod.values, j['paymentMethod']),
+        // Old device data has no accountId: it belongs to the Cash account
+        // and its payment method becomes the channel.
+        accountId: (j['accountId'] as String?) ?? cashAccountId,
+        channel: j.containsKey('channel') || j.containsKey('accountId')
+            ? j['channel'] as String?
+            : legacyChannelOf(j['paymentMethod']),
         counterparty: j['counterparty'] as String?,
         note: j['note'] as String?,
         origin: J.enumByName(TransactionOrigin.values, j['origin'], TransactionOrigin.manual),
@@ -281,7 +299,7 @@ abstract final class SubscriptionDto {
         'startDate': s.startDate == null ? null : J.date(s.startDate!),
         'status': s.status.name,
         'autoRenews': s.autoRenews,
-        'paymentMethod': s.paymentMethod?.name,
+        'accountId': s.accountId,
         'note': s.note,
         'createdAt': J.instant(s.createdAt),
         'updatedAt': J.instant(s.updatedAt),
@@ -298,7 +316,7 @@ abstract final class SubscriptionDto {
         startDate: J.toDateOrNull(j['startDate']),
         status: J.enumByName(SubscriptionStatus.values, j['status'], SubscriptionStatus.active),
         autoRenews: (j['autoRenews'] as bool?) ?? true,
-        paymentMethod: J.enumOrNull(PaymentMethod.values, j['paymentMethod']),
+        accountId: (j['accountId'] as String?) ?? (j['paymentMethod'] != null ? cashAccountId : null),
         note: j['note'] as String?,
         createdAt: J.toInstant(j['createdAt']),
         updatedAt: J.toInstant(j['updatedAt']),
@@ -366,7 +384,8 @@ abstract final class SettlementDto {
         'pendingId': s.pendingId,
         'amountPaise': J.money(s.amount),
         'date': J.date(s.date),
-        'method': s.method?.name,
+        'accountId': s.accountId,
+        'channel': s.channel,
         'transactionId': s.transactionId,
         'note': s.note,
         'createdAt': J.instant(s.createdAt),
@@ -377,7 +396,10 @@ abstract final class SettlementDto {
         pendingId: j['pendingId'] as String,
         amount: J.toMoney(j['amountPaise']),
         date: J.toDate(j['date']),
-        method: J.enumOrNull(PaymentMethod.values, j['method']),
+        accountId: (j['accountId'] as String?) ?? (j['method'] != null || j['transactionId'] != null ? cashAccountId : null),
+        channel: j.containsKey('channel') || j.containsKey('accountId')
+            ? j['channel'] as String?
+            : legacyChannelOf(j['method']),
         transactionId: j['transactionId'] as String?,
         note: j['note'] as String?,
         createdAt: J.toInstant(j['createdAt']),
@@ -436,6 +458,72 @@ abstract final class AssetDto {
         type: J.enumByName(AssetType.values, j['type'], AssetType.other),
         value: J.toMoney(j['valuePaise']),
         valuedOn: J.toDate(j['valuedOn']),
+        note: j['note'] as String?,
+        createdAt: J.toInstant(j['createdAt']),
+        updatedAt: J.toInstant(j['updatedAt']),
+        version: (j['version'] as num?)?.toInt() ?? 1,
+      );
+}
+
+abstract final class MoneyAccountDto {
+  static JsonMap toJson(MoneyAccount a) => {
+        'id': a.id,
+        'name': a.name,
+        'kind': a.kind.name,
+        'institution': a.institution,
+        'last4': a.last4,
+        'openingPaise': J.money(a.opening),
+        'openingDate': J.date(a.openingDate),
+        'creditLimitPaise': a.creditLimit == null ? null : J.money(a.creditLimit!),
+        'isDefault': a.isDefault,
+        'isArchived': a.isArchived,
+        'sortOrder': a.sortOrder,
+        'note': a.note,
+        'createdAt': J.instant(a.createdAt),
+        'updatedAt': J.instant(a.updatedAt),
+        'version': a.version,
+      };
+
+  static MoneyAccount fromJson(JsonMap j) => MoneyAccount(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        kind: J.enumByName(MoneyAccountKind.values, j['kind'], MoneyAccountKind.bank),
+        institution: j['institution'] as String?,
+        last4: j['last4'] as String?,
+        opening: J.toMoney(j['openingPaise']),
+        openingDate: J.toDate(j['openingDate']),
+        creditLimit: J.toMoneyOrNull(j['creditLimitPaise']),
+        isDefault: (j['isDefault'] as bool?) ?? false,
+        isArchived: (j['isArchived'] as bool?) ?? false,
+        sortOrder: (j['sortOrder'] as num?)?.toInt() ?? 0,
+        note: j['note'] as String?,
+        createdAt: J.toInstant(j['createdAt']),
+        updatedAt: J.toInstant(j['updatedAt']),
+        version: (j['version'] as num?)?.toInt() ?? 1,
+      );
+}
+
+abstract final class TransferDto {
+  static JsonMap toJson(Transfer t) => {
+        'id': t.id,
+        'fromAccountId': t.fromAccountId,
+        'toAccountId': t.toAccountId,
+        'amountPaise': J.money(t.amount),
+        'date': J.date(t.date),
+        'channel': t.channel,
+        'note': t.note,
+        'createdAt': J.instant(t.createdAt),
+        'updatedAt': J.instant(t.updatedAt),
+        'version': t.version,
+      };
+
+  static Transfer fromJson(JsonMap j) => Transfer(
+        id: j['id'] as String,
+        fromAccountId: j['fromAccountId'] as String,
+        toAccountId: j['toAccountId'] as String,
+        amount: J.toMoney(j['amountPaise']),
+        date: J.toDate(j['date']),
+        channel: j['channel'] as String?,
         note: j['note'] as String?,
         createdAt: J.toInstant(j['createdAt']),
         updatedAt: J.toInstant(j['updatedAt']),

@@ -1,6 +1,10 @@
+import '../../core/money/money.dart';
 import '../../core/persistence/entity_collection.dart';
+import '../../core/time/dates.dart';
 import '../../core/persistence/persistence_driver.dart';
 import '../../domain/repositories.dart';
+import '../../features/accounts/domain/money_account.dart';
+import '../../features/accounts/domain/transfer.dart';
 import '../../features/alerts/domain/alert.dart';
 import '../../features/budgets/domain/budget.dart';
 import '../../features/categories/domain/category.dart';
@@ -70,6 +74,16 @@ class LocalSettlementRepository extends EntityCollection<PendingSettlement> impl
 class LocalAssetRepository extends EntityCollection<Asset> implements AssetRepository {
   LocalAssetRepository(PersistenceDriver d, MockBehavior b)
       : super(storageKey: 'assets', idOf: (e) => e.id, encode: AssetDto.toJson, decode: AssetDto.fromJson, driver: d, behavior: b);
+}
+
+class LocalMoneyAccountRepository extends EntityCollection<MoneyAccount> implements MoneyAccountRepository {
+  LocalMoneyAccountRepository(PersistenceDriver d, MockBehavior b)
+      : super(storageKey: 'money_accounts', idOf: (e) => e.id, encode: MoneyAccountDto.toJson, decode: MoneyAccountDto.fromJson, driver: d, behavior: b);
+}
+
+class LocalTransferRepository extends EntityCollection<Transfer> implements TransferRepository {
+  LocalTransferRepository(PersistenceDriver d, MockBehavior b)
+      : super(storageKey: 'transfers', idOf: (e) => e.id, encode: TransferDto.toJson, decode: TransferDto.fromJson, driver: d, behavior: b);
 }
 
 class LocalSharedLedgerRepository extends EntityCollection<MirrorEntry> implements SharedLedgerRepository {
@@ -160,6 +174,8 @@ class LocalDataStore {
     pending = LocalPendingRepository(driver, this.behavior);
     settlements = LocalSettlementRepository(driver, this.behavior);
     assets = LocalAssetRepository(driver, this.behavior);
+    moneyAccounts = LocalMoneyAccountRepository(driver, this.behavior);
+    transfers = LocalTransferRepository(driver, this.behavior);
     profile = LocalProfileRepository(driver, this.behavior);
     emergencyPlan = LocalEmergencyPlanRepository(driver, this.behavior);
     alertInbox = LocalAlertInboxRepository(driver);
@@ -181,6 +197,8 @@ class LocalDataStore {
   late final LocalPendingRepository pending;
   late final LocalSettlementRepository settlements;
   late final LocalAssetRepository assets;
+  late final LocalMoneyAccountRepository moneyAccounts;
+  late final LocalTransferRepository transfers;
   late final LocalProfileRepository profile;
   late final LocalEmergencyPlanRepository emergencyPlan;
   late final LocalAlertInboxRepository alertInbox;
@@ -189,7 +207,7 @@ class LocalDataStore {
 
   List<EntityCollection<Object?>> get _collections => [
         transactions, categories, budgets, goals, savingsMovements, loans,
-        loanPayments, subscriptions, pending, settlements, assets, sharedLedger,
+        loanPayments, subscriptions, pending, settlements, assets, moneyAccounts, transfers, sharedLedger,
       ].cast<EntityCollection<Object?>>();
 
   /// Loads persisted data; seeds [scenario] when nothing is stored yet.
@@ -206,9 +224,45 @@ class LocalDataStore {
     await Future.wait([
       categories.load(), budgets.load(), goals.load(), savingsMovements.load(), loans.load(),
       loanPayments.load(), subscriptions.load(), pending.load(), settlements.load(), assets.load(), sharedLedger.load(),
-      profile.store.load(), emergencyPlan.store.load(), alertInbox.store.load(),
+      profile.store.load(), emergencyPlan.store.load(), alertInbox.store.load(), transfers.load(),
     ]);
+    // Data stored before money accounts existed has no `money_accounts` key.
+    if (!await moneyAccounts.load()) await migrateToMoneyAccounts();
     return true;
+  }
+
+  /// One-time device migration (spec: money accounts, section 7). Creates
+  /// the single `acc_cash` Cash account holding the old profile opening
+  /// balance; every existing transaction, subscription and settlement
+  /// already decodes onto it (see the DTOs' legacy handling), so totals do
+  /// not change. Old payment methods become channels. Re-persists the
+  /// records in the new shape.
+  Future<void> migrateToMoneyAccounts() async {
+    final p = profile.current;
+    final txs = transactions.current;
+    var openingDate = p?.openingDate.dateOnly;
+    if (openingDate == null && txs.isNotEmpty) {
+      openingDate = txs.map((t) => t.date.dateOnly).reduce((a, b) => a.isBefore(b) ? a : b);
+    }
+    openingDate ??= DateTime.now().dateOnly;
+    final now = DateTime.now();
+    moneyAccounts.seed([
+      MoneyAccount(
+        id: cashAccountId,
+        name: 'Cash',
+        kind: MoneyAccountKind.cash,
+        opening: p?.openingBalance ?? Money.zero,
+        openingDate: openingDate,
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    ]);
+    transactions.seed(List.of(transactions.current));
+    subscriptions.seed(List.of(subscriptions.current));
+    settlements.seed(List.of(settlements.current));
+    transfers.seed(const []);
+    await flush();
   }
 
   /// Replaces all data with [scenario].
@@ -226,6 +280,8 @@ class LocalDataStore {
     settlements.seed(seed.settlements);
     sharedLedger.seed(seed.mirrors);
     assets.seed(seed.assets);
+    moneyAccounts.seed(seed.moneyAccounts);
+    transfers.seed(seed.transfers);
     await profile.store.set(seed.profile, simulate: false);
     await emergencyPlan.store.set(seed.emergencyPlan, simulate: false);
     await alertInbox.store.set(const AlertInboxState(), simulate: false);

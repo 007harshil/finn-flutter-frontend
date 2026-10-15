@@ -101,6 +101,7 @@ void main() {
         type: TransactionType.expense,
         amount: sub.amount,
         categoryId: sub.categoryId,
+        accountId: 'acc_cash',
         date: testNow.dateOnly,
         origin: TransactionOrigin.subscription,
         originRefId: sub.id,

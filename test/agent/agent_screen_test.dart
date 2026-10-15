@@ -185,6 +185,8 @@ void main() {
     });
 
     testWidgets('several changes: a carousel with per-card decisions and Approve rest', (tester) async {
+      tester.view.physicalSize = const Size(800, 1200) * tester.view.devicePixelRatio;
+      addTearDown(tester.view.reset);
       final env = await TestEnv.create();
       final provider = ScriptedProvider([
         plan([

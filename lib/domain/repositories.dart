@@ -6,6 +6,8 @@
 // (lib/app/di/core_providers.dart) without touching features.
 
 import '../core/data/crud_repository.dart';
+import '../features/accounts/domain/money_account.dart';
+import '../features/accounts/domain/transfer.dart';
 import '../features/alerts/domain/alert.dart';
 import '../features/budgets/domain/budget.dart';
 import '../features/categories/domain/category.dart';
@@ -41,6 +43,10 @@ abstract interface class PendingRepository implements CrudRepository<PendingPaym
 abstract interface class SettlementRepository implements CrudRepository<PendingSettlement> {}
 
 abstract interface class AssetRepository implements CrudRepository<Asset> {}
+
+abstract interface class MoneyAccountRepository implements CrudRepository<MoneyAccount> {}
+
+abstract interface class TransferRepository implements CrudRepository<Transfer> {}
 
 /// A single persisted value.
 abstract interface class ValueRepository<T> {

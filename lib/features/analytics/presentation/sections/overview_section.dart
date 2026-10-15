@@ -242,7 +242,7 @@ class _Explore extends ConsumerWidget {
     String m(Money x, {bool compact = true}) => moneyText(context, x, compact: compact);
 
     final topCat = data.categories.isEmpty ? null : data.categories.first;
-    final topMethod = data.methods.isEmpty ? null : data.methods.first;
+    final topMethod = data.accountSpend.isEmpty ? null : data.accountSpend.first;
     final net = data.current.net;
     final active = data.budgetsActive;
     final rows = <(InsightsSection, String, String)>[
@@ -265,10 +265,10 @@ class _Explore extends ConsumerWidget {
       ),
       (
         InsightsSection.payments,
-        topMethod == null ? 'No payments' : topMethod.key.label,
+        topMethod == null ? 'No payments' : topMethod.name,
         topMethod == null
             ? 'How you pay'
-            : 'Used for ${formatBps(topMethod.value.ratioBps(data.current.expense) ?? 0, decimals: 0)}',
+            : 'Used for ${formatBps(topMethod.amount.ratioBps(data.current.expense) ?? 0, decimals: 0)}',
       ),
       (
         InsightsSection.budgets,

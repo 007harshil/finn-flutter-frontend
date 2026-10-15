@@ -8,7 +8,6 @@ import 'package:finn/agent/prompt/agent_prompt.dart';
 import 'package:finn/app/di/action_catalog.dart';
 import 'package:finn/core/money/money.dart';
 import 'package:finn/data/local/local_data_store.dart';
-import 'package:finn/features/transactions/domain/transaction.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../actions/action_harness.dart';
@@ -86,12 +85,12 @@ void main() {
       }
     });
 
-    test('payment methods only when the user named one', () {
-      expect(AgentMethod.resolve('upi', 'paid via gpay'), PaymentMethod.upi);
-      expect(AgentMethod.resolve('card', 'swiped my credit card'), PaymentMethod.card);
-      expect(AgentMethod.resolve('cash', 'spent 200 on coffee'), isNull);
-      expect(AgentMethod.resolve('card', 'paid by upi'), isNull);
-      expect(AgentMethod.resolve('teleport', 'cash'), isNull);
+    test('channels only when the user named one', () {
+      expect(AgentChannel.resolve('upi', 'paid via gpay'), 'UPI');
+      expect(AgentChannel.resolve('neft', 'sent by NEFT'), 'NEFT');
+      expect(AgentChannel.resolve('upi', 'spent 200 on coffee'), isNull);
+      expect(AgentChannel.resolve('imps', 'paid by upi'), isNull);
+      expect(AgentChannel.resolve('wire', 'sent a wire to Ravi'), 'wire');
     });
 
     test('names match like a person would, never by guessing', () {

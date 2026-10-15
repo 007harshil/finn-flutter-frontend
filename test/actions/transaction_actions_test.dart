@@ -16,7 +16,7 @@ TransactionInput expense(int rupees, {String category = SeedCategoryIds.food, Da
       amount: Money.rupees(rupees),
       categoryId: category,
       date: date ?? DateTime(2026, 10, 9),
-      paymentMethod: PaymentMethod.upi,
+      channel: 'UPI',
       counterparty: counterparty,
     );
 
@@ -135,6 +135,7 @@ void main() {
         type: TransactionType.expense,
         amount: const Money.rupees(12602),
         categoryId: SystemCategories.loanEmi,
+        accountId: 'acc_cash',
         date: DateTime(2026, 10, 5),
         origin: TransactionOrigin.loanRepayment,
         originRefId: 'loan_1',

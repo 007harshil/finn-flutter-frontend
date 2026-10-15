@@ -9,7 +9,9 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../agent/agent.dart' show AgentModePanel, AgentOrb, agentModeProvider, voiceInputProvider, VoicePhase;
 import '../../design_system/design_system.dart';
+import '../../features/accounts/presentation/transfer_form_sheet.dart';
 import '../../features/more/presentation/more_drawer.dart';
+import '../../kit/kit.dart' show FinnMenuItem, showFinnActionMenu;
 import '../di/core_providers.dart';
 import '../di/data_providers.dart';
 import '../router/routes.dart';
@@ -800,6 +802,22 @@ class _AddFab extends ConsumerWidget {
           enabled: enabled,
           haptic: ref.watch(settingsProvider.select((s) => s.hapticsEnabled)),
           onTap: () => context.push(AppRoutes.newTransaction()),
+          onLongPress: () async {
+            final pick = await showFinnActionMenu<String>(
+              context,
+              title: 'Add',
+              items: const [
+                FinnMenuItem(value: 'transaction', label: 'Add transaction', icon: LucideIcons.plus),
+                FinnMenuItem(value: 'transfer', label: 'Transfer', icon: LucideIcons.arrowLeftRight),
+              ],
+            );
+            if (!context.mounted) return;
+            if (pick == 'transaction') {
+              context.push(AppRoutes.newTransaction());
+            } else if (pick == 'transfer') {
+              showTransferSheet(context);
+            }
+          },
           child: Container(
             width: Dimens.fabSize,
             height: Dimens.fabSize,

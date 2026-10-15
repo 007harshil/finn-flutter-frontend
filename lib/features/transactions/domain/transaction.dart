@@ -12,18 +12,6 @@ enum TransactionType {
   bool get isIncome => this == TransactionType.income;
 }
 
-enum PaymentMethod {
-  upi('UPI'),
-  card('Card'),
-  cash('Cash'),
-  bankTransfer('Bank Transfer'),
-  wallet('Wallet'),
-  other('Other');
-
-  const PaymentMethod(this.label);
-  final String label;
-}
-
 /// Where a transaction came from. Linked transactions are created by a
 /// financial operation in another module and can only be changed there,
 /// which prevents a settlement or repayment from being double-counted.
@@ -55,7 +43,8 @@ class Transaction {
     required this.date,
     required this.createdAt,
     required this.updatedAt,
-    this.paymentMethod,
+    required this.accountId,
+    this.channel,
     this.counterparty,
     this.note,
     this.origin = TransactionOrigin.manual,
@@ -72,7 +61,12 @@ class Transaction {
 
   /// Calendar date the money moved.
   final DateTime date;
-  final PaymentMethod? paymentMethod;
+
+  /// The money account this movement hit (see `MoneyAccount`).
+  final String accountId;
+
+  /// Optional free-text sub-type: UPI, IMPS, NEFT, Cheque, ATM …
+  final String? channel;
 
   /// Merchant or person, e.g. "Swiggy" or "Priya".
   final String? counterparty;
@@ -110,7 +104,8 @@ class Transaction {
     Money? amount,
     String? categoryId,
     DateTime? date,
-    PaymentMethod? Function()? paymentMethod,
+    String? accountId,
+    String? Function()? channel,
     String? Function()? counterparty,
     String? Function()? note,
     DateTime? updatedAt,
@@ -122,7 +117,8 @@ class Transaction {
       amount: amount ?? this.amount,
       categoryId: categoryId ?? this.categoryId,
       date: date ?? this.date,
-      paymentMethod: paymentMethod != null ? paymentMethod() : this.paymentMethod,
+      accountId: accountId ?? this.accountId,
+      channel: channel != null ? channel() : this.channel,
       counterparty: counterparty != null ? counterparty() : this.counterparty,
       note: note != null ? note() : this.note,
       origin: origin,

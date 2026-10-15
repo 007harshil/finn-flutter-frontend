@@ -2,6 +2,7 @@ import '../../actions/action.dart' show Out;
 import '../../core/money/money.dart';
 import '../../core/money/money_format.dart';
 import '../../core/time/frequency.dart';
+import '../../features/accounts/domain/money_account.dart';
 import '../../features/categories/domain/category.dart';
 import '../../features/goals/domain/goal.dart';
 import '../../features/loans/domain/loan_calculator.dart';
@@ -136,6 +137,8 @@ final Map<String, OpSpec> opCatalog = {
     OpSpec('goal_take', {'goals.withdraw'}, (op, c) => _goalMove(op, c, 'goals.withdraw')),
     OpSpec('fund_add', {'emergencyFund.contribute'}, (op, c) => _fund(op, c, 'emergencyFund.contribute')),
     OpSpec('fund_take', {'emergencyFund.withdraw'}, (op, c) => _fund(op, c, 'emergencyFund.withdraw')),
+    const OpSpec('account', {'accounts.create'}, _account),
+    const OpSpec('transfer', {'transfers.create'}, _transfer),
     const OpSpec('q', {}, _question),
     const OpSpec('history', {}, _history),
   ])
@@ -234,7 +237,8 @@ OpOutcome _transaction(PlanOp op, OpContext c, TransactionType type) {
       'amount': Out.money(amount),
       'categoryId': category.id,
       'date': Out.date(_date(op, c)),
-      'paymentMethod': AgentMethod.resolve(op.args['method'], c.userText)?.name,
+      'accountId': AgentAccount.resolve(c.snapshot, op.args['account'], c.userText),
+      'channel': AgentChannel.resolve(op.args['channel'], c.userText),
       'counterparty': party != null && grounded(party, c.userText, extra: c.groundingText) ? party : null,
       'note': _str(op.args['note']),
     },
@@ -288,7 +292,7 @@ OpOutcome _edit(PlanOp op, OpContext c) {
   }
   // Changed fields may sit in "set" or, loosely, at the top level.
   final set = <String, Object?>{
-    for (final k in ['amount', 'category', 'date', 'note', 'party', 'method', 'type']) k: ?op.args[k],
+    for (final k in ['amount', 'category', 'date', 'note', 'party', 'account', 'channel', 'type']) k: ?op.args[k],
     if (op.args['set'] is Map) ...Map<String, Object?>.from(op.args['set'] as Map),
   };
   if (set.isEmpty) return const OpQuestion('What should I change?');
@@ -307,7 +311,10 @@ OpOutcome _edit(PlanOp op, OpContext c) {
   }
   final amount = AgentAmount.parse(set['amount']) ?? tx.amount;
   final date = AgentDate.resolve(set['date'], c.today) ?? tx.date;
-  final method = set.containsKey('method') ? AgentMethod.resolve(set['method'], c.userText) : tx.paymentMethod;
+  final accountId = set.containsKey('account')
+      ? AgentAccount.resolve(c.snapshot, set['account'], c.userText) ?? tx.accountId
+      : tx.accountId;
+  final channel = set.containsKey('channel') ? AgentChannel.resolve(set['channel'], c.userText) : tx.channel;
   return OpAction(
     'transactions.update',
     {
@@ -317,12 +324,73 @@ OpOutcome _edit(PlanOp op, OpContext c) {
       'amount': Out.money(amount),
       'categoryId': categoryId,
       'date': Out.date(date),
-      'paymentMethod': method?.name,
+      'accountId': accountId,
+      'channel': channel,
       'counterparty': set.containsKey('party') ? _str(set['party'], max: 60) : tx.counterparty,
       'note': set.containsKey('note') ? _str(set['note']) : tx.note,
     },
     notes: notes,
   );
+}
+
+/// The account an op names for [field], or a question listing the user's
+/// accounts when it is missing or ambiguous.
+Object _accountFor(PlanOp op, OpContext c, String field, String question) {
+  final raw = op.args[field];
+  final m = AgentAccount.match(c.snapshot, raw, '${c.userText} ${c.groundingText}');
+  if (m is Matched<MoneyAccount>) return m.value;
+  final pool = m is Ambiguous<MoneyAccount> ? m.candidates : c.snapshot.activeAccounts;
+  return OpQuestion(
+    question,
+    field: field,
+    options: [for (final a in pool.take(6)) ClarifyOption(label: a.name, value: a.id)],
+  );
+}
+
+OpOutcome _transfer(PlanOp op, OpContext c) {
+  final amount = _money(op, 'amount');
+  if (amount == null) return const OpQuestion('How much was moved?', field: 'amount');
+  final from = _accountFor(op, c, 'from', 'Which account did the money leave?');
+  if (from is OpOutcome) return from;
+  final to = _accountFor(op, c, 'to', 'Which account did the money go to?');
+  if (to is OpOutcome) return to;
+  if ((from as MoneyAccount).id == (to as MoneyAccount).id) {
+    return const OpRejected('A transfer needs two different accounts.');
+  }
+  return OpAction('transfers.create', {
+    'fromAccountId': from.id,
+    'toAccountId': to.id,
+    'amount': Out.money(amount),
+    'date': Out.date(_date(op, c)),
+    'channel': AgentChannel.resolve(op.args['channel'], c.userText),
+    'note': _str(op.args['note']),
+  });
+}
+
+MoneyAccountKind? _accountKind(Object? v) => switch (v is String ? v.trim().toLowerCase() : null) {
+  'cash' => MoneyAccountKind.cash,
+  'bank' || 'savings' || 'current' || 'account' => MoneyAccountKind.bank,
+  'debit' || 'debitcard' || 'debit card' => MoneyAccountKind.debitCard,
+  'credit' || 'creditcard' || 'credit card' => MoneyAccountKind.creditCard,
+  'promo' || 'gift' || 'promocard' || 'gift card' => MoneyAccountKind.promoCard,
+  'card' || 'othercard' || 'other card' => MoneyAccountKind.otherCard,
+  _ => null,
+};
+
+OpOutcome _account(PlanOp op, OpContext c) {
+  final name = _str(op.args['name'], max: 40);
+  if (name == null) return const OpQuestion('What should the account be called?', field: 'name');
+  final kind = _accountKind(op.args['kind']);
+  if (kind == null) return const OpQuestion('Is it cash, a bank account, a debit card or a credit card?', field: 'kind');
+  final last4 = _str(op.args['last4'], max: 4);
+  final limit = _money(op, 'limit');
+  return OpAction('accounts.create', {
+    'name': name,
+    'kind': kind.name,
+    'openingBalance': Out.money(_money(op, 'balance') ?? Money.zero),
+    if (last4 != null && kind.isCard && RegExp(r'^\d{4}$').hasMatch(last4)) 'last4': last4,
+    if (limit != null && kind == MoneyAccountKind.creditCard) 'creditLimit': Out.money(limit),
+  });
 }
 
 OpOutcome _undo(PlanOp op, OpContext c) {
@@ -444,7 +512,8 @@ OpOutcome _settle(PlanOp op, OpContext c) {
     'pendingId': v.payment.id,
     'amount': Out.money(amount),
     'date': Out.date(_date(op, c)),
-    'method': AgentMethod.resolve(op.args['method'], c.userText)?.name,
+    'accountId': AgentAccount.resolve(c.snapshot, op.args['account'], c.userText),
+    'channel': AgentChannel.resolve(op.args['channel'], c.userText),
     'recordCashMovement': true,
   });
 }
@@ -567,7 +636,8 @@ OpOutcome _loanPay(PlanOp op, OpContext c) {
     'kind': kind,
     'amount': Out.money(amount),
     'date': Out.date(_date(op, c)),
-    'method': AgentMethod.resolve(op.args['method'], c.userText)?.name,
+    'accountId': AgentAccount.resolve(c.snapshot, op.args['account'], c.userText),
+    'channel': AgentChannel.resolve(op.args['channel'], c.userText),
     'recordCashMovement': true,
   });
 }
@@ -628,7 +698,8 @@ OpOutcome _subPaid(PlanOp op, OpContext c) {
     'subscriptionId': sub.id,
     'date': Out.date(_date(op, c)),
     'amount': ?Out.moneyOpt(_money(op, 'amount')),
-    'method': AgentMethod.resolve(op.args['method'], c.userText)?.name,
+    'accountId': AgentAccount.resolve(c.snapshot, op.args['account'], c.userText),
+    'channel': AgentChannel.resolve(op.args['channel'], c.userText),
   });
 }
 

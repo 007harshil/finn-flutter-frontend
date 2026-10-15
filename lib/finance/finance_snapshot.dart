@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import '../core/money/money.dart';
 import '../core/time/dates.dart';
+import '../features/accounts/domain/money_account.dart';
+import '../features/accounts/domain/transfer.dart';
 import '../features/budgets/domain/budget.dart';
 import '../features/budgets/domain/budget_calculator.dart';
 import '../features/categories/domain/category.dart';
@@ -42,7 +44,10 @@ class FinanceSnapshot {
     required this.pending,
     required this.settlements,
     required this.assets,
-  }) : today = today.dateOnly;
+    List<MoneyAccount> accounts = const [],
+    this.transfers = const [],
+  })  : today = today.dateOnly,
+        accounts = sortAccounts(accounts);
 
   factory FinanceSnapshot.empty(DateTime today) => FinanceSnapshot(
         today: today,
@@ -60,6 +65,8 @@ class FinanceSnapshot {
         pending: const [],
         settlements: const [],
         assets: const [],
+        accounts: const [],
+        transfers: const [],
       );
 
   final DateTime today;
@@ -79,6 +86,10 @@ class FinanceSnapshot {
   final List<PendingPayment> pending;
   final List<PendingSettlement> settlements;
   final List<Asset> assets;
+
+  /// Money accounts (cash, banks, cards), ordered by sortOrder then createdAt.
+  final List<MoneyAccount> accounts;
+  final List<Transfer> transfers;
 
   static const ledgerCalc = LedgerCalculator();
   static const cashFlowCalc = CashFlowCalculator();
@@ -100,8 +111,27 @@ class FinanceSnapshot {
 
   TransactionCategory? category(String id) => categoryById[id];
 
+  late final Map<String, MoneyAccount> accountById = {for (final a in accounts) a.id: a};
+
+  MoneyAccount? account(String id) => accountById[id];
+
+  /// Accounts shown in pickers and on Home (not archived), in display order.
+  late final List<MoneyAccount> activeAccounts = [for (final a in accounts) if (!a.isArchived) a];
+
+  /// The non-archived default account; falls back to the first active one.
+  MoneyAccount? get defaultAccount =>
+      activeAccounts.where((a) => a.isDefault).firstOrNull ?? activeAccounts.firstOrNull;
+
+  /// Id used when an input omits `accountId`.
+  String get defaultAccountId => defaultAccount?.id ?? cashAccountId;
+
+  /// Per-account balances (owed for credit cards) in display order.
+  List<AccountBalance> get accountBalances => balance.accounts;
+
   late final BalanceSnapshot balance = ledgerCalc.balance(
     profile: profile,
+    accounts: accounts,
+    transfers: transfers,
     transactions: transactions,
     movements: savingsMovements,
     asOf: today,

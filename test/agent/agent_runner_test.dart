@@ -421,27 +421,29 @@ void main() {
       expect(r.provider.requests, hasLength(2));
     });
 
-    test('invented payment methods and shops are dropped', () async {
+    test('invented accounts, channels and shops are dropped', () async {
       final r = await rig([
         plan([
-          {'op': 'expense', 'amount': 200, 'category': 'Food & Dining', 'note': 'coffee', 'method': 'cash', 'party': 'Starbucks'},
+          {'op': 'expense', 'amount': 200, 'category': 'Food & Dining', 'note': 'coffee', 'account': 'Cash', 'channel': 'upi', 'party': 'Starbucks'},
         ]),
       ]);
       final result = await r.turn('spent 200 on coffee');
       final input = result.actions.single.proposal.input.toJson();
-      expect(input['paymentMethod'], isNull);
+      expect(input['accountId'], isNull);
+      expect(input['channel'], isNull);
       expect(input['counterparty'], isNull);
     });
 
-    test('a stated payment method and shop are kept', () async {
+    test('a stated account, channel and shop are kept', () async {
       final r = await rig([
         plan([
-          {'op': 'expense', 'amount': 200, 'category': 'Food & Dining', 'method': 'upi', 'party': 'Starbucks'},
+          {'op': 'expense', 'amount': 200, 'category': 'Food & Dining', 'account': 'Cash', 'channel': 'upi', 'party': 'Starbucks'},
         ]),
       ]);
-      final result = await r.turn('paid 200 at Starbucks via gpay');
+      final result = await r.turn('paid 200 at Starbucks via gpay from my cash');
       final input = result.actions.single.proposal.input.toJson();
-      expect(input['paymentMethod'], 'upi');
+      expect(input['accountId'], 'acc_cash');
+      expect(input['channel'], 'UPI');
       expect(input['counterparty'], 'Starbucks');
     });
   });

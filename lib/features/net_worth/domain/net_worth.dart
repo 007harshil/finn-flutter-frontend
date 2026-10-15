@@ -32,7 +32,8 @@ class NetWorthLine {
 /// * Cash is counted once (it already includes earmarked goal and
 ///   emergency savings — those are shown as a split, not added).
 /// * Receivables = money owed to the user (pending + lent loans).
-/// * Liabilities = outstanding principal on borrowed loans + pending dues.
+/// * Liabilities = outstanding principal on borrowed loans + pending dues
+///   + amounts owed on credit cards (never part of cash).
 @immutable
 class NetWorthSnapshot {
   const NetWorthSnapshot({
@@ -90,6 +91,14 @@ class NetWorthCalculator {
         amount: l.outstanding,
         detail: 'Outstanding principal',
         recordId: l.loan.id,
+      ));
+    }
+    if (!balance.creditOwed.isZero) {
+      lines.add(NetWorthLine(
+        group: balance.creditOwed.isPositive ? NetWorthGroup.liabilities : NetWorthGroup.assets,
+        label: balance.creditOwed.isPositive ? 'Credit card owed' : 'Credit card credit balance',
+        amount: balance.creditOwed.isPositive ? balance.creditOwed : -balance.creditOwed,
+        detail: 'Owed on credit cards',
       ));
     }
     final owe = Money.sum(pending.where((p) => p.payment.direction == PendingDirection.iOwe).map((p) => p.outstanding));

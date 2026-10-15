@@ -5,6 +5,7 @@ import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../core/time/frequency.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../accounts/application/account_support.dart';
 import '../../categories/domain/category.dart';
 import '../../transactions/application/transaction_actions.dart';
 import '../../transactions/domain/transaction.dart';
@@ -67,7 +68,7 @@ class SubscriptionInput extends ActionInput {
     required this.nextDueDate,
     this.startDate,
     this.autoRenews = true,
-    this.paymentMethod,
+    this.accountId,
     this.note,
   });
 
@@ -78,7 +79,8 @@ class SubscriptionInput extends ActionInput {
   final DateTime nextDueDate;
   final DateTime? startDate;
   final bool autoRenews;
-  final PaymentMethod? paymentMethod;
+  /// Account it is usually charged to.
+  final String? accountId;
   final String? note;
 
   factory SubscriptionInput.fromJson(Map<String, Object?> j) => SubscriptionInput(
@@ -89,7 +91,7 @@ class SubscriptionInput extends ActionInput {
         nextDueDate: In.date(j, 'nextDueDate'),
         startDate: In.dateOpt(j, 'startDate'),
         autoRenews: In.boolean(j, 'autoRenews', fallback: true),
-        paymentMethod: In.enumOpt(j, 'paymentMethod', PaymentMethod.values),
+        accountId: In.strOpt(j, 'accountId'),
         note: In.strOpt(j, 'note'),
       );
 
@@ -102,7 +104,7 @@ class SubscriptionInput extends ActionInput {
         'nextDueDate': Out.date(nextDueDate),
         'startDate': Out.dateOpt(startDate),
         'autoRenews': autoRenews,
-        'paymentMethod': paymentMethod?.name,
+        'accountId': accountId,
         'note': note,
       };
 }
@@ -116,12 +118,11 @@ const _subscriptionFields = [
   ActionFieldSpec('nextDueDate', FieldKind.date, 'Next renewal date'),
   ActionFieldSpec('startDate', FieldKind.date, 'When the subscription started', required: false),
   ActionFieldSpec('autoRenews', FieldKind.boolean, 'Renews automatically (informational)', required: false),
-  ActionFieldSpec('paymentMethod', FieldKind.enumeration, 'Usual payment method', required: false,
-      allowedValues: ['upi', 'card', 'cash', 'bankTransfer', 'wallet', 'other']),
+  ActionFieldSpec('accountId', FieldKind.id, 'Money account it is usually charged to', required: false),
   ActionFieldSpec('note', FieldKind.string, 'Note', required: false),
 ];
 
-Map<String, String> validateSubscription(SubscriptionInput i, FinanceSnapshot s) {
+Map<String, String> validateSubscription(SubscriptionInput i, FinanceSnapshot s, {Subscription? existing}) {
   final e = <String, String>{};
   final name = i.name.trim();
   if (name.isEmpty) e['name'] = 'Enter the service name.';
@@ -141,6 +142,10 @@ Map<String, String> validateSubscription(SubscriptionInput i, FinanceSnapshot s)
     e['startDate'] = 'The start date must be on or before the next due date.';
   }
   if ((i.note?.length ?? 0) > 500) e['note'] = 'Keep the note under 500 characters.';
+  if (i.accountId != null) {
+    final accountErr = accountWriteError(s, i.accountId!, keepAccountId: existing?.accountId);
+    if (accountErr != null) e['accountId'] = accountErr;
+  }
   return e;
 }
 
@@ -192,7 +197,7 @@ class CreateSubscriptionAction extends FinancialAction<SubscriptionInput, Subscr
       nextDueDate: input.nextDueDate.dateOnly,
       startDate: input.startDate?.dateOnly,
       autoRenews: input.autoRenews,
-      paymentMethod: input.paymentMethod,
+      accountId: input.accountId,
       note: input.note,
       createdAt: now,
       updatedAt: now,
@@ -246,7 +251,7 @@ class UpdateSubscriptionAction extends FinancialAction<UpdateSubscriptionInput, 
       return const Result.err(
           AppFailure(FailureCode.staleData, 'This subscription changed since you opened it. Reload and try again.'));
     }
-    final e = validateSubscription(input.data, s);
+    final e = validateSubscription(input.data, s, existing: existing);
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
     return Result.ok(preview(
       input,
@@ -268,7 +273,7 @@ class UpdateSubscriptionAction extends FinancialAction<UpdateSubscriptionInput, 
       nextDueDate: d.nextDueDate.dateOnly,
       startDate: () => d.startDate?.dateOnly,
       autoRenews: d.autoRenews,
-      paymentMethod: () => d.paymentMethod,
+      accountId: () => d.accountId,
       note: () => d.note,
       updatedAt: env.clock.now(),
       version: existing.version + 1,
@@ -356,7 +361,8 @@ class MarkSubscriptionPaidInput extends ActionInput {
     this.cycleDate,
     this.date,
     this.amount,
-    this.method,
+    this.accountId,
+    this.channel,
   });
 
   final String subscriptionId;
@@ -371,7 +377,10 @@ class MarkSubscriptionPaidInput extends ActionInput {
 
   /// Amount paid. Defaults to the subscription amount.
   final Money? amount;
-  final PaymentMethod? method;
+  /// Account paid from; defaults to the subscription's account, then the
+  /// user's default account.
+  final String? accountId;
+  final String? channel;
 
   @override
   Map<String, Object?> toJson() => {
@@ -379,7 +388,8 @@ class MarkSubscriptionPaidInput extends ActionInput {
         'cycleDate': Out.dateOpt(cycleDate),
         'date': Out.dateOpt(date),
         'amount': Out.moneyOpt(amount),
-        'method': method?.name,
+        'accountId': accountId,
+        'channel': channel,
       };
 }
 
@@ -390,7 +400,8 @@ class SubscriptionPaymentPlan {
     required this.cycle,
     required this.date,
     required this.amount,
-    required this.method,
+    required this.accountId,
+    this.channel,
     required this.nextDueDate,
   });
 
@@ -398,7 +409,8 @@ class SubscriptionPaymentPlan {
   final DateTime cycle;
   final DateTime date;
   final Money amount;
-  final PaymentMethod? method;
+  final String accountId;
+  final String? channel;
   final DateTime nextDueDate;
 }
 
@@ -420,8 +432,10 @@ class MarkSubscriptionPaidAction extends FinancialAction<MarkSubscriptionPaidInp
           ActionFieldSpec('cycleDate', FieldKind.date, 'Due date of the cycle being paid (defaults to next due date)', required: false),
           ActionFieldSpec('date', FieldKind.date, 'Payment date, not in the future (defaults to the due date)', required: false),
           ActionFieldSpec('amount', FieldKind.money, 'Amount paid (defaults to the subscription amount)', required: false),
-          ActionFieldSpec('method', FieldKind.enumeration, 'Payment method', required: false,
-              allowedValues: ['upi', 'card', 'cash', 'bankTransfer', 'wallet', 'other']),
+          ActionFieldSpec('accountId', FieldKind.id,
+              'Account paid from (defaults to the subscription account, then the default account)',
+              required: false),
+          ActionFieldSpec('channel', FieldKind.string, 'Optional: UPI, NEFT … (up to 30 characters)', required: false),
         ],
       );
 
@@ -431,7 +445,8 @@ class MarkSubscriptionPaidAction extends FinancialAction<MarkSubscriptionPaidInp
         cycleDate: In.dateOpt(j, 'cycleDate'),
         date: In.dateOpt(j, 'date'),
         amount: In.moneyOpt(j, 'amount'),
-        method: In.enumOpt(j, 'method', PaymentMethod.values),
+        accountId: In.strOpt(j, 'accountId'),
+        channel: In.strOpt(j, 'channel'),
       );
 
   /// Validates and resolves defaults; shared by [prepare] and [execute].
@@ -463,13 +478,19 @@ class MarkSubscriptionPaidAction extends FinancialAction<MarkSubscriptionPaidInp
     if (date.isAfter(s.today)) e['date'] = 'The date cannot be in the future.';
     if (!amount.isPositive) e['amount'] = 'Enter an amount greater than zero.';
     if (amount > maxTransactionAmount) e['amount'] = 'That amount looks too large. Please check it.';
+    final accountId = input.accountId ?? sub.accountId ?? s.defaultAccountId;
+    final accountErr = accountWriteError(s, accountId, keepAccountId: input.accountId == null ? sub.accountId : null);
+    if (accountErr != null) e['accountId'] = accountErr;
+    final channelErr = channelError(input.channel);
+    if (channelErr != null) e['channel'] = channelErr;
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
     return Result.ok(SubscriptionPaymentPlan(
       subscription: sub,
       cycle: cycle,
       date: date,
       amount: amount,
-      method: input.method ?? sub.paymentMethod,
+      accountId: accountId,
+      channel: cleanChannel(input.channel),
       nextDueDate: SubscriptionSchedule.nextCycleAfterCurrent(sub),
     ));
   }
@@ -491,7 +512,8 @@ class MarkSubscriptionPaidAction extends FinancialAction<MarkSubscriptionPaidInp
       lines: [
         PreviewLine('Renewal due', DateFormats.dayMonthYear.format(p.cycle)),
         PreviewLine('Paid on', DateFormats.dayMonthYear.format(p.date)),
-        if (p.method != null) PreviewLine('Paid via', p.method!.label),
+        PreviewLine('Account', s.account(p.accountId)?.name ?? '—'),
+        if (p.channel != null) PreviewLine('Channel', p.channel!),
         PreviewLine('Cash balance', (-p.amount).format(), emphasis: true),
         PreviewLine('Next due', DateFormats.dayMonthYear.format(p.nextDueDate)),
       ],
@@ -512,12 +534,13 @@ class MarkSubscriptionPaidAction extends FinancialAction<MarkSubscriptionPaidInp
       date: p.date,
       origin: TransactionOrigin.subscription,
       originRefId: sub.id,
-      method: p.method,
+      accountId: p.accountId,
+      channel: p.channel,
       counterparty: sub.name,
       note: SubscriptionSchedule.paymentNote(sub, p.cycle),
     );
     await env.repos.transactions.save(tx);
-    await extendTrackingStart(env, tx.date);
+    await extendTrackingStart(env, tx.date, accountIds: [tx.accountId]);
     try {
       await env.repos.subscriptions.save(sub.copyWith(
         nextDueDate: p.nextDueDate,

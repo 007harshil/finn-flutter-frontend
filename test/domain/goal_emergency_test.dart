@@ -224,7 +224,7 @@ void main() {
           c.id: c,
       };
       Transaction t(String c, int rupees, DateTime date, {TransactionType type = TransactionType.expense}) => Transaction(
-          id: 'tx_${_n++}', type: type, amount: rs(rupees), categoryId: c, date: date, createdAt: stamp, updatedAt: stamp);
+          id: 'tx_${_n++}', type: type, amount: rs(rupees), categoryId: c, accountId: 'acc_cash', date: date, createdAt: stamp, updatedAt: stamp);
       final txs = [
         t('rent', 28000, d(2026, 7, 3)),
         t('rent', 28000, d(2026, 8, 3)),

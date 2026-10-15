@@ -4,7 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/money/money.dart';
 import '../../../../core/money/money_format.dart';
 import '../../../../kit/kit.dart';
-import '../../../transactions/domain/transaction.dart';
+import '../../../accounts/domain/money_account.dart';
 import '../../application/analytics_providers.dart';
 import '../insight_charts.dart';
 import '../insight_widgets.dart';
@@ -286,13 +286,11 @@ class _Diverging extends StatelessWidget {
 // Payments
 // ---------------------------------------------------------------------------
 
-IconData _methodIcon(PaymentMethod m) => switch (m) {
-      PaymentMethod.upi => LucideIcons.smartphone,
-      PaymentMethod.card => LucideIcons.creditCard,
-      PaymentMethod.cash => LucideIcons.banknote,
-      PaymentMethod.bankTransfer => LucideIcons.building2,
-      PaymentMethod.wallet => LucideIcons.wallet,
-      PaymentMethod.other => LucideIcons.circleDot,
+IconData _accountIcon(MoneyAccountKind k) => switch (k) {
+      MoneyAccountKind.cash => LucideIcons.banknote,
+      MoneyAccountKind.bank => LucideIcons.building2,
+      MoneyAccountKind.promoCard => LucideIcons.wallet,
+      MoneyAccountKind.debitCard || MoneyAccountKind.creditCard || MoneyAccountKind.otherCard => LucideIcons.creditCard,
     };
 
 /// Payments: digital against cash, and the split across payment methods.
@@ -301,12 +299,12 @@ List<Widget> paymentsSection(BuildContext context, InsightsData data) {
   final t = context.type;
   final total = data.current.expense;
   final digital = data.digitalShareBps;
-  if (digital == null || data.methods.isEmpty) {
+  if (digital == null || data.accountSpend.isEmpty) {
     return [
       LedgerEmpty(
         icon: LucideIcons.creditCard,
         title: 'No payments in ${data.periodLabel}',
-        message: 'Record expenses with a payment method to see how you pay.',
+        message: 'Record expenses with an account to see how you pay.',
       ),
     ];
   }
@@ -316,7 +314,7 @@ List<Widget> paymentsSection(BuildContext context, InsightsData data) {
       label: 'Paid digitally',
       value: Text(formatBps(digital, decimals: 0), style: t.figureXL),
       sentence: 'Cash covered ${formatBps(10000 - digital, decimals: 0)}. '
-          'UPI, cards, bank transfers and wallets make up the rest.',
+          'Banks and cards make up the rest.',
     ),
     LedgerSection(
       title: 'How you paid',
@@ -327,32 +325,32 @@ List<Widget> paymentsSection(BuildContext context, InsightsData data) {
           const SizedBox(height: Sp.md),
           LedgerStackBar(
             gapColor: c.paper,
-            semanticLabel: data.methods
-                .map((m) => '${m.key.label} ${formatBps(share(m.value), decimals: 0)}')
+            semanticLabel: data.accountSpend
+                .map((m) => '${m.name} ${formatBps(share(m.amount), decimals: 0)}')
                 .join(', '),
             parts: [
-              for (var i = 0; i < data.methods.length; i++)
-                BarPart(share(data.methods[i].value) / 10000, rampColor(c, i)),
+              for (var i = 0; i < data.accountSpend.length; i++)
+                BarPart(share(data.accountSpend[i].amount) / 10000, rampColor(c, i)),
             ],
           ),
           const SizedBox(height: Sp.lg),
           LedgerPanel(
             dividerIndent: _rowIndent,
             children: [
-              for (var i = 0; i < data.methods.length; i++)
+              for (var i = 0; i < data.accountSpend.length; i++)
                 _ShareRow(
-                  leading: IconWell(icon: _methodIcon(data.methods[i].key)),
-                  title: data.methods[i].key.label,
+                  leading: IconWell(icon: _accountIcon(data.accountSpend[i].kind)),
+                  title: data.accountSpend[i].name,
                   subtitle: null,
-                  amount: data.methods[i].value,
-                  shareBps: share(data.methods[i].value),
+                  amount: data.accountSpend[i].amount,
+                  shareBps: share(data.accountSpend[i].amount),
                   swatch: rampColor(c, i),
                 ),
             ],
           ),
           const HowCalculated(
-            text: 'Share = spending through each payment method ÷ total spending. Expenses recorded without '
-                'a method are counted as "Other".',
+            text: 'Share = spending through each account ÷ total spending. Credit card purchases count as '
+                'spending when you make them.',
           ),
         ],
       ),

@@ -37,7 +37,10 @@ void main() {
     expect(newTx.single.type, TransactionType.expense);
     expect(newTx.single.origin, TransactionOrigin.subscription);
     expect(newTx.single.amount, sub.amount);
-    expect(after.balance.available, before.balance.available - sub.amount);
+    // Seeded on the HDFC credit card: spending raises what is owed, cash is unchanged.
+    expect(after.account(newTx.single.accountId)!.isLiability, isTrue);
+    expect(after.balance.creditOwed, before.balance.creditOwed + sub.amount);
+    expect(after.balance.available, before.balance.available);
 
     // Detail: next renewal moved forward; payment history lists the new expense.
     await scrollTo(tester, find.text('Next renewal'), up: true);

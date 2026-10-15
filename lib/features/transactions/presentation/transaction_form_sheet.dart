@@ -11,6 +11,8 @@ import '../../../core/money/money_format.dart';
 import '../../../core/result/result.dart';
 import '../../../kit/kit.dart';
 import '../../../features/transactions/domain/transaction.dart';
+import '../../accounts/presentation/widgets/account_picker_field.dart';
+import '../../accounts/presentation/widgets/channel_field.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../application/transaction_actions.dart';
 import '../application/transaction_form_support.dart';
@@ -112,8 +114,9 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
   late TransactionType _type;
   String? _categoryId;
   late DateTime _date;
-  PaymentMethod? _method;
-  bool _methodTouched = false;
+  // Null until picked: the form shows the default account and sends it.
+  String? _accountId;
+  String? _channel;
 
   /// Shown when an edited transaction's category can no longer be used.
   String? _retiredCategoryName;
@@ -132,8 +135,8 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       _type = t.type;
       _amount.text = MoneyFormatter.editable(t.amount);
       _date = t.date;
-      _method = t.paymentMethod;
-      _methodTouched = true;
+      _accountId = t.accountId;
+      _channel = t.channel;
       _counterparty.text = t.counterparty ?? '';
       _note.text = t.note ?? '';
       final pickable = ref.read(pickableCategoriesProvider(t.type)).value;
@@ -146,10 +149,6 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
             ref.read(categoryProvider(t.categoryId))?.name ??
             'The previous category';
       }
-    } else {
-      _method =
-          ref.read(lastPaymentMethodProvider)[_type] ??
-          defaultPaymentMethod(_type);
     }
   }
 
@@ -168,11 +167,6 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
           ? null
           : ref.read(categoryProvider(_categoryId!));
       if (current != null && current.type != type) _categoryId = null;
-      if (!_methodTouched) {
-        _method =
-            ref.read(lastPaymentMethodProvider)[type] ??
-            defaultPaymentMethod(type);
-      }
       _errors = Map.of(_errors)..remove('categoryId');
     });
   }
@@ -218,12 +212,14 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       _submitting = true;
     });
 
+    final accountId = _accountId ?? ref.read(defaultAccountProvider).value?.id;
     final data = TransactionInput(
       type: _type,
       amount: amount!,
       categoryId: _categoryId!,
       date: _date,
-      paymentMethod: _method,
+      accountId: accountId,
+      channel: _channel,
       counterparty: _trimmed(_counterparty),
       note: _trimmed(_note),
     );
@@ -264,7 +260,6 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       setState(() => _submitting = false);
       return;
     }
-    ref.read(lastPaymentMethodProvider.notifier).remember(_type, _method);
     await Navigator.of(context).maybePop(saved.id);
   }
 
@@ -305,6 +300,16 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
             errorText: _errors['amount'],
             textInputAction: TextInputAction.next,
             onChanged: (_) => _clearError('amount'),
+          ),
+          const SizedBox(height: LedgerForm.gap),
+          AccountPickerField(
+            label: income ? 'Received in' : 'Paid from',
+            value: _accountId ?? ref.watch(defaultAccountProvider).value?.id,
+            errorText: _errors['accountId'],
+            onChanged: (id) => setState(() {
+              _accountId = id;
+              _errors = Map.of(_errors)..remove('accountId');
+            }),
           ),
           const SizedBox(height: LedgerForm.gap),
           if (_retiredCategoryName != null && _categoryId == null) ...[
@@ -365,23 +370,13 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
             }),
           ),
           const SizedBox(height: LedgerForm.gap),
-          LedgerField(
-            label: income ? 'Received via' : 'Paid via',
-            child: LedgerChoiceChips<PaymentMethod>(
-              options: [
-                for (final m in PaymentMethod.values)
-                  LedgerOption(m, m.label, icon: _methodIcon(m)),
-              ],
-              selected: _method,
-              onChanged: (m) => setState(() {
-                _method = m;
-                _methodTouched = true;
-              }),
-              onCleared: () => setState(() {
-                _method = null;
-                _methodTouched = true;
-              }),
-            ),
+          ChannelField(
+            value: _channel,
+            errorText: _errors['channel'],
+            onChanged: (v) {
+              _channel = v;
+              _clearError('channel');
+            },
           ),
           const SizedBox(height: LedgerForm.gap),
           LedgerTextField(
@@ -410,12 +405,3 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     );
   }
 }
-
-IconData _methodIcon(PaymentMethod m) => switch (m) {
-  PaymentMethod.upi => LucideIcons.smartphone,
-  PaymentMethod.card => LucideIcons.creditCard,
-  PaymentMethod.cash => LucideIcons.banknote,
-  PaymentMethod.bankTransfer => LucideIcons.landmark,
-  PaymentMethod.wallet => LucideIcons.wallet,
-  PaymentMethod.other => LucideIcons.circleDot,
-};

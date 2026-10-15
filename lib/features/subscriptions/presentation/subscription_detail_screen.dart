@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
@@ -139,7 +140,7 @@ class _SubscriptionDetailScreenState extends ConsumerState<SubscriptionDetailScr
   }
 }
 
-class _Body extends StatelessWidget {
+class _Body extends ConsumerWidget {
   const _Body({required this.detail, required this.onMarkPaid, required this.onSkip, required this.onResume});
 
   final SubscriptionDetail detail;
@@ -148,7 +149,7 @@ class _Body extends StatelessWidget {
   final VoidCallback onResume;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = context.type;
     final d = detail;
     final s = d.subscription;
@@ -172,7 +173,12 @@ class _Body extends StatelessWidget {
                   LedgerFact(label: 'Per month', value: AmountText(s.monthlyEquivalent, style: t.figure)),
                 LedgerFact(label: 'Per year', value: AmountText(s.annualized, style: t.figure)),
                 LedgerFact(label: 'Category', text: d.category?.name ?? 'Uncategorised'),
-                LedgerFact(label: 'Usually paid by', text: s.paymentMethod?.label ?? 'Not set'),
+                LedgerFact(
+                  label: 'Usually charged to',
+                  text: s.accountId == null
+                      ? 'Not set'
+                      : (ref.watch(financeSnapshotProvider).value?.account(s.accountId!)?.name ?? 'Unknown account'),
+                ),
                 LedgerFact(label: 'Renews automatically', text: s.autoRenews ? 'Yes' : 'No'),
                 if (s.startDate != null) LedgerFact(label: 'Started', text: DateFormats.dayMonthYear.format(s.startDate!)),
                 if (s.isActive && later.isNotEmpty)

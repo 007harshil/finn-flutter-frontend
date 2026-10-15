@@ -4,6 +4,7 @@ import '../../../core/money/money_format.dart';
 import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../accounts/domain/money_account.dart';
 import '../domain/financial_profile.dart';
 
 /// Input for updating the user's financial starting point.
@@ -124,15 +125,23 @@ class UpdateProfileAction extends FinancialAction<UpdateProfileInput, FinancialP
     ));
   }
 
-  /// Cash recomputed with the new opening balance and date.
+  /// Cash recomputed with the new opening balance and date applied to the
+  /// Cash account (`acc_cash`).
   static Money _cashWith(FinanceSnapshot s, UpdateProfileInput input) {
-    final from = input.openingDate.dateOnly;
-    var paise = input.openingBalance.paise;
-    for (final t in s.transactions) {
-      if (t.date.isAfter(s.today) || t.date.isBefore(from)) continue;
-      paise += t.signedAmount.paise;
-    }
-    return Money.fromPaise(paise);
+    final date = input.openingDate.dateOnly;
+    return FinanceSnapshot.ledgerCalc
+        .balance(
+          profile: s.profile?.copyWith(openingBalance: input.openingBalance, openingDate: date),
+          accounts: [
+            for (final a in s.accounts)
+              if (a.id == cashAccountId) a.copyWith(opening: input.openingBalance, openingDate: date) else a,
+          ],
+          transfers: s.transfers,
+          transactions: s.transactions,
+          movements: s.savingsMovements,
+          asOf: s.today,
+        )
+        .cash;
   }
 
   @override
@@ -144,6 +153,28 @@ class UpdateProfileAction extends FinancialAction<UpdateProfileInput, FinancialP
       monthlyIncomeEstimate: input.monthlyIncomeEstimate,
     );
     await env.repos.profile.set(profile);
+    // The ledger reads the Cash account, not the profile: keep it in step.
+    final now = env.clock.now();
+    final cash = s.account(cashAccountId);
+    if (cash != null) {
+      await env.repos.moneyAccounts.save(cash.copyWith(
+        opening: input.openingBalance,
+        openingDate: profile.openingDate,
+        updatedAt: now,
+        version: cash.version + 1,
+      ));
+    } else if (s.accounts.isEmpty) {
+      await env.repos.moneyAccounts.save(MoneyAccount(
+        id: cashAccountId,
+        name: 'Cash',
+        kind: MoneyAccountKind.cash,
+        opening: input.openingBalance,
+        openingDate: profile.openingDate,
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      ));
+    }
     return Result.ok(profile);
   }
 }

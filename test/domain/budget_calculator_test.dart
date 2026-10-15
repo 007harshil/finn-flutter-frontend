@@ -45,6 +45,7 @@ Transaction tx(
       type: type,
       amount: Money.rupees(rupees),
       categoryId: category,
+      accountId: 'acc_cash',
       date: date,
       origin: origin,
       createdAt: stamp,
@@ -175,7 +176,7 @@ void main() {
             budget: b,
             transactions: [
               Transaction(
-                id: 't', type: TransactionType.expense, amount: Money.fromPaise(spentPaise), categoryId: 'cat_food',
+                id: 't', type: TransactionType.expense, amount: Money.fromPaise(spentPaise), categoryId: 'cat_food', accountId: 'acc_cash',
                 date: d(2026, 10, 2), createdAt: stamp, updatedAt: stamp),
             ],
             subscriptions: const [],

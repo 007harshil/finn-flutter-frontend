@@ -1,4 +1,5 @@
 import '../../core/money/money.dart';
+import '../../features/accounts/domain/money_account.dart';
 import '../../features/categories/domain/category.dart';
 import '../../features/transactions/domain/transaction.dart';
 import '../../finance/finance_snapshot.dart';
@@ -107,34 +108,73 @@ abstract final class AgentDate {
   }
 }
 
-/// Words that name a payment method, for checking that the user said one.
-const Map<PaymentMethod, List<String>> _methodWords = {
-  PaymentMethod.upi: ['upi', 'gpay', 'google pay', 'phonepe', 'phone pe', 'paytm', 'bhim', 'qr'],
-  PaymentMethod.card: ['card', 'credit', 'debit', 'visa', 'mastercard', 'rupay', 'amex'],
-  PaymentMethod.cash: ['cash', 'nakad'],
-  PaymentMethod.bankTransfer: ['bank', 'neft', 'imps', 'rtgs', 'transfer', 'cheque', 'check'],
-  PaymentMethod.wallet: ['wallet', 'amazon pay', 'mobikwik'],
-};
+/// Account the model named, matched to the user's own accounts.
+abstract final class AgentAccount {
+  /// Labels an account answers to: its name, issuer, kind and last four.
+  static Iterable<String> labels(MoneyAccount a) => [
+    a.name,
+    if (a.institution != null) a.institution!,
+    if (a.institution != null) '${a.institution} ${a.name}',
+    a.kind.label,
+    if (a.last4 != null) a.last4!,
+  ];
 
-abstract final class AgentMethod {
-  /// The payment method the model named, kept only when the user's text
-  /// actually mentions a payment method (models tend to add one).
-  static PaymentMethod? resolve(Object? v, String userText) {
+  /// The matching of [v] among the user's active accounts.
+  static NameMatch<MoneyAccount> match(FinanceSnapshot s, Object? v, String userText) {
+    if (v is! String || v.trim().isEmpty) return NoMatch<MoneyAccount>();
+    final raw = v.trim();
+    // An id (the answer to a clarification) needs no grounding.
+    final byId = s.activeAccounts.where((a) => a.id == raw).firstOrNull;
+    if (byId != null) return Matched(byId);
+    if (!grounded(raw, userText)) return NoMatch<MoneyAccount>();
+    return matchByName(raw, s.activeAccounts, labels);
+  }
+
+  /// The account id the model named, or null (use the default account)
+  /// when none was said, it was not in the user's words, or it is
+  /// ambiguous ("card" with several cards).
+  static String? resolve(FinanceSnapshot s, Object? v, String userText) {
+    final m = match(s, v, userText);
+    return m is Matched<MoneyAccount> ? m.value.id : null;
+  }
+}
+
+/// Channel (sub-type of a payment) the model named.
+abstract final class AgentChannel {
+  static const _aliases = {
+    'upi': 'UPI',
+    'gpay': 'UPI',
+    'google pay': 'UPI',
+    'phonepe': 'UPI',
+    'phone pe': 'UPI',
+    'paytm': 'UPI',
+    'bhim': 'UPI',
+    'imps': 'IMPS',
+    'neft': 'NEFT',
+    'rtgs': 'RTGS',
+    'net banking': 'Net banking',
+    'netbanking': 'Net banking',
+    'cheque': 'Cheque',
+    'check': 'Cheque',
+    'tap': 'Tap / swipe',
+    'swipe': 'Tap / swipe',
+    'atm': 'ATM',
+  };
+
+  /// The channel the model named, kept only when the user's text really
+  /// mentions it (models tend to add one). Free text is allowed.
+  static String? resolve(Object? v, String userText) {
     if (v is! String) return null;
     final key = v.trim().toLowerCase();
-    final method = switch (key) {
-      'upi' => PaymentMethod.upi,
-      'card' => PaymentMethod.card,
-      'cash' => PaymentMethod.cash,
-      'bank' || 'banktransfer' || 'bank transfer' || 'neft' || 'imps' => PaymentMethod.bankTransfer,
-      'wallet' => PaymentMethod.wallet,
-      'other' => PaymentMethod.other,
-      _ => null,
-    };
-    if (method == null || method == PaymentMethod.other) return null;
+    if (key.isEmpty || key.length > 30) return null;
     final text = userText.toLowerCase();
-    final mentioned = (_methodWords[method] ?? const []).any((w) => RegExp('\\b${RegExp.escape(w)}').hasMatch(text));
-    return mentioned ? method : null;
+    bool mentions(String w) => RegExp('\\b${RegExp.escape(w)}').hasMatch(text);
+    final canonical = _aliases[key];
+    if (canonical != null) {
+      final said = mentions(canonical.toLowerCase()) || _aliases.entries.any((e) => e.value == canonical && mentions(e.key));
+      return said ? canonical : null;
+    }
+    return mentions(key) ? v.trim() : null;
   }
 }
 

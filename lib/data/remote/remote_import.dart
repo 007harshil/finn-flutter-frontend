@@ -28,7 +28,8 @@ class RemoteImporter {
         s.loans.current.isNotEmpty ||
         s.subscriptions.current.isNotEmpty ||
         s.pending.current.isNotEmpty ||
-        s.assets.current.isNotEmpty;
+        s.assets.current.isNotEmpty ||
+        s.transfers.current.isNotEmpty;
   }
 
   /// The `/import` body: the local store's DTO JSON. Pending items shared
@@ -56,6 +57,8 @@ class RemoteImporter {
           if (ownPendingIds.contains(x.pendingId)) SettlementDto.toJson(x),
       ],
       'assets': [for (final a in s.assets.current) AssetDto.toJson(a)],
+      'moneyAccounts': [for (final a in s.moneyAccounts.current) MoneyAccountDto.toJson(a)],
+      'transfers': [for (final t in s.transfers.current) TransferDto.toJson(t)],
       'profile': ProfileDto.toJson(s.profile.current),
       'emergencyPlan': EmergencyPlanDto.toJson(s.emergencyPlan.current),
     };

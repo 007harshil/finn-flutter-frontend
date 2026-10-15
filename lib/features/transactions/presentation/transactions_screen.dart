@@ -15,6 +15,9 @@ import '../../../core/time/dates.dart';
 import '../../../features/transactions/domain/transaction.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/transaction_row.dart';
+import '../../accounts/domain/transfer.dart';
+import '../../accounts/presentation/transfer_form_sheet.dart';
+import '../../accounts/presentation/widgets/transfer_row.dart';
 import '../application/transaction_filter.dart';
 import 'widgets/activity_filter_sheet.dart';
 import 'widgets/activity_summary.dart';
@@ -89,7 +92,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   bool _onScroll(ScrollNotification n, TransactionFeed? feed) {
     if (n.depth != 0 || n.metrics.axis != Axis.vertical) return false;
     _scrolledUnder.value = n.metrics.pixels > _titleExtent;
-    if (feed == null || _extendQueued || _visibleRows >= feed.count) return false;
+    if (feed == null || _extendQueued || _visibleRows >= feed.rowCount) return false;
     if (n.metrics.extentAfter < 600) {
       _extendQueued = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -149,7 +152,18 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         storageKey: 'activity-list',
         slivers: [
           PageBlock(
-            child: PageHeader(title: 'Activity', actions: [_SortButton(onPressed: _pickSort)]),
+            child: PageHeader(
+              title: 'Activity',
+              actions: [
+                LedgerIconButton(
+                  key: const ValueKey('activity-transfer'),
+                  icon: LucideIcons.arrowLeftRight,
+                  tooltip: 'Record a transfer',
+                  onPressed: () => showTransferSheet(context),
+                ),
+                _SortButton(onPressed: _pickSort),
+              ],
+            ),
           ),
           PinnedHeaderSliver(
             child: _FilterHeader(
@@ -187,7 +201,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
 
     final feed = value.requireValue;
     final filter = feed.filter;
-    if (feed.isEmpty) {
+    if (feed.hasNoRows) {
       final refined = filter.hasRefinements;
       return [
         // Keep the switches and filter chips in reach so a filter that
@@ -214,7 +228,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
       ];
     }
 
-    final rows = math.min(_visibleRows, feed.count);
+    final rows = math.min(_visibleRows, feed.rowCount);
     final items = _items(feed, feed.entryCountFor(rows));
     final grouped = filter.sort.groupsByDate;
     final today = ref.read(todayProvider);
@@ -241,20 +255,28 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   ),
                 ),
               ),
+            _TransferItem(:final transfer, :final first, :final last) => PageColumn(
+                child: LedgerPanelSlice(
+                  first: first,
+                  last: last,
+                  dividerIndent: _rowIndent,
+                  child: TransferRow(key: ValueKey(transfer.id), transfer: transfer, showDate: !grouped),
+                ),
+              ),
           },
         ),
       ),
-      if (rows < feed.count)
+      if (rows < feed.rowCount)
         PageBlock(
           top: Sp.xl,
           child: LedgerButton(
-            label: 'Load more (${feed.count - rows} left)',
+            label: 'Load more (${feed.rowCount - rows} left)',
             variant: LedgerButtonVariant.secondary,
             expand: true,
             onPressed: () => setState(() => _visibleRows += _pageSize),
           ),
         )
-      else if (feed.count > 8)
+      else if (feed.rowCount > 8)
         PageBlock(
           top: Sp.xl,
           child: Text(
@@ -282,6 +304,10 @@ List<_Item> _items(TransactionFeed feed, int count) {
         final last = i + 1 >= count || entries[i + 1] is FeedDayHeader;
         out.add(_RowItem(transaction, first: open, last: last));
         open = false;
+      case FeedTransfer(:final transfer):
+        final last = i + 1 >= count || entries[i + 1] is FeedDayHeader;
+        out.add(_TransferItem(transfer, first: open, last: last));
+        open = false;
     }
   }
   return out;
@@ -299,6 +325,13 @@ final class _HeaderItem extends _Item {
 final class _RowItem extends _Item {
   const _RowItem(this.transaction, {required this.first, required this.last});
   final Transaction transaction;
+  final bool first;
+  final bool last;
+}
+
+final class _TransferItem extends _Item {
+  const _TransferItem(this.transfer, {required this.first, required this.last});
+  final Transfer transfer;
   final bool first;
   final bool last;
 }

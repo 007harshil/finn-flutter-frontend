@@ -5,6 +5,7 @@ import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../core/time/frequency.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../accounts/application/account_support.dart';
 import '../../categories/domain/category.dart';
 import '../../transactions/application/transaction_actions.dart';
 import '../../transactions/domain/transaction.dart';
@@ -27,6 +28,8 @@ class LoanInput extends ActionInput {
     this.maturityDate,
     this.prepaymentStrategy = PrepaymentStrategy.reduceTenure,
     this.recordDisbursement = false,
+    this.accountId,
+    this.channel,
     this.note,
   });
 
@@ -46,6 +49,11 @@ class LoanInput extends ActionInput {
   /// Record the disbursement as a cash movement (borrowed: money in;
   /// lent: money out). Leave false for loans taken before tracking began.
   final bool recordDisbursement;
+
+  /// Account the disbursement hit (default account when omitted) and its
+  /// optional channel. Only used with [recordDisbursement].
+  final String? accountId;
+  final String? channel;
   final String? note;
 
   factory LoanInput.fromJson(Map<String, Object?> j) => LoanInput(
@@ -63,6 +71,8 @@ class LoanInput extends ActionInput {
     prepaymentStrategy:
         In.enumOpt(j, 'prepaymentStrategy', PrepaymentStrategy.values) ?? PrepaymentStrategy.reduceTenure,
     recordDisbursement: In.boolean(j, 'recordDisbursement', fallback: false),
+    accountId: In.strOpt(j, 'accountId'),
+    channel: In.strOpt(j, 'channel'),
     note: In.strOpt(j, 'note'),
   );
 
@@ -81,6 +91,8 @@ class LoanInput extends ActionInput {
     'maturityDate': Out.dateOpt(maturityDate),
     'prepaymentStrategy': prepaymentStrategy.name,
     'recordDisbursement': recordDisbursement,
+    'accountId': accountId,
+    'channel': channel,
     'note': note,
   };
 
@@ -121,6 +133,12 @@ Map<String, String> validateLoan(LoanInput i, FinanceSnapshot s) {
   if (i.frequency == Frequency.weekly) e['frequency'] = 'Weekly repayment is not supported.';
   if (i.firstDueDate.dateOnly.isBefore(i.startDate.dateOnly)) {
     e['firstDueDate'] = 'The first due date must be after the start date.';
+  }
+  if (i.recordDisbursement) {
+    final accountErr = accountWriteError(s, i.accountId ?? s.defaultAccountId);
+    if (accountErr != null) e['accountId'] = accountErr;
+    final channelErr = channelError(i.channel);
+    if (channelErr != null) e['channel'] = channelErr;
   }
   if (i.recordDisbursement && i.startDate.dateOnly.isAfter(s.today)) {
     e['startDate'] = 'A future disbursement cannot be recorded as cash yet.';
@@ -179,6 +197,13 @@ class CreateLoanAction extends FinancialAction<LoanInput, Loan> {
         'Record the disbursement as a cash movement',
         required: false,
       ),
+      ActionFieldSpec(
+        'accountId',
+        FieldKind.id,
+        'Account the disbursement hit (default account when omitted)',
+        required: false,
+      ),
+      ActionFieldSpec('channel', FieldKind.string, 'Optional channel, e.g. NEFT', required: false),
     ],
   );
 
@@ -251,10 +276,11 @@ class CreateLoanAction extends FinancialAction<LoanInput, Loan> {
         originRefId: id,
         counterparty: input.counterparty.trim(),
         note: '${input.name} · disbursement',
-        method: PaymentMethod.bankTransfer,
+        accountId: input.accountId ?? s.defaultAccountId,
+        channel: input.channel,
       );
       await env.repos.transactions.save(tx);
-      await extendTrackingStart(env, tx.date);
+      await extendTrackingStart(env, tx.date, accountIds: [tx.accountId]);
     }
     final loan = input.toLoan(id, env.clock.now(), disbursementTransactionId: tx?.id);
     await env.repos.loans.save(loan);
@@ -352,7 +378,8 @@ class LoanPaymentInput extends ActionInput {
     required this.kind,
     required this.amount,
     required this.date,
-    this.method,
+    this.accountId,
+    this.channel,
     this.recordCashMovement = true,
     this.note,
   });
@@ -361,7 +388,9 @@ class LoanPaymentInput extends ActionInput {
   final LoanPaymentKind kind;
   final Money amount;
   final DateTime date;
-  final PaymentMethod? method;
+  /// Account paid from / received into (default account when omitted).
+  final String? accountId;
+  final String? channel;
   final bool recordCashMovement;
   final String? note;
 
@@ -371,7 +400,8 @@ class LoanPaymentInput extends ActionInput {
     'kind': kind.name,
     'amount': Out.money(amount),
     'date': Out.date(date),
-    'method': method?.name,
+    'accountId': accountId,
+    'channel': channel,
     'recordCashMovement': recordCashMovement,
     'note': note,
   };
@@ -401,7 +431,13 @@ class RecordLoanPaymentAction extends FinancialAction<LoanPaymentInput, LoanPaym
       ),
       ActionFieldSpec('amount', FieldKind.money, 'Amount paid (or received for lent loans)'),
       ActionFieldSpec('date', FieldKind.date, 'Payment date'),
-      ActionFieldSpec('method', FieldKind.enumeration, 'Payment method', required: false),
+      ActionFieldSpec(
+        'accountId',
+        FieldKind.id,
+        'Account paid from or received into (default account when omitted)',
+        required: false,
+      ),
+      ActionFieldSpec('channel', FieldKind.string, 'Optional channel, e.g. UPI, NEFT', required: false),
       ActionFieldSpec(
         'recordCashMovement',
         FieldKind.boolean,
@@ -417,7 +453,8 @@ class RecordLoanPaymentAction extends FinancialAction<LoanPaymentInput, LoanPaym
     kind: In.enumeration(j, 'kind', LoanPaymentKind.values),
     amount: In.money(j, 'amount'),
     date: In.date(j, 'date'),
-    method: In.enumOpt(j, 'method', PaymentMethod.values),
+    accountId: In.strOpt(j, 'accountId'),
+    channel: In.strOpt(j, 'channel'),
     recordCashMovement: In.boolean(j, 'recordCashMovement', fallback: true),
     note: In.strOpt(j, 'note'),
   );
@@ -438,6 +475,15 @@ class RecordLoanPaymentAction extends FinancialAction<LoanPaymentInput, LoanPaym
       return const Result.err(
         AppFailure.validation('The date is before the loan started.', fields: {'date': 'Before the loan start date.'}),
       );
+    }
+    if (input.recordCashMovement) {
+      final accountErr = accountWriteError(s, input.accountId ?? s.defaultAccountId);
+      final channelErr = channelError(input.channel);
+      if (accountErr != null || channelErr != null) {
+        final field = accountErr != null ? 'accountId' : 'channel';
+        final msg = (accountErr ?? channelErr)!;
+        return Result.err(AppFailure.validation(msg, fields: {field: msg}));
+      }
     }
     return _calc.previewPayment(state: st, kind: input.kind, amount: input.amount);
   }
@@ -503,12 +549,13 @@ class RecordLoanPaymentAction extends FinancialAction<LoanPaymentInput, LoanPaym
         date: input.date,
         origin: TransactionOrigin.loanRepayment,
         originRefId: loan.id,
-        method: input.method,
+        accountId: input.accountId ?? s.defaultAccountId,
+        channel: input.channel,
         counterparty: loan.counterparty,
         note: '${loan.name} · ${input.kind.label}${p.periodNumber != null ? ' #${p.periodNumber}' : ''}',
       );
       await env.repos.transactions.save(tx);
-      await extendTrackingStart(env, tx.date);
+      await extendTrackingStart(env, tx.date, accountIds: [tx.accountId]);
     }
     final payment = LoanPayment(
       id: env.ids.next('lp'),

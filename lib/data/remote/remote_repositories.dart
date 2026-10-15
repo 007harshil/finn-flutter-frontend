@@ -12,6 +12,8 @@ import '../../features/categories/domain/category.dart';
 import '../../features/emergency_fund/domain/emergency_fund.dart';
 import '../../features/goals/domain/goal.dart';
 import '../../features/loans/domain/loan.dart';
+import '../../features/accounts/domain/money_account.dart';
+import '../../features/accounts/domain/transfer.dart';
 import '../../features/net_worth/domain/asset.dart';
 import '../../features/pending/domain/pending_payment.dart';
 import '../../features/settings/domain/financial_profile.dart';
@@ -127,6 +129,14 @@ class RemoteSettlementRepository extends RemoteCollection<PendingSettlement> imp
 
 class RemoteAssetRepository extends RemoteCollection<Asset> implements AssetRepository {
   RemoteAssetRepository(SyncEngine e) : super(e, SyncCollections.assets, AssetDto.fromJson);
+}
+
+class RemoteMoneyAccountRepository extends RemoteCollection<MoneyAccount> implements MoneyAccountRepository {
+  RemoteMoneyAccountRepository(SyncEngine e) : super(e, SyncCollections.moneyAccounts, MoneyAccountDto.fromJson);
+}
+
+class RemoteTransferRepository extends RemoteCollection<Transfer> implements TransferRepository {
+  RemoteTransferRepository(SyncEngine e) : super(e, SyncCollections.transfers, TransferDto.fromJson);
 }
 
 /// A synced single value, hydrated synchronously from the cache.
@@ -340,6 +350,8 @@ FinanceRepositories buildRemoteRepositories(SyncEngine engine, ApiClient api) =>
   pending: RemotePendingRepository(engine),
   settlements: RemoteSettlementRepository(engine),
   assets: RemoteAssetRepository(engine),
+  moneyAccounts: RemoteMoneyAccountRepository(engine),
+  transfers: RemoteTransferRepository(engine),
   profile: RemoteProfileRepository(engine, api),
   emergencyPlan: RemoteEmergencyPlanRepository(engine),
   alertInbox: RemoteAlertInboxRepository(engine, api),

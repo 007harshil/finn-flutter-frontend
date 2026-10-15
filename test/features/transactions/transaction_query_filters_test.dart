@@ -10,7 +10,8 @@ Transaction _tx(
   DateTime date, {
   TransactionType type = TransactionType.expense,
   String category = 'food',
-  PaymentMethod? method,
+  String accountId = 'acc_cash',
+  String? channel,
   TransactionOrigin origin = TransactionOrigin.manual,
 }) =>
     Transaction(
@@ -21,7 +22,8 @@ Transaction _tx(
       date: date,
       createdAt: date,
       updatedAt: date,
-      paymentMethod: method,
+      accountId: accountId,
+      channel: channel,
       origin: origin,
     );
 
@@ -29,13 +31,13 @@ void main() {
   final today = DateTime(2026, 10, 11);
   final txs = [
     _tx('salary', 100000, DateTime(2026, 10, 10), type: TransactionType.income, category: 'salary'),
-    _tx('rent', 30000, DateTime(2026, 10, 5), category: 'rent', method: PaymentMethod.bankTransfer),
+    _tx('rent', 30000, DateTime(2026, 10, 5), category: 'rent', accountId: 'acc_axis'),
     _tx('netflix', 649, DateTime(2026, 10, 3), category: 'subs', origin: TransactionOrigin.subscription),
-    _tx('lunch', 450, DateTime(2026, 10, 2), method: PaymentMethod.upi),
-    _tx('dinner', 1800, DateTime(2026, 10, 1), method: PaymentMethod.card),
+    _tx('lunch', 450, DateTime(2026, 10, 2), accountId: 'acc_sbi'),
+    _tx('dinner', 1800, DateTime(2026, 10, 1), accountId: 'acc_hdfc'),
     // September: inside the comparison window (1–11 Sep) and after it.
-    _tx('sep-early', 5000, DateTime(2026, 9, 8), method: PaymentMethod.upi),
-    _tx('sep-late', 9000, DateTime(2026, 9, 25), method: PaymentMethod.upi),
+    _tx('sep-early', 5000, DateTime(2026, 9, 8), accountId: 'acc_sbi'),
+    _tx('sep-late', 9000, DateTime(2026, 9, 25), accountId: 'acc_sbi'),
   ];
   final october = TransactionFilter(month: today.monthKey);
   TransactionFeed feed(TransactionFilter f) => TransactionQuery.build(txs, f, const {}, today: today);
@@ -48,9 +50,19 @@ void main() {
     expect(ids(october.copyWith(amount: () => const AmountRange(minPaise: 3000000))), ['salary', 'rent']);
   });
 
-  test('payment method treats a missing method as Other', () {
-    expect(ids(october.copyWith(methods: {PaymentMethod.upi, PaymentMethod.card})), ['lunch', 'dinner']);
-    expect(ids(october.copyWith(methods: {PaymentMethod.other})), ['salary', 'netflix']);
+  test('account filter keeps transactions on the chosen accounts', () {
+    expect(ids(october.copyWith(accountIds: {'acc_sbi', 'acc_hdfc'})), ['lunch', 'dinner']);
+    expect(ids(october.copyWith(accountIds: {'acc_cash'})), ['salary', 'netflix']);
+  });
+
+  test('channel filter matches case-insensitively', () {
+    final withChannels = [
+      _tx('a', 100, DateTime(2026, 10, 2), channel: 'UPI'),
+      _tx('b', 200, DateTime(2026, 10, 3), channel: 'ATM'),
+      _tx('c', 300, DateTime(2026, 10, 4)),
+    ];
+    final f = october.copyWith(channels: {'upi'});
+    expect(TransactionQuery.build(withChannels, f, const {}, today: today).transactions.map((t) => t.id), ['a']);
   });
 
   test('source filter matches the transaction origin', () {
@@ -60,7 +72,7 @@ void main() {
   test('advanced count and refinements include the new filters', () {
     final f = october.copyWith(
       amount: () => const AmountRange(maxPaise: 100),
-      methods: {PaymentMethod.cash},
+      accountIds: {'acc_cash'},
       origins: {TransactionOrigin.manual},
       categoryIds: {'food'},
     );
@@ -75,7 +87,7 @@ void main() {
     expect(f.expense, const Money.rupees(30000 + 649 + 450 + 1800));
     expect(f.previousExpense, const Money.rupees(5000));
     // Filters apply to the comparison too.
-    expect(feed(october.copyWith(methods: {PaymentMethod.card})).previousExpense, Money.zero);
+    expect(feed(october.copyWith(accountIds: {'acc_hdfc'})).previousExpense, Money.zero);
     // A past month compares with the whole month before it.
     expect(TransactionQuery.previousPeriod(TransactionFilter(month: const MonthKey(2026, 9)), today),
         DateRange(DateTime(2026, 8, 1), DateTime(2026, 8, 31)));
@@ -94,7 +106,7 @@ void main() {
   });
 
   test('live count matches the built feed', () {
-    final f = october.copyWith(methods: {PaymentMethod.upi});
+    final f = october.copyWith(accountIds: {'acc_sbi'});
     expect(TransactionQuery.count(txs, f, const {}), feed(f).count);
   });
 }

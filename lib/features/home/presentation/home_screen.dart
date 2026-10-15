@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../application/home_overview.dart';
+import 'widgets/accounts_section.dart';
 import 'widgets/attention_section.dart';
 import 'widgets/hero_balance_card.dart';
 import 'widgets/home_header.dart';
@@ -38,6 +39,7 @@ class HomeScreen extends ConsumerWidget {
             : const [
                 PageBlock(child: HomeHeader()),
                 PageBlock(top: Sp.xxl, child: HeroBalanceCard()),
+                PageBlock(child: HomeAccountsSection()),
                 PageBlock(top: Sp.section, child: PeriodOverview()),
                 PageBlock(child: AttentionSection()),
                 PageBlock(child: UpcomingSection()),

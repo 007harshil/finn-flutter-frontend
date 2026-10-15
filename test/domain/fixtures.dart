@@ -3,6 +3,7 @@
 import 'package:finn/core/money/money.dart';
 import 'package:finn/core/time/frequency.dart';
 import 'package:finn/data/mock/seed_data.dart';
+import 'package:finn/features/accounts/domain/money_account.dart';
 import 'package:finn/features/budgets/domain/budget.dart';
 import 'package:finn/features/categories/domain/category.dart';
 import 'package:finn/features/emergency_fund/domain/emergency_fund.dart';
@@ -40,7 +41,8 @@ Transaction tx(
   String? category,
   TransactionOrigin origin = TransactionOrigin.manual,
   String? originRefId,
-  PaymentMethod? method,
+  String accountId = cashAccountId,
+  String? channel,
   String? counterparty,
   String? id,
 }) =>
@@ -50,7 +52,8 @@ Transaction tx(
       amount: rs(rupees),
       categoryId: category ?? (income ? SeedCategoryIds.salary : SeedCategoryIds.food),
       date: date,
-      paymentMethod: method,
+      accountId: accountId,
+      channel: channel,
       counterparty: counterparty,
       origin: origin,
       originRefId: originRefId,

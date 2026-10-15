@@ -10,6 +10,9 @@ import '../../../../core/money/money.dart';
 import '../../../../core/money/money_format.dart';
 import '../../../../kit/kit.dart';
 import '../../../../shared/presentation/category_icons.dart';
+import '../../../accounts/application/account_support.dart';
+import '../../../accounts/domain/money_account.dart';
+import '../../../accounts/domain/transfer.dart';
 import '../../../categories/domain/category.dart';
 import '../../application/transaction_filter.dart';
 import '../../domain/transaction.dart';
@@ -51,13 +54,11 @@ String originLabel(TransactionOrigin o) => switch (o) {
   TransactionOrigin.pendingSettlement => 'Settlements',
 };
 
-IconData methodIcon(PaymentMethod m) => switch (m) {
-  PaymentMethod.upi => LucideIcons.smartphone,
-  PaymentMethod.card => LucideIcons.creditCard,
-  PaymentMethod.cash => LucideIcons.banknote,
-  PaymentMethod.bankTransfer => LucideIcons.landmark,
-  PaymentMethod.wallet => LucideIcons.wallet,
-  PaymentMethod.other => LucideIcons.circleDot,
+IconData accountIcon(MoneyAccountKind k) => switch (k) {
+  MoneyAccountKind.cash => LucideIcons.banknote,
+  MoneyAccountKind.bank => LucideIcons.landmark,
+  MoneyAccountKind.promoCard => LucideIcons.wallet,
+  MoneyAccountKind.debitCard || MoneyAccountKind.creditCard || MoneyAccountKind.otherCard => LucideIcons.creditCard,
 };
 
 /// Type, amount, category, payment method and source in one sheet, with a
@@ -95,10 +96,39 @@ class _ActivityFilterSheetState extends ConsumerState<ActivityFilterSheet> {
       type: () => null,
       categoryIds: const {},
       amount: () => null,
-      methods: const {},
+      accountIds: const {},
+      channels: const {},
       origins: const {},
     ),
   );
+
+  /// Channels worth filtering by: suggestions that are in use, custom ones
+  /// in use, and anything already selected. Most used first.
+  List<String> _channelOptions(List<Transaction> txs, List<Transfer> transfers, Set<String> selected) {
+    final uses = <String, int>{};
+    void add(String? raw) {
+      final v = cleanChannel(raw);
+      if (v == null) return;
+      final key = uses.keys.firstWhere((k) => k.toLowerCase() == v.toLowerCase(), orElse: () => v);
+      uses[key] = (uses[key] ?? 0) + 1;
+    }
+
+    for (final t in txs) {
+      add(t.channel);
+    }
+    for (final t in transfers) {
+      add(t.channel);
+    }
+    for (final s in selected) {
+      uses.putIfAbsent(s, () => 0);
+    }
+    final list = uses.keys.toList()
+      ..sort((a, b) {
+        final u = uses[b]!.compareTo(uses[a]!);
+        return u != 0 ? u : a.toLowerCase().compareTo(b.toLowerCase());
+      });
+    return list;
+  }
 
   Set<T> _toggled<T>(Set<T> set, T value) {
     final next = Set<T>.of(set);
@@ -122,7 +152,14 @@ class _ActivityFilterSheetState extends ConsumerState<ActivityFilterSheet> {
             (_draft.type == null || t.type == _draft.type))
           t,
     ];
-    final matches = TransactionQuery.count(txs, _draft, cats);
+    final transfers = ref.watch(transfersProvider).value ?? const <Transfer>[];
+    final accountsById = {
+      for (final a in ref.watch(moneyAccountsProvider).value ?? const <MoneyAccount>[]) a.id: a,
+    };
+    final matches =
+        TransactionQuery.count(txs, _draft, cats) +
+        transfers.where((t) => range.contains(t.date) && TransactionQuery.passesTransfer(t, _draft, accountsById)).length;
+    final channelOptions = _channelOptions(txs, transfers, _draft.channels);
     final active = _draft.advancedCount + (_draft.type != null ? 1 : 0);
 
     return FinnSheetScaffold(
@@ -181,27 +218,45 @@ class _ActivityFilterSheetState extends ConsumerState<ActivityFilterSheet> {
             child: _categoryChips(inPeriod, cats),
           ),
           _Group(
-            title: 'Paid via',
-            trailing: _draft.methods.isEmpty
+            title: 'Account',
+            trailing: _draft.accountIds.isEmpty
                 ? 'Any'
-                : '${_draft.methods.length} selected',
+                : '${_draft.accountIds.length} selected',
             child: Wrap(
               spacing: Sp.sm,
               runSpacing: Sp.sm,
               children: [
-                for (final m in PaymentMethod.values)
+                for (final a in ref.watch(moneyAccountsProvider).value ?? const <MoneyAccount>[])
                   LedgerChip(
-                    key: ValueKey('filter-method:${m.name}'),
-                    label: m.label,
-                    icon: methodIcon(m),
-                    selected: _draft.methods.contains(m),
+                    key: ValueKey('filter-account:${a.id}'),
+                    label: a.name,
+                    icon: accountIcon(a.kind),
+                    selected: _draft.accountIds.contains(a.id),
                     onTap: () => _set(
-                      _draft.copyWith(methods: _toggled(_draft.methods, m)),
+                      _draft.copyWith(accountIds: _toggled(_draft.accountIds, a.id)),
                     ),
                   ),
               ],
             ),
           ),
+          if (channelOptions.isNotEmpty)
+            _Group(
+              title: 'Channel',
+              trailing: _draft.channels.isEmpty ? 'Any' : '${_draft.channels.length} selected',
+              child: Wrap(
+                spacing: Sp.sm,
+                runSpacing: Sp.sm,
+                children: [
+                  for (final ch in channelOptions)
+                    LedgerChip(
+                      key: ValueKey('filter-channel:$ch'),
+                      label: ch,
+                      selected: _draft.channels.contains(ch),
+                      onTap: () => _set(_draft.copyWith(channels: _toggled(_draft.channels, ch))),
+                    ),
+                ],
+              ),
+            ),
           _Group(
             title: 'Source',
             trailing: _draft.origins.isEmpty

@@ -76,6 +76,12 @@ abstract final class AppRoutes {
   static String editPending(String id) => '/more/pending/$id/edit';
   static String settlePending(String id) => '/more/pending/$id/settle';
 
+  static const accounts = '/more/accounts';
+  static const newAccount = '/more/accounts/new';
+  static String accountDetail(String id) => '/more/accounts/$id';
+  static String editAccount(String id) => '/more/accounts/$id/edit';
+  static String correctAccountBalance(String id) => '/more/accounts/$id/balance';
+
   static const analytics = '/more/analytics';
   static const netWorth = '/more/net-worth';
   static const newAsset = '/more/net-worth/assets/new';

@@ -108,6 +108,8 @@ void main() {
       SyncCollections.pending => (await repos.pending.getAll()).length,
       SyncCollections.settlements => (await repos.settlements.getAll()).length,
       SyncCollections.assets => (await repos.assets.getAll()).length,
+      SyncCollections.moneyAccounts => (await repos.moneyAccounts.getAll()).length,
+      SyncCollections.transfers => (await repos.transfers.getAll()).length,
       _ => throw StateError('Unknown collection $name'),
     };
     for (final entry in collections.entries) {

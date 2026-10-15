@@ -6,6 +6,7 @@ import '../../../core/money/money.dart';
 import '../../../core/time/clock.dart';
 import '../../../data/local/local_data_store.dart';
 import '../../../kit/kit.dart';
+import '../../accounts/domain/money_account.dart';
 import '../../settings/domain/financial_profile.dart';
 
 class _IntroPage {
@@ -89,6 +90,18 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       if (_mode == _StartMode.fresh) {
         if (!remote) await ref.read(localDataStoreProvider).reseed(DataScenario.empty, today);
         await repos.profile.set(FinancialProfile(displayName: name, openingBalance: balance!, openingDate: today));
+        if (!remote) {
+          // The ledger reads the Cash account; the server does this itself.
+          final cash = await repos.moneyAccounts.getById(cashAccountId);
+          if (cash != null) {
+            await repos.moneyAccounts.save(cash.copyWith(
+              opening: balance,
+              openingDate: today,
+              updatedAt: DateTime.now(),
+              version: cash.version + 1,
+            ));
+          }
+        }
       } else {
         final existing = repos.profile.current;
         await repos.profile.set(

@@ -10,6 +10,10 @@ import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/verify_otp_screen.dart';
 import '../../features/budgets/presentation/budget_detail_screen.dart';
+import '../../features/accounts/presentation/account_detail_screen.dart';
+import '../../features/accounts/presentation/account_form_sheet.dart';
+import '../../features/accounts/presentation/accounts_screen.dart';
+import '../../features/accounts/presentation/set_balance_sheet.dart';
 import '../../features/budgets/presentation/budget_form_sheet.dart';
 import '../../features/budgets/presentation/budgets_screen.dart';
 import '../../features/categories/presentation/categories_screen.dart';
@@ -245,6 +249,21 @@ final routerProvider = Provider<GoRouter>((ref) {
                         routes: [
                           sheet('edit', (s) => PendingFormSheet(pendingId: s.pathParameters['pendingId'])),
                           sheet('settle', (s) => SettlePendingSheet(pendingId: s.pathParameters['pendingId']!)),
+                        ],
+                      ),
+                    ],
+                  ),
+                  page(
+                    'accounts',
+                    (_) => const AccountsScreen(),
+                    routes: [
+                      sheet('new', (_) => const AccountFormSheet()),
+                      page(
+                        ':accountId',
+                        (s) => AccountDetailScreen(id: s.pathParameters['accountId']!),
+                        routes: [
+                          sheet('edit', (s) => AccountFormSheet(accountId: s.pathParameters['accountId'])),
+                          sheet('balance', (s) => SetBalanceSheet(accountId: s.pathParameters['accountId']!)),
                         ],
                       ),
                     ],

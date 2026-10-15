@@ -481,7 +481,7 @@ class _SettlementRow extends StatelessWidget {
     final note = s.note?.trim() ?? '';
     final sub = [
       DateFormats.dayMonthYear.format(s.date),
-      if (s.method != null) s.method!.label,
+      if (s.channel != null) s.channel!,
       if (txId == null) 'outside your tracked cash',
       if (note.isNotEmpty) note,
     ].join(', ');

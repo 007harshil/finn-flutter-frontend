@@ -61,6 +61,7 @@ class MoreMenu extends StatelessWidget {
           child: LedgerPanel(
             dividerIndent: _indent,
             children: [
+              _Item(icon: LucideIcons.wallet, title: 'Accounts', route: AppRoutes.accounts, open: open),
               _Item(icon: LucideIcons.landmark, title: 'Loans & EMIs', route: AppRoutes.loans, open: open),
               _Item(icon: LucideIcons.handCoins, title: 'Pending payments', route: AppRoutes.pending, open: open),
               _SubscriptionsItem(open: open),

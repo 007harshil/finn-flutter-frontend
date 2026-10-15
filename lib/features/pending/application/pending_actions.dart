@@ -5,6 +5,7 @@ import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../domain/repositories.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../accounts/application/account_support.dart';
 import '../../categories/domain/category.dart';
 import '../../transactions/application/transaction_actions.dart';
 import '../../transactions/domain/transaction.dart';
@@ -544,7 +545,8 @@ class SettlePendingInput extends ActionInput {
     required this.pendingId,
     required this.amount,
     required this.date,
-    this.method,
+    this.accountId,
+    this.channel,
     this.recordCashMovement = true,
     this.note,
   });
@@ -552,7 +554,10 @@ class SettlePendingInput extends ActionInput {
   final String pendingId;
   final Money amount;
   final DateTime date;
-  final PaymentMethod? method;
+  /// Account the money moved through (default account when omitted) and the
+  /// optional free-text channel. Only used with [recordCashMovement].
+  final String? accountId;
+  final String? channel;
 
   /// When true, a linked income/expense transaction is created so the cash
   /// balance reflects the settlement. False for settlements outside tracked
@@ -565,7 +570,8 @@ class SettlePendingInput extends ActionInput {
         'pendingId': pendingId,
         'amount': Out.money(amount),
         'date': Out.date(date),
-        'method': method?.name,
+        'accountId': accountId,
+        'channel': channel,
         'recordCashMovement': recordCashMovement,
         'note': note,
       };
@@ -587,8 +593,8 @@ class SettlePendingAction extends FinancialAction<SettlePendingInput, PendingSet
           ActionFieldSpec('pendingId', FieldKind.id, 'Exact pending payment id. Use pending.resolve to find it by name; never guess.'),
           ActionFieldSpec('amount', FieldKind.money, 'Amount settled now (≤ outstanding)'),
           ActionFieldSpec('date', FieldKind.date, 'Settlement date'),
-          ActionFieldSpec('method', FieldKind.enumeration, 'Payment method', required: false,
-              allowedValues: ['upi', 'card', 'cash', 'bankTransfer', 'wallet', 'other']),
+          ActionFieldSpec('accountId', FieldKind.id, 'Account the money moved through (default account when omitted)', required: false),
+          ActionFieldSpec('channel', FieldKind.string, 'Optional channel, e.g. UPI, NEFT (up to 30 characters)', required: false),
           ActionFieldSpec('recordCashMovement', FieldKind.boolean, 'Create the matching cash transaction (default true)', required: false),
           ActionFieldSpec('note', FieldKind.string, 'Reference', required: false),
         ],
@@ -599,7 +605,8 @@ class SettlePendingAction extends FinancialAction<SettlePendingInput, PendingSet
         pendingId: In.str(j, 'pendingId'),
         amount: In.money(j, 'amount'),
         date: In.date(j, 'date'),
-        method: In.enumOpt(j, 'method', PaymentMethod.values),
+        accountId: In.strOpt(j, 'accountId'),
+        channel: In.strOpt(j, 'channel'),
         recordCashMovement: In.boolean(j, 'recordCashMovement', fallback: true),
         note: In.strOpt(j, 'note'),
       );
@@ -616,6 +623,12 @@ class SettlePendingAction extends FinancialAction<SettlePendingInput, PendingSet
     if (input.amount > v.outstanding) e['amount'] = 'Only ${v.outstanding.format()} is outstanding.';
     if (input.date.dateOnly.isAfter(s.today)) e['date'] = 'The date cannot be in the future.';
     if (input.date.dateOnly.isBefore(v.payment.createdDate)) e['date'] = 'The date is before this item was created.';
+    if (input.recordCashMovement) {
+      final accountErr = accountWriteError(s, input.accountId ?? s.defaultAccountId);
+      if (accountErr != null) e['accountId'] = accountErr;
+      final channelErr = channelError(input.channel);
+      if (channelErr != null) e['channel'] = channelErr;
+    }
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
 
     final owe = v.payment.direction == PendingDirection.iOwe;
@@ -640,6 +653,7 @@ class SettlePendingAction extends FinancialAction<SettlePendingInput, PendingSet
         PreviewLine('This settlement', input.amount.format(), emphasis: true),
         PreviewLine('Remaining after', remaining.format()),
         PreviewLine('Cash balance', cashLine),
+        if (input.recordCashMovement) PreviewLine('Account', s.account(input.accountId ?? s.defaultAccountId)?.name ?? '—'),
       ],
       warnings: warnings,
       basis: {'v': v.payment.version, 'settled': v.settled.paise},
@@ -660,19 +674,21 @@ class SettlePendingAction extends FinancialAction<SettlePendingInput, PendingSet
         date: input.date,
         origin: TransactionOrigin.pendingSettlement,
         originRefId: v.payment.id,
-        method: input.method,
+        accountId: input.accountId ?? s.defaultAccountId,
+        channel: input.channel,
         counterparty: v.payment.counterparty,
         note: 'Settlement · ${v.payment.purpose}',
       );
       await env.repos.transactions.save(tx);
-      await extendTrackingStart(env, tx.date);
+      await extendTrackingStart(env, tx.date, accountIds: [tx.accountId]);
     }
     final settlement = PendingSettlement(
       id: env.ids.next('set'),
       pendingId: v.payment.id,
       amount: input.amount,
       date: input.date.dateOnly,
-      method: input.method,
+      accountId: tx?.accountId,
+      channel: tx?.channel,
       transactionId: tx?.id,
       note: input.note,
       createdAt: env.clock.now(),

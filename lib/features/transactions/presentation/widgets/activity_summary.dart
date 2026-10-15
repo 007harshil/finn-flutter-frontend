@@ -418,14 +418,22 @@ class _ActiveFilters extends ConsumerWidget {
           '${f.categoryIds.length} categories',
           () => notifier.setCategories(const {}),
         ),
-      if (f.methods.length == 1)
-        ('methods', f.methods.single.label, () => notifier.setMethods(const {}))
-      else if (f.methods.length > 1)
+      if (f.accountIds.length == 1)
         (
-          'methods',
-          '${f.methods.length} payment methods',
-          () => notifier.setMethods(const {}),
+          'accounts',
+          ref.read(financeSnapshotProvider).value?.account(f.accountIds.single)?.name ?? 'Account',
+          () => notifier.setAccounts(const {}),
+        )
+      else if (f.accountIds.length > 1)
+        (
+          'accounts',
+          '${f.accountIds.length} accounts',
+          () => notifier.setAccounts(const {}),
         ),
+      if (f.channels.length == 1)
+        ('channels', f.channels.single, () => notifier.setChannels(const {}))
+      else if (f.channels.length > 1)
+        ('channels', '${f.channels.length} channels', () => notifier.setChannels(const {})),
       if (f.origins.length == 1)
         (
           'origins',

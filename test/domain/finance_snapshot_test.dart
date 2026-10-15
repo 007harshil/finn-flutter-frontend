@@ -20,14 +20,21 @@ void main() {
         s = await h.snapshot();
       });
 
-      test('cash = opening + Σ signed transactions between the opening date and today', () {
-        final from = s.profile!.openingDate.dateOnly;
-        final expected = Money.sum([
-          s.profile!.openingBalance,
-          for (final t in s.transactions)
-            if (!t.date.isBefore(from) && !t.date.isAfter(s.today)) t.signedAmount,
-        ]);
-        expect(s.balance.cash, expected);
+      test('cash = Σ asset account balances; credit owed = Σ card balances', () {
+        Money flow(String id) => Money.sum([
+              for (final t in s.transactions)
+                if (t.accountId == id && !t.date.isBefore(s.account(id)!.openingDate) && !t.date.isAfter(s.today))
+                  t.signedAmount,
+              for (final tr in s.transfers)
+                if (!tr.date.isBefore(s.account(tr.toAccountId)!.openingDate) && tr.toAccountId == id && !tr.date.isAfter(s.today)) tr.amount,
+              for (final tr in s.transfers)
+                if (!tr.date.isBefore(s.account(tr.fromAccountId)!.openingDate) && tr.fromAccountId == id && !tr.date.isAfter(s.today)) -tr.amount,
+            ]);
+        final assets = s.accounts.where((a) => !a.isLiability);
+        final cards = s.accounts.where((a) => a.isLiability);
+        expect(s.balance.cash, Money.sum(assets.map((a) => a.opening + flow(a.id))));
+        expect(s.balance.creditOwed, Money.sum(cards.map((a) => a.opening - flow(a.id))));
+        expect(s.balance.openingBalance, s.profile!.openingBalance);
       });
 
       test('earmarked = Σ goal saved + emergency fund saved', () {
@@ -50,7 +57,7 @@ void main() {
         expect(nw.assets, Money.sum(s.assets.map((a) => a.value)));
         final lent = Money.sum(s.loanStates.where((l) => !l.loan.isBorrowed).map((l) => l.outstanding));
         expect(nw.receivables, lent + s.pendingToCollect);
-        expect(nw.liabilities, s.totalDebt + s.pendingToPay);
+        expect(nw.liabilities, s.totalDebt + s.pendingToPay + s.balance.creditOwed);
         expect(nw.netWorth, nw.cash + nw.assets + nw.receivables - nw.liabilities);
       });
 

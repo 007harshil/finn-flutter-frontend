@@ -29,6 +29,7 @@ void main() {
     // The current month is partial; swiping right goes to last month.
     expect(find.text('This month'), findsOneWidget);
     expect(find.text('Kept so far'), findsOneWidget);
+    await scrollTo(tester, find.text('Money in'));
     await tester.fling(find.text('Money in'), const Offset(300, 0), 1000);
     await tester.pumpAndSettle();
     expect(find.text('September 2026'), findsOneWidget);

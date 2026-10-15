@@ -17,6 +17,8 @@ class FinanceRepositories {
     required this.pending,
     required this.settlements,
     required this.assets,
+    required this.moneyAccounts,
+    required this.transfers,
     required this.profile,
     required this.emergencyPlan,
     required this.alertInbox,
@@ -35,6 +37,8 @@ class FinanceRepositories {
   final PendingRepository pending;
   final SettlementRepository settlements;
   final AssetRepository assets;
+  final MoneyAccountRepository moneyAccounts;
+  final TransferRepository transfers;
   final ProfileRepository profile;
   final EmergencyPlanRepository emergencyPlan;
   final AlertInboxRepository alertInbox;
@@ -67,6 +71,8 @@ class FinanceRepositories {
       pending: await pending.getAll(),
       settlements: await settlements.getAll(),
       assets: await assets.getAll(),
+      accounts: await moneyAccounts.getAll(),
+      transfers: await transfers.getAll(),
     );
   }
 }

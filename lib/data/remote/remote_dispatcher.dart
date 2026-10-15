@@ -61,6 +61,16 @@ final Map<String, ActionResultDecoder> actionResultDecoders = {
     return plan;
   },
   for (final id in ['assets.create', 'assets.update', 'assets.delete']) id: _record(AssetDto.fromJson),
+  for (final id in [
+    'accounts.create',
+    'accounts.update',
+    'accounts.setBalance',
+    'accounts.setDefault',
+    'accounts.archive',
+    'accounts.delete',
+  ])
+    id: _record(MoneyAccountDto.fromJson),
+  for (final id in ['transfers.create', 'transfers.update', 'transfers.delete']) id: _record(TransferDto.fromJson),
   'profile.update': (json) {
     final j = _map(json);
     final profile = ProfileDto.fromJson(j.containsKey('exists') ? j : {...j, 'exists': true});

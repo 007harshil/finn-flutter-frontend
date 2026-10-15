@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/money/money.dart';
 import '../../../core/time/dates.dart';
-import '../../transactions/domain/transaction.dart';
 import 'pending_split.dart';
 import 'shared_pending.dart';
 
@@ -127,7 +126,8 @@ class PendingSettlement {
     required this.amount,
     required this.date,
     required this.createdAt,
-    this.method,
+    this.accountId,
+    this.channel,
     this.transactionId,
     this.note,
   });
@@ -136,7 +136,11 @@ class PendingSettlement {
   final String pendingId;
   final Money amount;
   final DateTime date;
-  final PaymentMethod? method;
+
+  /// Account the settlement money moved through (null when not recorded as
+  /// cash) and the optional free-text channel.
+  final String? accountId;
+  final String? channel;
 
   /// Linked cash transaction. Null when settled outside tracked cash
   /// (e.g. offset against another debt).

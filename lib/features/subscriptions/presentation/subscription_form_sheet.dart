@@ -9,6 +9,7 @@ import '../../../core/time/frequency.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/category_icons.dart';
+import '../../accounts/presentation/widgets/account_picker_field.dart';
 import '../../categories/domain/category.dart';
 import '../../transactions/domain/transaction.dart';
 import '../application/subscription_actions.dart';
@@ -65,7 +66,8 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
   DateTime? _nextDue;
   DateTime? _start;
   String? _categoryId;
-  PaymentMethod? _method;
+  // Optional: where renewals are usually charged (null = the default account when marked paid).
+  String? _accountId;
   bool _autoRenews = true;
   Map<String, String> _errors = const {};
   bool _busy = false;
@@ -91,7 +93,7 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
     _nextDue = s.nextDueDate;
     _start = s.startDate;
     _categoryId = s.categoryId;
-    _method = s.paymentMethod;
+    _accountId = s.accountId;
     _autoRenews = s.autoRenews;
     _loaded = true;
   }
@@ -114,7 +116,7 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
       nextDueDate: _nextDue ?? today,
       startDate: _start,
       autoRenews: _autoRenews,
-      paymentMethod: _method,
+      accountId: _accountId,
       note: note.isEmpty ? null : note,
     );
     setState(() {
@@ -269,16 +271,18 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
             onChanged: (id) => setState(() => _categoryId = id),
           ),
           const SizedBox(height: LedgerForm.gap),
-          LedgerField(
-            label: 'Usually paid by (optional)',
-            child: LedgerChoiceChips<PaymentMethod>(
-              options: [
-                for (final m in PaymentMethod.values)
-                  LedgerOption(m, m.label, icon: _methodIcon(m)),
-              ],
-              selected: _method,
-              onChanged: (m) => setState(() => _method = m),
-            ),
+          AccountPickerField(
+            label: 'Charged to (optional)',
+            hint: 'Default account',
+            helper: 'Used when you mark a renewal paid.',
+            value: _accountId,
+            optional: true,
+            noneLabel: 'Default account',
+            errorText: _errors['accountId'],
+            onChanged: (id) => setState(() {
+              _accountId = id;
+              _errors = Map.of(_errors)..remove('accountId');
+            }),
           ),
           const SizedBox(height: LedgerForm.gap),
           LedgerSwitchRow(
@@ -327,12 +331,3 @@ class _FormSkeleton extends StatelessWidget {
     );
   }
 }
-
-IconData _methodIcon(PaymentMethod m) => switch (m) {
-  PaymentMethod.upi => LucideIcons.smartphone,
-  PaymentMethod.card => LucideIcons.creditCard,
-  PaymentMethod.cash => LucideIcons.banknote,
-  PaymentMethod.bankTransfer => LucideIcons.landmark,
-  PaymentMethod.wallet => LucideIcons.wallet,
-  PaymentMethod.other => LucideIcons.circleDot,
-};

@@ -8,6 +8,7 @@ import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../finance/finance_snapshot.dart';
 import '../../../finance/ledger.dart';
+import '../../accounts/domain/money_account.dart';
 import '../../budgets/domain/budget.dart';
 import '../../goals/domain/goal.dart';
 import '../../loans/domain/loan_calculator.dart';
@@ -114,6 +115,16 @@ typedef MoneyText = String Function(Money m);
 
 String _defaultMoney(Money m) => m.format(decimals: DecimalDisplay.none);
 
+/// Spending through one money account in the analysed period.
+@immutable
+class AccountSpend {
+  const AccountSpend({required this.accountId, required this.name, required this.kind, required this.amount});
+  final String accountId;
+  final String name;
+  final MoneyAccountKind kind;
+  final Money amount;
+}
+
 /// Everything the Insights screen shows, computed once per snapshot and
 /// filter. Widgets only lay this out.
 @immutable
@@ -130,7 +141,7 @@ class InsightsData {
     required this.dailyBurn,
     required this.months,
     required this.categories,
-    required this.methods,
+    required this.accountSpend,
     required this.budgets,
     required this.budgetPeriod,
     required this.savings,
@@ -167,7 +178,8 @@ class InsightsData {
   /// Monthly series for the trend charts, oldest first.
   final List<MonthlyCashFlow> months;
   final List<CategorySlice> categories;
-  final List<MapEntry<PaymentMethod, Money>> methods;
+  /// Spending per account in the period, biggest first.
+  final List<AccountSpend> accountSpend;
   final List<BudgetUsage> budgets;
   final DateRange budgetPeriod;
   final List<TrendPoint> savings;
@@ -265,7 +277,7 @@ class InsightsData {
   /// Share of spending paid digitally (everything except cash), in bps.
   int? get digitalShareBps {
     if (current.expense.isZero) return null;
-    final cash = Money.sum(methods.where((m) => m.key == PaymentMethod.cash).map((m) => m.value));
+    final cash = Money.sum(accountSpend.where((a) => a.kind == MoneyAccountKind.cash).map((a) => a.amount));
     return (current.expense - cash).ratioBps(current.expense);
   }
 
@@ -355,10 +367,10 @@ class InsightsData {
   }
 
   String get methodHeadline {
-    if (methods.isEmpty) return 'No payments recorded yet';
-    final top = methods.first;
-    final share = top.value.ratioBps(current.expense) ?? 0;
-    return '${top.key.label} carried ${formatBps(share, decimals: 0)} of your spending';
+    if (accountSpend.isEmpty) return 'No payments recorded yet';
+    final top = accountSpend.first;
+    final share = top.amount.ratioBps(current.expense) ?? 0;
+    return '${top.name} carried ${formatBps(share, decimals: 0)} of your spending';
   }
 
   int get budgetsOver => budgets.where((b) => b.health == BudgetHealth.breached).length;
@@ -444,7 +456,15 @@ InsightsData buildInsightsData(FinanceSnapshot s, InsightsFilter f, {AnalyticsSe
     dailyBurn: service.dailyBurn(s, range),
     months: service.cashFlow(s, anchor, windowCount),
     categories: service.categoryBreakdown(s, range, compareTo: previousRange),
-    methods: current.byMethod,
+    accountSpend: [
+      for (final e in current.byAccount)
+        AccountSpend(
+          accountId: e.key,
+          name: s.account(e.key)?.name ?? 'Unknown account',
+          kind: s.account(e.key)?.kind ?? MoneyAccountKind.bank,
+          amount: e.value,
+        ),
+    ],
     budgets: s.budgetUsages,
     budgetPeriod: s.currentBudgetPeriod,
     savings: service.savingsTrend(s, anchor, windowCount),

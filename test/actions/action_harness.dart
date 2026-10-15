@@ -7,6 +7,7 @@ import 'package:finn/core/result/result.dart';
 import 'package:finn/core/time/clock.dart';
 import 'package:finn/data/local/local_data_store.dart';
 import 'package:finn/domain/finance_repositories.dart';
+import 'package:finn/features/accounts/domain/money_account.dart';
 import 'package:finn/features/settings/domain/financial_profile.dart';
 import 'package:finn/finance/finance_snapshot.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,12 +43,15 @@ class ActionHarness {
         openingBalance: harnessOpening,
         openingDate: DateTime(2026, 1, 1),
       ));
+      // The ledger reads the Cash account (as profile.update keeps it in step).
+      final cash = store.moneyAccounts.current.firstWhere((a) => a.id == cashAccountId);
+      await store.moneyAccounts.save(cash.copyWith(opening: harnessOpening, openingDate: DateTime(2026, 1, 1)));
     }
     final repos = FinanceRepositories(
       transactions: store.transactions, categories: store.categories, budgets: store.budgets,
       goals: store.goals, savingsMovements: store.savingsMovements, loans: store.loans,
       loanPayments: store.loanPayments, subscriptions: store.subscriptions, pending: store.pending,
-      settlements: store.settlements, assets: store.assets, profile: store.profile,
+      settlements: store.settlements, assets: store.assets, moneyAccounts: store.moneyAccounts, transfers: store.transfers, profile: store.profile,
       emergencyPlan: store.emergencyPlan, alertInbox: store.alertInbox,
         users: store.users, sharedLedger: store.sharedLedger,
     );

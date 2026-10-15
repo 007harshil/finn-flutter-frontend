@@ -15,7 +15,7 @@ void main() {
       transactions: store.transactions, categories: store.categories, budgets: store.budgets,
       goals: store.goals, savingsMovements: store.savingsMovements, loans: store.loans,
       loanPayments: store.loanPayments, subscriptions: store.subscriptions, pending: store.pending,
-      settlements: store.settlements, assets: store.assets, profile: store.profile,
+      settlements: store.settlements, assets: store.assets, moneyAccounts: store.moneyAccounts, transfers: store.transfers, profile: store.profile,
       emergencyPlan: store.emergencyPlan, alertInbox: store.alertInbox,
         users: store.users, sharedLedger: store.sharedLedger,
     );

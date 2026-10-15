@@ -225,7 +225,7 @@ Future<Transaction?> markSubscriptionPaid(
   input: MarkSubscriptionPaidInput(
     subscriptionId: s.id,
     cycleDate: s.nextDueDate,
-    method: s.paymentMethod,
+    accountId: s.accountId,
   ),
   // Stable per cycle: double taps never record twice.
   idempotencyKey: 'sub-paid-${s.id}-${Out.date(s.nextDueDate)}',

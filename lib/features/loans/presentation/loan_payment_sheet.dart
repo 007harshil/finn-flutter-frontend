@@ -10,7 +10,8 @@ import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
-import '../../transactions/domain/transaction.dart';
+import '../../accounts/presentation/widgets/account_picker_field.dart';
+import '../../accounts/presentation/widgets/channel_field.dart';
 import '../application/loan_actions.dart';
 import '../domain/loan.dart';
 import '../domain/loan_calculator.dart';
@@ -33,7 +34,9 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
   final _note = TextEditingController();
   LoanPaymentKind? _kind;
   DateTime? _date;
-  PaymentMethod _method = PaymentMethod.bankTransfer;
+  // Null until picked: the form shows the default account and sends it.
+  String? _accountId;
+  String? _channel;
   bool _recordCash = true;
   bool _busy = false;
   Map<String, String> _errors = const {};
@@ -64,7 +67,8 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
       kind: kind,
       amount: LedgerAmountField.parse(_amount.text) ?? Money.zero,
       date: _date ?? today,
-      method: _method,
+      accountId: _recordCash ? (_accountId ?? ref.read(defaultAccountProvider).value?.id) : null,
+      channel: _recordCash ? _channel : null,
       recordCashMovement: _recordCash,
       note: note.isEmpty ? null : note,
     );
@@ -207,18 +211,6 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
             onChanged: (d) => setState(() => _date = d),
           ),
           const SizedBox(height: LedgerForm.gap),
-          LedgerField(
-            label: 'Method',
-            child: LedgerChoiceChips<PaymentMethod>(
-              options: [
-                for (final m in PaymentMethod.values)
-                  LedgerOption(m, m.label, icon: _methodIcons[m]),
-              ],
-              selected: _method,
-              onChanged: (m) => setState(() => _method = m),
-            ),
-          ),
-          const SizedBox(height: LedgerForm.gap),
           LedgerSwitchRow(
             title: 'Record as cash movement',
             subtitle: _recordCash
@@ -229,6 +221,24 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
             value: _recordCash,
             onChanged: (b) => setState(() => _recordCash = b),
           ),
+          if (_recordCash) ...[
+            const SizedBox(height: LedgerForm.gap),
+            AccountPickerField(
+              label: borrowed ? 'Paid from' : 'Received in',
+              value: _accountId ?? ref.watch(defaultAccountProvider).value?.id,
+              errorText: _errors['accountId'],
+              onChanged: (id) => setState(() {
+                _accountId = id;
+                _errors = Map.of(_errors)..remove('accountId');
+              }),
+            ),
+            const SizedBox(height: LedgerForm.gap),
+            ChannelField(
+              value: _channel,
+              errorText: _errors['channel'],
+              onChanged: (v) => _channel = v,
+            ),
+          ],
           const SizedBox(height: LedgerForm.gap),
           LedgerTextField(
             label: 'Note (optional)',
@@ -242,15 +252,6 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
     );
   }
 }
-
-const _methodIcons = {
-  PaymentMethod.upi: LucideIcons.smartphone,
-  PaymentMethod.card: LucideIcons.creditCard,
-  PaymentMethod.cash: LucideIcons.banknote,
-  PaymentMethod.bankTransfer: LucideIcons.landmark,
-  PaymentMethod.wallet: LucideIcons.wallet,
-  PaymentMethod.other: LucideIcons.circleDot,
-};
 
 class _FormSkeleton extends StatelessWidget {
   const _FormSkeleton();

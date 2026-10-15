@@ -1,4 +1,6 @@
 import '../../actions/action.dart';
+import '../../features/accounts/application/account_actions.dart';
+import '../../features/accounts/application/transfer_actions.dart';
 import '../../features/budgets/application/budget_actions.dart';
 import '../../features/categories/application/category_actions.dart';
 import '../../features/emergency_fund/application/emergency_actions.dart';
@@ -52,5 +54,14 @@ final List<FinancialAction<ActionInput, Object?>> allActions = [
   const CreateAssetAction(),
   const UpdateAssetAction(),
   const DeleteAssetAction(),
+  const CreateAccountAction(),
+  const UpdateAccountAction(),
+  const SetAccountBalanceAction(),
+  const SetDefaultAccountAction(),
+  const ArchiveAccountAction(),
+  const DeleteAccountAction(),
+  const CreateTransferAction(),
+  const UpdateTransferAction(),
+  const DeleteTransferAction(),
   const UpdateProfileAction(),
 ].cast<FinancialAction<ActionInput, Object?>>();

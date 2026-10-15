@@ -5,6 +5,7 @@ import '../../../core/result/result.dart';
 import '../../../core/time/clock.dart';
 import '../../../core/time/dates.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../accounts/application/account_support.dart';
 import '../domain/transaction.dart';
 import '../../settings/application/tracking_start.dart';
 
@@ -15,7 +16,8 @@ class TransactionInput extends ActionInput {
     required this.amount,
     required this.categoryId,
     required this.date,
-    this.paymentMethod,
+    this.accountId,
+    this.channel,
     this.counterparty,
     this.note,
   });
@@ -24,7 +26,9 @@ class TransactionInput extends ActionInput {
   final Money amount;
   final String categoryId;
   final DateTime date;
-  final PaymentMethod? paymentMethod;
+  /// Account hit; null resolves to the user's default account.
+  final String? accountId;
+  final String? channel;
   final String? counterparty;
   final String? note;
 
@@ -33,7 +37,8 @@ class TransactionInput extends ActionInput {
     amount: In.money(j, 'amount'),
     categoryId: In.str(j, 'categoryId'),
     date: In.date(j, 'date'),
-    paymentMethod: In.enumOpt(j, 'paymentMethod', PaymentMethod.values),
+    accountId: In.strOpt(j, 'accountId'),
+    channel: In.strOpt(j, 'channel'),
     counterparty: In.strOpt(j, 'counterparty'),
     note: In.strOpt(j, 'note'),
   );
@@ -44,7 +49,8 @@ class TransactionInput extends ActionInput {
     'amount': Out.money(amount),
     'categoryId': categoryId,
     'date': Out.date(date),
-    'paymentMethod': paymentMethod?.name,
+    'accountId': accountId,
+    'channel': channel,
     'counterparty': counterparty,
     'note': note,
   };
@@ -56,12 +62,12 @@ const _fields = [
   ActionFieldSpec('categoryId', FieldKind.id, 'Category id matching the type'),
   ActionFieldSpec('date', FieldKind.date, 'Date the money moved (not in the future)'),
   ActionFieldSpec(
-    'paymentMethod',
-    FieldKind.enumeration,
-    'How it was paid',
+    'accountId',
+    FieldKind.id,
+    'Money account it hit (cash, bank or card). Omit for the default account',
     required: false,
-    allowedValues: ['upi', 'card', 'cash', 'bankTransfer', 'wallet', 'other'],
   ),
+  ActionFieldSpec('channel', FieldKind.string, 'Optional: UPI, IMPS, NEFT, Cheque, ATM … (up to 30 characters)', required: false),
   ActionFieldSpec('counterparty', FieldKind.string, 'Merchant or person', required: false),
   ActionFieldSpec('note', FieldKind.string, 'Free-text note', required: false),
 ];
@@ -69,7 +75,7 @@ const _fields = [
 /// Maximum single amount accepted (₹10 crore) — guards against typos.
 const Money maxTransactionAmount = Money.rupees(100000000);
 
-Map<String, String> validateTransaction(TransactionInput i, FinanceSnapshot s) {
+Map<String, String> validateTransaction(TransactionInput i, FinanceSnapshot s, {Transaction? existing}) {
   final errors = <String, String>{};
   if (!i.amount.isPositive) errors['amount'] = 'Enter an amount greater than zero.';
   if (i.amount > maxTransactionAmount) errors['amount'] = 'That amount looks too large. Please check it.';
@@ -82,17 +88,22 @@ Map<String, String> validateTransaction(TransactionInput i, FinanceSnapshot s) {
     errors['categoryId'] = 'This category is managed automatically. Choose another.';
   }
   if (i.date.dateOnly.isAfter(s.today)) errors['date'] = 'The date cannot be in the future.';
+  final accountErr = accountWriteError(s, i.accountId ?? existing?.accountId ?? s.defaultAccountId, keepAccountId: existing?.accountId);
+  if (accountErr != null) errors['accountId'] = accountErr;
+  final channelErr = channelError(i.channel);
+  if (channelErr != null) errors['channel'] = channelErr;
   if ((i.counterparty?.length ?? 0) > 80) errors['counterparty'] = 'Keep this under 80 characters.';
   if ((i.note?.length ?? 0) > 500) errors['note'] = 'Keep the note under 500 characters.';
   return errors;
 }
 
-List<PreviewLine> _lines(TransactionInput i, FinanceSnapshot s) => [
+List<PreviewLine> _lines(TransactionInput i, FinanceSnapshot s, {Transaction? existing}) => [
   PreviewLine('Type', i.type.label),
   PreviewLine('Amount', i.amount.format(), emphasis: true),
   PreviewLine('Category', s.category(i.categoryId)?.name ?? '—'),
   PreviewLine('Date', DateFormats.dayMonthYear.format(i.date)),
-  if (i.paymentMethod != null) PreviewLine('Paid via', i.paymentMethod!.label),
+  PreviewLine('Account', s.account(i.accountId ?? existing?.accountId ?? s.defaultAccountId)?.name ?? '—'),
+  if (cleanChannel(i.channel) != null) PreviewLine('Channel', cleanChannel(i.channel)!),
   if (i.counterparty != null) PreviewLine(i.type.isIncome ? 'From' : 'To', i.counterparty!),
 ];
 
@@ -141,14 +152,15 @@ class CreateTransactionAction extends FinancialAction<TransactionInput, Transact
       amount: input.amount,
       categoryId: input.categoryId,
       date: input.date.dateOnly,
-      paymentMethod: input.paymentMethod,
+      accountId: resolveAccountId(s, input.accountId),
+      channel: cleanChannel(input.channel),
       counterparty: input.counterparty,
       note: input.note,
       createdAt: now,
       updatedAt: now,
     );
     await env.repos.transactions.save(tx);
-    await extendTrackingStart(env, tx.date);
+    await extendTrackingStart(env, tx.date, accountIds: [tx.accountId]);
     return Result.ok(tx);
   }
 }
@@ -211,7 +223,7 @@ class UpdateTransactionAction extends FinancialAction<UpdateTransactionInput, Tr
         AppFailure(FailureCode.staleData, 'This transaction changed since you opened it. Reload and try again.'),
       );
     }
-    final errors = validateTransaction(input.data, s);
+    final errors = validateTransaction(input.data, s, existing: existing);
     if (errors.isNotEmpty) return Result.err(AppFailure.validation(errors.values.first, fields: errors));
     return Result.ok(
       preview(
@@ -219,7 +231,7 @@ class UpdateTransactionAction extends FinancialAction<UpdateTransactionInput, Tr
         title: 'Save changes',
         summary:
             'Update ${existing.amount.format()} ${existing.type.label.toLowerCase()} to ${input.data.amount.format()}',
-        lines: _lines(input.data, s),
+        lines: _lines(input.data, s, existing: existing),
       ),
     );
   }
@@ -233,14 +245,15 @@ class UpdateTransactionAction extends FinancialAction<UpdateTransactionInput, Tr
       amount: d.amount,
       categoryId: d.categoryId,
       date: d.date.dateOnly,
-      paymentMethod: () => d.paymentMethod,
+      accountId: d.accountId ?? existing.accountId,
+      channel: () => cleanChannel(d.channel),
       counterparty: () => d.counterparty,
       note: () => d.note,
       updatedAt: env.clock.now(),
       version: existing.version + 1,
     );
     await env.repos.transactions.save(updated);
-    await extendTrackingStart(env, updated.date);
+    await extendTrackingStart(env, updated.date, accountIds: [updated.accountId]);
     return Result.ok(updated);
   }
 }
@@ -321,7 +334,8 @@ Transaction buildLinkedTransaction({
   required DateTime date,
   required TransactionOrigin origin,
   required String originRefId,
-  PaymentMethod? method,
+  required String accountId,
+  String? channel,
   String? counterparty,
   String? note,
 }) {
@@ -332,7 +346,8 @@ Transaction buildLinkedTransaction({
     amount: amount,
     categoryId: categoryId,
     date: date.dateOnly,
-    paymentMethod: method,
+    accountId: accountId,
+    channel: cleanChannel(channel),
     counterparty: counterparty,
     note: note,
     origin: origin,
