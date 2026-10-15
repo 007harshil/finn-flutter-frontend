@@ -2,7 +2,7 @@ import 'package:finn/actions/dispatcher.dart';
 import 'package:finn/app/di/action_providers.dart';
 import 'package:finn/app/di/core_providers.dart';
 import 'package:finn/core/money/money.dart';
-import 'package:finn/design_system/design_system.dart';
+import 'package:finn/kit/kit.dart';
 import 'package:finn/features/alerts/domain/alert.dart';
 import 'package:finn/features/net_worth/application/asset_actions.dart';
 import 'package:finn/features/net_worth/domain/asset.dart';
@@ -46,15 +46,15 @@ void main() {
     await env.pumpWidget(tester, const ProfileSheet());
     await tester.pumpAndSettle();
 
-    final name = find.widgetWithText(FinnTextField, 'What should we call you?');
+    final name = find.widgetWithText(LedgerTextField, 'Name');
     expect(find.text('Aarav'), findsOneWidget);
     await tester.enterText(name, '');
-    await tester.tap(find.widgetWithText(FinnButton, 'Save profile'));
+    await tester.tap(find.widgetWithText(LedgerButton, 'Save profile'));
     await tester.pumpAndSettle();
     expect(find.text('Enter a name.'), findsOneWidget);
 
     await tester.enterText(name, 'Aarav Sharma');
-    await tester.tap(find.widgetWithText(FinnButton, 'Save profile'));
+    await tester.tap(find.widgetWithText(LedgerButton, 'Save profile'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
@@ -83,7 +83,7 @@ void main() {
     final env = await TestEnv.create();
     await env.pumpWidget(tester, const ActivityLogScreen());
     await tester.pumpAndSettle();
-    expect(find.text('NO ACTIVITY YET'), findsOneWidget);
+    expect(find.text('No activity yet'), findsOneWidget);
 
     final container = _container(tester, ActivityLogScreen);
     final outcome = await tester.runAsync(() => container.read(actionDispatcherProvider).dispatch(
@@ -94,8 +94,8 @@ void main() {
     expect(outcome, isA<ActionCompleted<Asset>>());
     await tester.pumpAndSettle();
 
-    expect(find.text('NO ACTIVITY YET'), findsNothing);
+    expect(find.text('No activity yet'), findsNothing);
     expect(find.textContaining('PPF account'), findsOneWidget);
-    expect(find.text('TODAY'), findsOneWidget);
+    expect(find.text('Today'), findsOneWidget);
   });
 }

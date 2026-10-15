@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../actions/action.dart';
 import '../../actions/dispatcher.dart';
 import '../../app/di/action_providers.dart';
 import '../../app/di/core_providers.dart';
 import '../../core/result/result.dart';
-import '../../design_system/design_system.dart';
+import '../../kit/kit.dart';
 
 /// Generates a fresh idempotency key per form session. Keep one per open
 /// form so double-taps never execute twice; create a new one after success.
@@ -63,8 +64,11 @@ Future<O?> runAction<I extends ActionInput, O>(
       if (failure.fieldErrors.isNotEmpty && onFieldErrors != null) {
         onFieldErrors(failure.fieldErrors);
       } else if (failure.code != FailureCode.duplicate) {
-        FinnToast.error(context, failure.message,
-            subtitle: failure.retryable ? 'Nothing was changed. You can try again.' : null);
+        FinnToast.error(
+          context,
+          failure.message,
+          subtitle: failure.retryable ? 'Nothing was changed. You can try again.' : null,
+        );
       }
       return null;
     case ActionNeedsConfirmation<O>():
@@ -79,61 +83,47 @@ Future<bool> showActionReview(BuildContext context, ActionPreview preview) async
   final result = await showFinnSheet<bool>(
     context,
     builder: (ctx) {
-      final c = ctx.colors;
-      final t = ctx.text;
+      final t = ctx.type;
       return FinnSheetScaffold(
         title: preview.title,
-        description: preview.summary,
+        description: preview.lines.isEmpty && preview.warnings.isEmpty ? null : preview.summary,
         footer: Row(
           children: [
             Expanded(
-              child: FinnButton(
+              child: LedgerButton(
                 label: 'Cancel',
-                variant: FinnButtonVariant.outline,
+                variant: LedgerButtonVariant.secondary,
                 expand: true,
                 onPressed: () => Navigator.of(ctx).pop(false),
               ),
             ),
-            const SizedBox(width: Space.x3),
+            const SizedBox(width: Sp.md),
             Expanded(
               flex: 2,
-              child: FinnButton(
-                label: 'Confirm',
-                icon: Icons.check_rounded,
-                expand: true,
-                onPressed: () => Navigator.of(ctx).pop(true),
-              ),
+              child: LedgerButton(label: 'Confirm', expand: true, onPressed: () => Navigator.of(ctx).pop(true)),
             ),
           ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final line in preview.lines)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: Space.x2),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: Text(line.label, style: t.label)),
-                    const SizedBox(width: Space.x3),
-                    Flexible(
-                      flex: 2,
-                      child: Text(
-                        line.value,
-                        textAlign: TextAlign.end,
-                        style: line.emphasis ? t.amountMedium : t.bodyStrong,
-                      ),
-                    ),
-                  ],
+            for (var i = 0; i < preview.lines.length; i++) ...[
+              if (i > 0) const LedgerDivider(),
+              LedgerFact(
+                inset: false,
+                label: preview.lines[i].label,
+                value: Text(
+                  preview.lines[i].value,
+                  textAlign: TextAlign.end,
+                  style: preview.lines[i].emphasis ? t.figureL.copyWith(fontSize: 22) : t.body,
                 ),
               ),
-            for (final w in preview.warnings) ...[
-              const SizedBox(height: Space.x3),
-              InfoBanner(message: w, tone: FinnTone.warning),
             ],
-            if (preview.lines.isEmpty && preview.warnings.isEmpty)
-              Text(preview.summary, style: t.body.copyWith(color: c.textSecondary)),
+            for (final w in preview.warnings) ...[
+              const SizedBox(height: Sp.md),
+              LedgerNote(text: w, tone: NoteTone.caution, icon: LucideIcons.triangleAlert),
+            ],
+            if (preview.lines.isEmpty && preview.warnings.isEmpty) Text(preview.summary, style: t.body),
           ],
         ),
       );

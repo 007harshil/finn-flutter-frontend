@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/di/data_providers.dart';
 import '../../../core/money/money_format.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../goals/presentation/savings_widgets.dart';
 import '../application/emergency_actions.dart';
@@ -22,8 +22,11 @@ class EmergencyMovementSheet extends ConsumerWidget {
       return FinnSheetScaffold(
         title: withdraw ? 'Withdraw' : 'Add money',
         child: value.hasError
-            ? const ErrorState(title: 'Could not load your emergency fund')
-            : const SkeletonPulse(child: ListSkeleton(count: 3, padding: EdgeInsets.zero)),
+            ? const LedgerEmpty(
+                title: 'Could not load your emergency fund',
+                message: 'Please try again.',
+              )
+            : const SavingsMovementSkeleton(),
       );
     }
     final s = value.requireValue;
@@ -32,23 +35,39 @@ class EmergencyMovementSheet extends ConsumerWidget {
       potName: 'emergency fund',
       saved: s.saved,
       target: s.target,
-      disabledReason: withdraw && !s.saved.isPositive ? 'Nothing is saved in your emergency fund yet.' : null,
+      disabledReason: withdraw && !s.saved.isPositive
+          ? 'Nothing is saved in your emergency fund yet.'
+          : null,
       onSubmit: (draft, key, onErrors) async {
         final target = s.target;
-        final completes = !withdraw && target.isPositive && s.saved < target && s.saved + draft.amount >= target;
+        final completes =
+            !withdraw &&
+            target.isPositive &&
+            s.saved < target &&
+            s.saved + draft.amount >= target;
         final result = await runAction(
           context,
           ref,
-          action: withdraw ? const EmergencyFundMovementAction.withdraw() : const EmergencyFundMovementAction.contribute(),
-          input: EmergencyFundMovementInput(amount: draft.amount, date: draft.date, note: draft.note),
+          action: withdraw
+              ? const EmergencyFundMovementAction.withdraw()
+              : const EmergencyFundMovementAction.contribute(),
+          input: EmergencyFundMovementInput(
+            amount: draft.amount,
+            date: draft.date,
+            note: draft.note,
+          ),
           idempotencyKey: key,
           celebrate: !withdraw,
           successTitle: withdraw
               ? 'Moved ${draft.amount.format()} back to available'
-              : (completes ? 'Emergency fund fully funded!' : 'Added ${draft.amount.format()}'),
+              : (completes
+                    ? 'Emergency fund fully funded!'
+                    : 'Added ${draft.amount.format()}'),
           successSubtitle: withdraw
               ? 'You can top up your safety net later.'
-              : (completes ? 'Your safety net is complete.' : 'Set aside for emergencies'),
+              : (completes
+                    ? 'Your safety net is complete.'
+                    : 'Set aside for emergencies'),
           onFieldErrors: onErrors,
         );
         return result != null;

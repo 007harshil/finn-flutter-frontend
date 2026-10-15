@@ -9,7 +9,7 @@ import '../../../app/di/action_providers.dart';
 import '../../../app/di/core_providers.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 
 /// Audit trail of every operation run through the action dispatcher.
 class ActivityLogScreen extends ConsumerWidget {
@@ -18,17 +18,21 @@ class ActivityLogScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final entries = ref.watch(auditEntriesProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Activity log')),
-      body: switch (entries) {
-        AsyncValue(:final value?) => _Body(entries: value),
-        AsyncValue(hasError: true) => const Center(
-            child: Padding(
-              padding: EdgeInsets.all(Space.x6),
-              child: ErrorState(title: 'Could not load activity', message: 'Please go back and try again.'),
+    return LedgerPage(
+      storageKey: 'activity-log',
+      appBar: const LedgerAppBar(title: 'Activity log'),
+      slivers: switch (entries) {
+        AsyncValue(:final value?) => _body(context, ref, value),
+        AsyncValue(hasError: true) => const [
+          PageBlock(
+            top: Sp.xl,
+            child: LedgerEmpty(
+              title: 'Could not load activity',
+              message: 'Please go back and try again.',
             ),
           ),
-        _ => const SkeletonPulse(child: ListSkeleton(count: 6)),
+        ],
+        _ => const [SliverToBoxAdapter(child: LedgerPageSkeleton(rows: 6))],
       },
     );
   }
@@ -49,127 +53,86 @@ String _dayLabel(DateTime d, DateTime today) {
   return DateFormats.weekdayDayMonth.format(day);
 }
 
-class _Body extends ConsumerWidget {
-  const _Body({required this.entries});
-  final List<AuditEntry> entries;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (entries.isEmpty) {
-      return const Center(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(Space.gutter),
-          child: EmptyState(
-            icon: LucideIcons.history,
-            title: 'No activity yet',
-            message: 'Changes you make — adding a transaction, paying an EMI, updating a goal — '
-                'are listed here while the app is open.',
+List<Widget> _body(BuildContext context, WidgetRef ref, List<AuditEntry> entries) {
+  if (entries.isEmpty) {
+    return const [
+      PageBlock(
+        top: Sp.xl,
+        child: LedgerEmpty(
+          icon: LucideIcons.history,
+          title: 'No activity yet',
+          message:
+              'Changes you make, like adding a transaction or paying an EMI, are listed here while the app is open.',
+        ),
+      ),
+    ];
+  }
+  final today = ref.watch(todayProvider);
+  final days = <String, List<(int, AuditEntry)>>{};
+  for (var i = 0; i < entries.length; i++) {
+    days.putIfAbsent(_dayLabel(entries[i].at, today), () => []).add((i, entries[i]));
+  }
+  final failed = entries.where((e) => !e.succeeded).length;
+  return [
+    PageBlock(
+      top: Sp.sm,
+      child: LedgerNote(
+        text:
+            '${entries.length} change${entries.length == 1 ? '' : 's'} this session'
+            '${failed > 0 ? ', $failed not completed' : ''}. Kept only while the app is open.',
+      ),
+    ),
+    for (final day in days.entries)
+      PageBlock(
+        key: ValueKey('day-${day.key}'),
+        top: Sp.section,
+        child: LedgerSection(
+          title: day.key,
+          child: LedgerPanel(
+            children: [
+              for (final (i, e) in day.value)
+                _EntryRow(
+                  key: ValueKey('${e.actionId}-${e.at.microsecondsSinceEpoch}-$i'),
+                  entry: e,
+                ),
+            ],
           ),
         ),
-      );
-    }
-    final today = ref.watch(todayProvider);
-    final items = <Object>[];
-    String? lastDay;
-    for (final e in entries) {
-      final label = _dayLabel(e.at, today);
-      if (label != lastDay) {
-        items.add(label);
-        lastDay = label;
-      }
-      items.add(e);
-    }
-    final failed = entries.where((e) => !e.succeeded).length;
-    return ListView.builder(
-      key: const PageStorageKey('activity-log'),
-      padding: const EdgeInsets.fromLTRB(0, Space.x2, 0, Space.x10),
-      itemCount: items.length + 1,
-      itemBuilder: (context, i) {
-        if (i == 0) {
-          return ResponsiveCenter(
-            padding: const EdgeInsets.fromLTRB(Space.gutter, 0, Space.gutter, Space.x2),
-            child: InfoBanner(
-              tone: FinnTone.info,
-              message: '${entries.length} change${entries.length == 1 ? '' : 's'} this session'
-                  '${failed > 0 ? ', $failed not completed' : ''}. '
-                  'The log is kept only while the app is open.',
-            ),
-          );
-        }
-        final item = items[i - 1];
-        if (item is String) {
-          return ResponsiveCenter(
-            key: ValueKey('day-$item'),
-            padding: const EdgeInsets.fromLTRB(Space.gutter, Space.x4, Space.gutter, Space.x2),
-            child: Semantics(header: true, child: Text(item.toUpperCase(), style: context.text.sectionTitle)),
-          );
-        }
-        final e = item as AuditEntry;
-        return ResponsiveCenter(
-          key: ValueKey('${e.actionId}-${e.at.microsecondsSinceEpoch}-$i'),
-          padding: const EdgeInsets.fromLTRB(Space.gutter, 0, Space.gutter, Space.x2),
-          child: _EntryTile(entry: e),
-        );
-      },
-    );
-  }
+      ),
+    const SliverToBoxAdapter(child: SizedBox(height: Sp.xl)),
+  ];
 }
 
-class _EntryTile extends ConsumerWidget {
-  const _EntryTile({required this.entry});
+class _EntryRow extends ConsumerWidget {
+  const _EntryRow({super.key, required this.entry});
   final AuditEntry entry;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
     final descriptor = ref.watch(actionRegistryProvider).lookup(entry.actionId)?.descriptor;
     final hidden = AmountVisibility.hiddenOf(context);
     final ok = entry.succeeded;
-    final tone = ok ? FinnTone.positive : FinnTone.negative;
     var summary = entry.summary;
     if (hidden) summary = summary.replaceAll(RegExp(r'[−+-]?₹[\d,]+(\.\d+)?'), MoneyFormatter.masked);
     final meta = [
       descriptor?.title ?? entry.actionId,
       _channelLabel(entry.channel),
       DateFormat('h:mm a').format(entry.at),
+      if (ok && entry.confirmedBy != null) 'Reviewed before saving',
     ].join(' · ');
-    return FinnCard(
-      padding: const EdgeInsets.all(Space.x3 + 2),
-      child: MergeSemantics(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            IconTile(
-              icon: ok ? LucideIcons.circleCheck : LucideIcons.circleX,
-              background: tone.soft(c),
-              foreground: tone.color(c),
-              size: 32,
-              radius: Radii.md,
-              iconSize: 16,
-            ),
-            const SizedBox(width: Space.x3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(summary, style: t.bodyStrong),
-                  const SizedBox(height: Space.x0_5),
-                  Text(meta, style: t.caption),
-                  if (!ok && entry.failure != null) ...[
-                    const SizedBox(height: Space.x1),
-                    Text('Not completed: ${entry.failure}', style: t.caption.copyWith(color: c.negative)),
-                  ],
-                  if (ok && entry.confirmedBy != null) ...[
-                    const SizedBox(height: Space.x1_5),
-                    StatusPill(label: 'Reviewed before saving', color: c.info, icon: LucideIcons.shieldCheck),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
+    final failure = !ok && entry.failure != null ? 'Not completed: ${entry.failure}' : null;
+    return LedgerRow(
+      leading: IconWell(
+        icon: ok ? LucideIcons.check : LucideIcons.x,
+        color: ok ? null : c.red,
+        background: ok ? null : c.redSoft,
       ),
+      title: summary,
+      titleLines: 2,
+      subtitle: failure ?? meta,
+      subtitleColor: failure == null ? null : c.red,
+      subtitleLines: 2,
     );
   }
 }

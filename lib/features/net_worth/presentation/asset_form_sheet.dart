@@ -4,7 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/di/core_providers.dart';
 import '../../../core/money/money_format.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/category_icons.dart';
 import '../application/asset_actions.dart';
@@ -57,7 +57,8 @@ class _AssetFormSheetState extends ConsumerState<AssetFormSheet> {
   }
 
   void _clearError(String field) {
-    if (_errors.containsKey(field)) setState(() => _errors = {..._errors}..remove(field));
+    if (_errors.containsKey(field))
+      setState(() => _errors = {..._errors}..remove(field));
   }
 
   void _onErrors(Map<String, String> e) {
@@ -65,7 +66,7 @@ class _AssetFormSheetState extends ConsumerState<AssetFormSheet> {
   }
 
   Future<void> _submit() async {
-    final value = AmountField.parse(_value.text);
+    final value = LedgerAmountField.parse(_value.text);
     final local = <String, String>{
       if (_name.text.trim().length < 2) 'name': 'Use at least 2 characters.',
       if (value == null) 'value': 'Enter the current value (zero is fine).',
@@ -104,7 +105,11 @@ class _AssetFormSheetState extends ConsumerState<AssetFormSheet> {
         context,
         ref,
         action: const UpdateAssetAction(),
-        input: UpdateAssetInput(id: existing.id, expectedVersion: existing.version, data: data),
+        input: UpdateAssetInput(
+          id: existing.id,
+          expectedVersion: existing.version,
+          data: data,
+        ),
         idempotencyKey: _key,
         successTitle: 'Asset updated',
         onFieldErrors: _onErrors,
@@ -135,40 +140,50 @@ class _AssetFormSheetState extends ConsumerState<AssetFormSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final value = _isEdit ? ref.watch(assetByIdProvider(widget.assetId!)) : null;
+    final value = _isEdit
+        ? ref.watch(assetByIdProvider(widget.assetId!))
+        : null;
     final ready = value == null || value.hasValue || _loaded;
     if (value != null && value.hasValue) _load(value.value);
     if (value == null) _loaded = true;
     final missing = _isEdit && ready && _existing == null;
     return FinnSheetScaffold(
       title: _isEdit ? 'Edit asset' : 'Add asset',
-      description: 'An estimate of something you own. It counts towards net worth, not your cash balance.',
-      footer: FinnButton(
+      description: 'Counts towards net worth, not your cash balance.',
+      footer: LedgerButton(
         label: _isEdit ? 'Save changes' : 'Add asset',
-        icon: LucideIcons.check,
         expand: true,
-        size: FinnButtonSize.lg,
         loading: _submitting,
         onPressed: _submitting || !ready || missing ? null : _submit,
       ),
       child: !ready
-          ? const SkeletonPulse(child: ListSkeleton(count: 4, padding: EdgeInsets.zero))
+          ? const _FormSkeleton()
           : missing
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(vertical: Space.x6),
-                  child: ErrorState(title: 'Asset not found', message: 'It may have been deleted.'),
-                )
-              : _form(context),
+          ? const LedgerEmpty(
+              title: 'Asset not found',
+              message: 'It may have been deleted.',
+            )
+          : _form(context),
     );
   }
 
   Widget _form(BuildContext context) {
-    final t = context.text;
+    final c = context.ink;
     final today = ref.watch(todayProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        FinnTextField(
+        LedgerAmountField(
+          hero: true,
+          controller: _value,
+          label: 'Current value',
+          helper: 'What it would fetch today.',
+          errorText: _errors['value'],
+          textInputAction: TextInputAction.next,
+          onChanged: (_) => _clearError('value'),
+        ),
+        const SizedBox(height: LedgerForm.gap),
+        LedgerTextField(
           controller: _name,
           label: 'Name',
           hint: 'e.g. HDFC mutual funds',
@@ -178,32 +193,24 @@ class _AssetFormSheetState extends ConsumerState<AssetFormSheet> {
           textInputAction: TextInputAction.next,
           onChanged: (_) => _clearError('name'),
         ),
-        const SizedBox(height: Space.x3),
-        Text('Type', style: t.label),
-        const SizedBox(height: Space.x2),
-        FilterChipBar<AssetType>(
-          padding: EdgeInsets.zero,
-          multiSelect: false,
-          items: [
-            for (final type in AssetType.values)
-              FilterChipItem(type, type.label, icon: CategoryIcons.of(type.iconKey)),
-          ],
-          selected: {_type},
-          onChanged: (s) {
-            if (s.isNotEmpty) setState(() => _type = s.first);
-          },
+        const SizedBox(height: LedgerForm.gap),
+        LedgerField(
+          label: 'Type',
+          child: LedgerChoiceChips<AssetType>(
+            options: [
+              for (final type in AssetType.values)
+                LedgerOption(
+                  type,
+                  type.label,
+                  icon: CategoryIcons.of(type.iconKey),
+                ),
+            ],
+            selected: _type,
+            onChanged: (v) => setState(() => _type = v),
+          ),
         ),
-        const SizedBox(height: Space.x5),
-        AmountField(
-          controller: _value,
-          label: 'Current value',
-          hint: 'What it would fetch today',
-          errorText: _errors['value'],
-          textInputAction: TextInputAction.next,
-          onChanged: (_) => _clearError('value'),
-        ),
-        const SizedBox(height: Space.x5),
-        DateField(
+        const SizedBox(height: LedgerForm.groupGap),
+        LedgerDateField(
           label: 'Valued on',
           value: _valuedOn ?? today,
           firstDate: DateTime(1970),
@@ -214,8 +221,8 @@ class _AssetFormSheetState extends ConsumerState<AssetFormSheet> {
             _errors = {..._errors}..remove('valuedOn');
           }),
         ),
-        const SizedBox(height: Space.x5),
-        FinnTextField(
+        const SizedBox(height: LedgerForm.gap),
+        LedgerTextField(
           controller: _note,
           label: 'Note (optional)',
           hint: 'e.g. Matures March 2027',
@@ -227,20 +234,41 @@ class _AssetFormSheetState extends ConsumerState<AssetFormSheet> {
           onChanged: (_) => _clearError('note'),
         ),
         if (_isEdit) ...[
-          const SizedBox(height: Space.x4),
-          FinnButton(
-            label: 'Delete asset',
-            icon: LucideIcons.trash2,
-            variant: FinnButtonVariant.ghost,
-            onPressed: _submitting ? null : _delete,
-          ),
-          Text(
-            'Deleting removes it from net worth. Your cash balance is not affected.',
-            style: t.caption,
-            textAlign: TextAlign.center,
+          const SizedBox(height: LedgerForm.groupGap),
+          Align(
+            child: LedgerButton(
+              label: 'Delete asset',
+              icon: LucideIcons.trash2,
+              variant: LedgerButtonVariant.quiet,
+              color: c.red,
+              onPressed: _submitting ? null : _delete,
+            ),
           ),
         ],
       ],
+    );
+  }
+}
+
+class _FormSkeleton extends StatelessWidget {
+  const _FormSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Loading',
+      child: const ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LedgerSkeleton(width: 200, height: 44),
+            SizedBox(height: LedgerForm.gap),
+            LedgerSkeleton(height: 52),
+            SizedBox(height: LedgerForm.gap),
+            LedgerSkeleton(height: 52),
+          ],
+        ),
+      ),
     );
   }
 }

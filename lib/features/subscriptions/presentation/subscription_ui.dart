@@ -42,9 +42,12 @@ class SubscriptionsOverview {
   });
 
   factory SubscriptionsOverview.of(FinanceSnapshot s) {
-    int byDue(Subscription a, Subscription b) => a.nextDueDate.compareTo(b.nextDueDate);
+    int byDue(Subscription a, Subscription b) =>
+        a.nextDueDate.compareTo(b.nextDueDate);
     final subs = s.subscriptions;
-    final active = subs.where((x) => x.status == SubscriptionStatus.active).toList()..sort(byDue);
+    final active =
+        subs.where((x) => x.status == SubscriptionStatus.active).toList()
+          ..sort(byDue);
     final income = s.monthSummary(s.currentMonth.previous).income;
     final monthly = _calc.monthlyCommitment(subs);
     final window = DateRange(s.today, s.today.add(const Duration(days: 30)));
@@ -61,10 +64,16 @@ class SubscriptionsOverview {
       upcoming: upcoming,
       upcomingTotal: Money.sum(upcoming.map((e) => e.subscription.amount)),
       active: active,
-      paused: subs.where((x) => x.status == SubscriptionStatus.paused).toList()..sort(byDue),
-      cancelled: subs.where((x) => x.status == SubscriptionStatus.cancelled).toList()
-        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase())),
-      overdueCount: active.where((x) => _calc.dueState(x, s.today) == DueState.overdue).length,
+      paused: subs.where((x) => x.status == SubscriptionStatus.paused).toList()
+        ..sort(byDue),
+      cancelled:
+          subs.where((x) => x.status == SubscriptionStatus.cancelled).toList()
+            ..sort(
+              (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+            ),
+      overdueCount: active
+          .where((x) => _calc.dueState(x, s.today) == DueState.overdue)
+          .length,
     );
   }
 
@@ -86,7 +95,8 @@ class SubscriptionsOverview {
 
   bool get isEmpty => active.isEmpty && paused.isEmpty && cancelled.isEmpty;
 
-  IncomeImpact? get incomeImpact => incomeShareBps == null ? null : IncomeImpact.of(incomeShareBps!);
+  IncomeImpact? get incomeImpact =>
+      incomeShareBps == null ? null : IncomeImpact.of(incomeShareBps!);
 }
 
 /// How much of last month's income recurring costs take.
@@ -115,9 +125,11 @@ enum IncomeImpact {
   };
 }
 
-final subscriptionsOverviewProvider = Provider<AsyncValue<SubscriptionsOverview>>(
-  (ref) => ref.watch(financeSnapshotProvider).whenData(SubscriptionsOverview.of),
-);
+final subscriptionsOverviewProvider =
+    Provider<AsyncValue<SubscriptionsOverview>>(
+      (ref) =>
+          ref.watch(financeSnapshotProvider).whenData(SubscriptionsOverview.of),
+    );
 
 /// Data for one subscription's detail page.
 @immutable
@@ -147,65 +159,98 @@ class SubscriptionDetail {
   final Money paidTotal;
 }
 
-final subscriptionDetailProvider = Provider.family<AsyncValue<SubscriptionDetail?>, String>((ref, id) {
-  return ref.watch(financeSnapshotProvider).whenData((s) {
-    final sub = s.subscriptions.where((x) => x.id == id).firstOrNull;
-    if (sub == null) return null;
-    final third = sub.frequency.nth(sub.nextDueDate, 2);
-    final payments = s.linkedTransactions(sub.id)..sort((a, b) => b.date.compareTo(a.date));
-    return SubscriptionDetail(
-      subscription: sub,
-      category: s.category(sub.categoryId),
-      today: s.today,
-      dueState: _calc.dueState(sub, s.today),
-      expected: _calc.occurrencesIn(sub, DateRange(sub.nextDueDate, third)).take(3).toList(),
-      payments: payments,
-      paidTotal: Money.sum(payments.map((t) => t.amount)),
-    );
-  });
-});
+final subscriptionDetailProvider =
+    Provider.family<AsyncValue<SubscriptionDetail?>, String>((ref, id) {
+      return ref.watch(financeSnapshotProvider).whenData((s) {
+        final sub = s.subscriptions.where((x) => x.id == id).firstOrNull;
+        if (sub == null) return null;
+        final third = sub.frequency.nth(sub.nextDueDate, 2);
+        final payments = s.linkedTransactions(sub.id)
+          ..sort((a, b) => b.date.compareTo(a.date));
+        return SubscriptionDetail(
+          subscription: sub,
+          category: s.category(sub.categoryId),
+          today: s.today,
+          dueState: _calc.dueState(sub, s.today),
+          expected: _calc
+              .occurrencesIn(sub, DateRange(sub.nextDueDate, third))
+              .take(3)
+              .toList(),
+          payments: payments,
+          paidTotal: Money.sum(payments.map((t) => t.amount)),
+        );
+      });
+    });
 
 /// Days until [s] is next charged; negative when overdue.
-int subscriptionDaysUntil(Subscription s, DateTime today) => daysBetween(today, s.nextDueDate);
+int subscriptionDaysUntil(Subscription s, DateTime today) =>
+    daysBetween(today, s.nextDueDate);
 
 /// Renewal that needs a look: overdue, due today or due within three days.
-bool subscriptionIsDueSoon(Subscription s, DateTime today) => s.isActive && subscriptionDaysUntil(s, today) <= 3;
+bool subscriptionIsDueSoon(Subscription s, DateTime today) =>
+    s.isActive && subscriptionDaysUntil(s, today) <= 3;
 
 /// "2 days overdue", "Due today", "Due tomorrow", "Due in 3 days", else the
 /// date. Red when overdue, amber when close, otherwise no colour.
-({String label, Color? color}) subscriptionNextCharge(BuildContext context, Subscription s, DateTime today) {
+({String label, Color? color}) subscriptionNextCharge(
+  BuildContext context,
+  Subscription s,
+  DateTime today,
+) {
   final c = context.ink;
   final days = subscriptionDaysUntil(s, today);
-  if (days < 0) return (label: '${-days} ${-days == 1 ? 'day' : 'days'} overdue', color: c.red);
+  if (days < 0)
+    return (
+      label: '${-days} ${-days == 1 ? 'day' : 'days'} overdue',
+      color: c.red,
+    );
   if (days == 0) return (label: 'Due today', color: c.amber);
   if (days == 1) return (label: 'Due tomorrow', color: c.amber);
   if (days <= 3) return (label: 'Due in $days days', color: c.amber);
-  return (label: 'Next ${DateFormats.dayMonth.format(s.nextDueDate)}', color: null);
+  return (
+    label: 'Next ${DateFormats.dayMonth.format(s.nextDueDate)}',
+    color: null,
+  );
 }
 
 /// Records the current renewal as paid (review sheet confirms details).
-Future<Transaction?> markSubscriptionPaid(BuildContext context, WidgetRef ref, Subscription s) => runAction(
+Future<Transaction?> markSubscriptionPaid(
+  BuildContext context,
+  WidgetRef ref,
+  Subscription s,
+) => runAction(
   context,
   ref,
   action: const MarkSubscriptionPaidAction(),
-  input: MarkSubscriptionPaidInput(subscriptionId: s.id, cycleDate: s.nextDueDate, method: s.paymentMethod),
+  input: MarkSubscriptionPaidInput(
+    subscriptionId: s.id,
+    cycleDate: s.nextDueDate,
+    method: s.paymentMethod,
+  ),
   // Stable per cycle: double taps never record twice.
   idempotencyKey: 'sub-paid-${s.id}-${Out.date(s.nextDueDate)}',
   celebrate: true,
   successTitle: '${s.name} marked as paid',
-  successSubtitle: 'Next renewal ${DateFormats.dayMonthYear.format(SubscriptionSchedule.nextCycleAfterCurrent(s))}',
+  successSubtitle:
+      'Next renewal ${DateFormats.dayMonthYear.format(SubscriptionSchedule.nextCycleAfterCurrent(s))}',
 );
 
 /// Category mark for a subscription (watches only its category).
 class SubscriptionAvatar extends ConsumerWidget {
-  const SubscriptionAvatar({super.key, required this.categoryId, this.size = 40});
+  const SubscriptionAvatar({
+    super.key,
+    required this.categoryId,
+    this.size = 40,
+  });
 
   final String categoryId;
   final double size;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) =>
-      CategoryMark(category: ref.watch(categoryProvider(categoryId)), size: size);
+  Widget build(BuildContext context, WidgetRef ref) => CategoryMark(
+    category: ref.watch(categoryProvider(categoryId)),
+    size: size,
+  );
 }
 
 /// One subscription row: name, cycle and next charge, amount. Overdue or
@@ -231,14 +276,19 @@ class SubscriptionTile extends StatelessWidget {
     final s = subscription;
     final inactive = !s.isActive;
     final next = inactive ? null : subscriptionNextCharge(context, s, today);
-    final subtitle = next == null ? s.frequency.label : '${s.frequency.label}, ${next.label.toLowerCaseFirst()}';
+    final subtitle = next == null
+        ? s.frequency.label
+        : '${s.frequency.label}, ${next.label.toLowerCaseFirst()}';
     final pay = onMarkPaid;
     return LedgerRow(
       title: s.name,
       leading: SubscriptionAvatar(categoryId: s.categoryId),
       subtitle: subtitle,
       subtitleColor: next?.color,
-      trailing: AmountText(s.amount, style: t.figure.copyWith(color: inactive ? c.inkSoft : null)),
+      trailing: AmountText(
+        s.amount,
+        style: t.figure.copyWith(color: inactive ? c.inkSoft : null),
+      ),
       below: pay == null
           ? null
           : Align(
@@ -252,24 +302,13 @@ class SubscriptionTile extends StatelessWidget {
               ),
             ),
       onTap: onTap,
-      semanticLabel: '${s.name}, ${AmountText.spokenLabel(s.amount)} ${s.frequency.label}, ${next?.label ?? s.status.label}',
+      semanticLabel:
+          '${s.name}, ${AmountText.spokenLabel(s.amount)} ${s.frequency.label}, ${next?.label ?? s.status.label}',
     );
   }
 }
 
 extension on String {
-  String toLowerCaseFirst() => isEmpty ? this : '${this[0].toLowerCase()}${substring(1)}';
-}
-
-/// Label above a non-text form control.
-class SubscriptionFieldLabel extends StatelessWidget {
-  const SubscriptionFieldLabel(this.text, {super.key});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: Sp.sm),
-    child: Text(text, style: context.type.label),
-  );
+  String toLowerCaseFirst() =>
+      isEmpty ? this : '${this[0].toLowerCase()}${substring(1)}';
 }

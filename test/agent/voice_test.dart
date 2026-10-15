@@ -243,13 +243,13 @@ void main() {
     expect((sent.single as UserChatEntry).text, 'Spent 450 on lunch', reason: 'transcript sent as the user message');
     expect(find.text('Review this change'), findsOneWidget);
     expect(find.text('Nothing is saved until you approve.'), findsOneWidget);
-    expect(find.text('MOVES MONEY'), findsWidgets);
+    expect(find.text('Moves money'), findsWidgets);
 
     await tester.tap(find.text('Approve'));
     await tester.pump();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Change saved'), findsOneWidget);
-    expect(find.text('SAVED'), findsOneWidget);
+    expect(find.text('Saved'), findsOneWidget);
   });
 }

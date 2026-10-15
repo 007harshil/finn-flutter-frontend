@@ -25,7 +25,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Record transaction'), findsOneWidget);
     await enterAmount(tester, '1234');
-    await scrollAndTap(tester, find.descendant(of: find.byKey(const ValueKey(SeedCategoryIds.food)), matching: find.byType(InkWell)));
+    await tester.tap(find.text('Choose a category'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey(SeedCategoryIds.food)));
+    await tester.pumpAndSettle();
     await enterField(tester, 'Paid to', 'Journey Cafe');
     await tapButton(tester, 'Record expense');
     await settle(tester);

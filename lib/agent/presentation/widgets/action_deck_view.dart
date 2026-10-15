@@ -5,13 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../application/action_deck.dart';
 import '../../execution/proposals.dart';
 import 'action_outcome.dart';
 import 'action_visuals.dart';
-import 'agent_logo.dart';
-import 'agent_visualizer.dart';
 import 'agent_working.dart';
 import 'change_review.dart';
 
@@ -43,8 +41,7 @@ enum _Phase {
 /// swipeable carousel when there are several, one card otherwise. Each
 /// card is approved or declined on its own (or all at once) and stays on
 /// the deck with its outcome: saved cards link to their record, declined
-/// ones are greyed out and stamped, and can be regenerated in place.
-/// Regenerated changes are drawn in their own colours.
+/// ones are muted and labelled, and can be retried in place ("Try 2").
 class ActionDeckView extends StatefulWidget {
   const ActionDeckView({
     super.key,
@@ -70,7 +67,7 @@ class ActionDeckView extends StatefulWidget {
   /// Approved changes are being written.
   final bool executing;
 
-  /// A turn is running (regenerating is not possible meanwhile).
+  /// A turn is running (retrying is not possible meanwhile).
   final bool busy;
 
   final void Function(String proposalId, CardDecision? decision) onDecide;
@@ -117,7 +114,7 @@ class _ActionDeckViewState extends State<ActionDeckView> {
       if (_pages.hasClients) _pages.jumpToPage(page);
       setState(() => _page = page);
     } else {
-      _pages.animateToPage(page, duration: duration, curve: Curves2.emphasized);
+      _pages.animateToPage(page, duration: duration, curve: context.motion.standard);
     }
   }
 
@@ -137,7 +134,7 @@ class _ActionDeckViewState extends State<ActionDeckView> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
     final slots = widget.deck.slots;
     final phases = [for (final s in slots) _phaseOf(s)];
     final pending = [
@@ -151,7 +148,6 @@ class _ActionDeckViewState extends State<ActionDeckView> {
     Widget card(int i) => _DeckCard(
       slot: slots[i],
       phase: phases[i],
-      single: !many,
       canRetry: slots[i].canRetry && !widget.busy,
       onDecide: (d) => _decide(i, d),
       onRetry: () => widget.onRetry(slots[i].key),
@@ -161,77 +157,68 @@ class _ActionDeckViewState extends State<ActionDeckView> {
     return Semantics(
       container: true,
       label: pending.isNotEmpty ? 'Review proposed changes' : 'Proposed changes',
-      child: Container(
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: BorderRadius.circular(Radii.xxl),
-          border: Border.all(color: c.agentMid.withValues(alpha: 0.45), width: 1.2),
-          boxShadow: Elevation.sm,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _DeckHeader(deck: widget.deck, phases: phases, pending: pending),
-            const SizedBox(height: Space.x3),
-            if (!many)
-              Padding(padding: const EdgeInsets.symmetric(horizontal: Space.x3), child: card(0))
-            else ...[
-              _AdaptivePager(
-                controller: _pages,
-                count: slots.length,
-                onPageChanged: (i) => setState(() => _page = i),
-                builder: card,
-              ),
-              const SizedBox(height: Space.x2),
-              _PageDots(
-                count: slots.length,
-                page: page,
-                colors: [for (var i = 0; i < slots.length; i++) _dotColor(slots[i], phases[i], c)],
-                onPrevious: page > 0 ? () => _goTo(page - 1) : null,
-                onNext: page < slots.length - 1 ? () => _goTo(page + 1) : null,
-              ),
-            ],
-            if (pending.length > 1 && undecided > 0)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Space.x3, Space.x3, Space.x3, 0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: FinnButton(
-                        label: undecided == pending.length ? 'Decline all' : 'Decline rest',
-                        variant: FinnButtonVariant.outline,
-                        onPressed: () => widget.onDecideRest(CardDecision.declined),
-                      ),
-                    ),
-                    const SizedBox(width: Space.x3),
-                    Expanded(
-                      child: FinnButton(
-                        label: undecided == pending.length ? 'Approve all' : 'Approve rest ($undecided)',
-                        icon: LucideIcons.checkCheck,
-                        onPressed: () => widget.onDecideRest(CardDecision.approved),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: Space.x3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _DeckHeader(deck: widget.deck, phases: phases, pending: pending),
+          const SizedBox(height: Sp.md),
+          if (!many)
+            card(0)
+          else ...[
+            _AdaptivePager(
+              controller: _pages,
+              count: slots.length,
+              onPageChanged: (i) => setState(() => _page = i),
+              builder: card,
+            ),
+            const SizedBox(height: Sp.xs),
+            _PageDots(
+              count: slots.length,
+              page: page,
+              colors: [for (var i = 0; i < slots.length; i++) _dotColor(slots[i], phases[i], c)],
+              onPrevious: page > 0 ? () => _goTo(page - 1) : null,
+              onNext: page < slots.length - 1 ? () => _goTo(page + 1) : null,
+            ),
           ],
-        ),
+          if (pending.length > 1 && undecided > 0) ...[
+            const SizedBox(height: Sp.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: LedgerButton(
+                    label: undecided == pending.length ? 'Decline all' : 'Decline rest',
+                    variant: LedgerButtonVariant.secondary,
+                    expand: true,
+                    onPressed: () => widget.onDecideRest(CardDecision.declined),
+                  ),
+                ),
+                const SizedBox(width: Sp.md),
+                Expanded(
+                  child: LedgerButton(
+                    label: undecided == pending.length ? 'Approve all' : 'Approve rest ($undecided)',
+                    icon: LucideIcons.checkCheck,
+                    expand: true,
+                    onPressed: () => widget.onDecideRest(CardDecision.approved),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }
 
-  static Color _dotColor(DeckSlot slot, _Phase phase, FinnColors c) => switch (phase) {
-    _Phase.deciding => Colors.white,
-    _Phase.approved || _Phase.saving => AgentLight.mint,
-    _Phase.declined || _Phase.idle => c.textTertiary,
-    _Phase.regenerating => AgentLight.magenta,
+  static Color _dotColor(DeckSlot slot, _Phase phase, LedgerColors c) => switch (phase) {
+    _Phase.deciding => c.ink,
+    _Phase.approved || _Phase.saving => c.green,
+    _Phase.declined || _Phase.idle => c.lineStrong,
+    _Phase.regenerating => c.inkSoft,
     _Phase.settled => actionStatusVisual(slot.current.record!, c).$2,
   };
 }
 
-/// Title, state and (while reviewing) headline numbers of the deck.
+/// Title and state of the deck.
 class _DeckHeader extends StatelessWidget {
   const _DeckHeader({required this.deck, required this.phases, required this.pending});
 
@@ -241,8 +228,7 @@ class _DeckHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final t = context.type;
     final total = deck.slots.length;
     final saved = deck.saved;
     final declined = [
@@ -253,96 +239,33 @@ class _DeckHeader extends StatelessWidget {
     final (String title, String subtitle) = switch (phases) {
       _ when pending.isNotEmpty => (
         pending.length == 1 ? 'Review this change' : 'Review ${pending.length} changes',
-        pending.length == 1 ? 'Nothing is saved until you approve.' : 'Swipe through them. Nothing is saved until you approve.',
+        pending.length == 1
+            ? 'Nothing is saved until you approve.'
+            : 'Swipe through them. Nothing is saved until you approve.',
       ),
-      _ when phases.contains(_Phase.saving) => (
-        'Saving your changes…',
-        'Writing what you approved.',
-      ),
-      _ when phases.contains(_Phase.regenerating) => (
-        'Regenerating a change…',
-        'Reading your request again.',
-      ),
-      _ when phases.every((p) => p == _Phase.declined) => ('Declined', 'Nothing was saved.'),
+      _ when phases.contains(_Phase.saving) => ('Saving your changes', 'Writing what you approved.'),
+      _ when phases.contains(_Phase.regenerating) => ('Trying another way', 'Reading your request again.'),
+      _ when phases.every((p) => p == _Phase.declined) => ('Nothing saved', 'You declined every change.'),
       _ => (
         switch (saved) {
           _ when saved == total => total == 1 ? 'Change saved' : 'All $total changes saved',
           0 => total == 1 ? 'Not saved' : 'No changes saved',
           _ => '$saved of $total changes saved',
         },
-        declined > 0 ? 'Tap Retry on a declined change and FiNN will try another way.' : 'Every change below shows what happened.',
+        declined > 0 ? 'Retry a declined change and FiNN will try another way.' : 'Each change shows what happened.',
       ),
     };
 
-    final movesMoney = pending.where((a) => a.proposal.descriptor.movesMoney).length;
-    final permanent = pending.where((a) => !a.proposal.descriptor.reversible).length;
-    final modules = {for (final a in pending) actionVisualFor(a.proposal.descriptor.id, c).module}.length;
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(Space.x4, Space.x4, Space.x4, Space.x3),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [c.agentStart.withValues(alpha: 0.16), c.agentEnd.withValues(alpha: 0.10)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
+    return AnimatedSwitcher(
+      duration: context.motion.fast,
+      layoutBuilder: (current, previous) => Stack(alignment: Alignment.topLeft, children: [...previous, ?current]),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        key: ValueKey(title),
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const FinnAgentMark(size: 32),
-              const SizedBox(width: Space.x3),
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: context.motion.fast,
-                  layoutBuilder: (current, previous) => Stack(
-                    alignment: Alignment.centerLeft,
-                    children: [...previous, ?current],
-                  ),
-                  child: Column(
-                    key: ValueKey(title),
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: t.sectionTitle),
-                      Text(subtitle, style: t.caption.copyWith(color: c.textSecondary)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (pending.isNotEmpty) ...[
-            const SizedBox(height: Space.x3),
-            Row(
-              children: [
-                Expanded(
-                  child: ImpactTile(
-                    value: '${pending.length}',
-                    label: pending.length == 1 ? 'Change' : 'Changes',
-                    icon: LucideIcons.listChecks,
-                    color: c.agentEnd,
-                  ),
-                ),
-                const SizedBox(width: Space.x2),
-                Expanded(
-                  child: ImpactTile(value: '$movesMoney', label: 'Move money', icon: LucideIcons.indianRupee, color: c.attention),
-                ),
-                const SizedBox(width: Space.x2),
-                Expanded(
-                  child: permanent > 0
-                      ? ImpactTile(value: '$permanent', label: 'Permanent', icon: LucideIcons.lock, color: c.negative)
-                      : ImpactTile(
-                          value: '$modules',
-                          label: modules == 1 ? 'Area' : 'Areas',
-                          icon: LucideIcons.layers,
-                          color: c.agentStart,
-                        ),
-                ),
-              ],
-            ),
-          ],
+          Semantics(header: true, child: Text(title, style: t.heading)),
+          const SizedBox(height: 2),
+          Text(subtitle, style: t.label),
         ],
       ),
     );
@@ -354,7 +277,6 @@ class _DeckCard extends StatelessWidget {
   const _DeckCard({
     required this.slot,
     required this.phase,
-    required this.single,
     required this.canRetry,
     required this.onDecide,
     required this.onRetry,
@@ -363,172 +285,150 @@ class _DeckCard extends StatelessWidget {
 
   final DeckSlot slot;
   final _Phase phase;
-
-  /// The only card of the deck (its buttons are the deck's buttons).
-  final bool single;
   final bool canRetry;
   final ValueChanged<CardDecision?> onDecide;
   final VoidCallback onRetry;
   final ValueChanged<String> onOpen;
 
-  static const _regenColors = [AgentLight.magenta, AgentLight.violet, Palette.amber400];
-
   bool get _declined =>
-      phase == _Phase.declined || (phase == _Phase.settled && slot.current.record!.status == ActionResultStatus.declined);
+      phase == _Phase.declined ||
+      (phase == _Phase.settled && slot.current.record!.status == ActionResultStatus.declined);
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final attempt = slot.current;
     final record = attempt.record;
-    final regenerated = slot.regenerated;
-    final dimmed = _declined || phase == _Phase.saving || phase == _Phase.regenerating || phase == _Phase.idle;
+    final muted = _declined || phase == _Phase.saving || phase == _Phase.regenerating || phase == _Phase.idle;
 
-    final Color edge = switch (phase) {
-      _Phase.approved || _Phase.saving => AgentLight.mint.withValues(alpha: 0.6),
-      _Phase.settled when record!.succeeded => c.positive.withValues(alpha: 0.55),
-      _Phase.regenerating => AgentLight.magenta.withValues(alpha: 0.6),
-      _ => c.border,
-    };
-
-    final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (regenerated) ...[
-          _RegeneratedRibbon(slot: slot),
-          const SizedBox(height: Space.x2_5),
-        ],
-        AnimatedOpacity(
-          duration: context.motion.normal,
-          opacity: dimmed ? 0.42 : 1,
-          child: ChangeDetails(
-            proposal: attempt.proposal,
-            accent: regenerated ? AgentLight.magenta : null,
-            trailing: phase == _Phase.settled && record!.succeeded
-                ? Icon(LucideIcons.badgeCheck, size: 22, color: c.positive)
-                : null,
-          ),
-        ),
-        if (slot.note case final note?) ...[
-          const SizedBox(height: Space.x2_5),
-          _AgentNote(text: note),
-        ],
-        const SizedBox(height: Space.x3),
-        _footer(context, c, t),
-      ],
+    final rows = changeDetailRows(
+      context,
+      attempt.proposal,
+      tag: slot.regenerated ? Text('Try ${slot.attempts.length}', style: t.small) : null,
+      trailing: phase == _Phase.settled && record!.succeeded
+          ? Semantics(
+              label: 'Saved',
+              excludeSemantics: true,
+              child: Icon(LucideIcons.circleCheck, size: 20, color: c.green),
+            )
+          : null,
     );
 
-    Widget body = AnimatedContainer(
-      duration: context.motion.normal,
-      padding: const EdgeInsets.all(Space.x3),
-      decoration: BoxDecoration(
-        color: regenerated ? Color.alphaBlend(AgentLight.magenta.withValues(alpha: 0.07), c.surfaceMuted) : c.surfaceMuted,
-        borderRadius: BorderRadius.circular(Radii.xl),
-        border: regenerated ? null : Border.all(color: edge, width: 1.2),
-      ),
-      child: content,
-    );
-    if (regenerated) {
-      // Regenerated changes get their own colours so they read as new.
-      body = DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(Radii.xl + 1.5),
-          gradient: const LinearGradient(colors: _regenColors, begin: Alignment.topLeft, end: Alignment.bottomRight),
-          boxShadow: [BoxShadow(color: AgentLight.magenta.withValues(alpha: 0.22), blurRadius: 18, offset: const Offset(0, 6))],
-        ),
-        child: Padding(padding: const EdgeInsets.all(1.5), child: body),
-      );
-    }
-
-    return Stack(
+    return LedgerPanel(
       children: [
-        body,
-        if (_declined)
-          Positioned(top: regenerated ? Space.x10 : Space.x3, right: Space.x3, child: const _DeclinedStamp()),
-        if (phase == _Phase.saving || phase == _Phase.regenerating)
-          Positioned.fill(
-            child: _CardLoader(
-              colors: phase == _Phase.saving ? agentWorkColors(AgentWork.saving) : _regenColors,
-              label: phase == _Phase.saving ? 'Saving…' : 'Finding another way…',
-            ),
+        for (final r in rows) AnimatedOpacity(duration: context.motion.normal, opacity: muted ? 0.5 : 1, child: r),
+        if (slot.note case final note?)
+          Padding(
+            padding: const EdgeInsets.all(Sp.md),
+            child: LedgerNote(text: note, icon: LucideIcons.messageCircle),
           ),
+        Padding(padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.md, Sp.md), child: _footer(context, c, t)),
       ],
     );
   }
 
-  Widget _footer(BuildContext context, FinnColors c, FinnTypography t) {
+  Widget _footer(BuildContext context, LedgerColors c, LedgerType t) {
     final record = slot.current.record;
     switch (phase) {
       case _Phase.deciding:
-        return Row(
-          children: [
-            Expanded(
-              child: FinnButton(
-                label: 'Decline',
-                size: single ? FinnButtonSize.md : FinnButtonSize.sm,
-                variant: FinnButtonVariant.outline,
-                onPressed: () => onDecide(CardDecision.declined),
+        return Padding(
+          padding: const EdgeInsets.only(right: Sp.xs),
+          child: Row(
+            children: [
+              Expanded(
+                child: LedgerButton(
+                  label: 'Decline',
+                  variant: LedgerButtonVariant.secondary,
+                  expand: true,
+                  onPressed: () => onDecide(CardDecision.declined),
+                ),
               ),
-            ),
-            const SizedBox(width: Space.x3),
-            Expanded(
-              child: FinnButton(
-                label: 'Approve',
-                icon: LucideIcons.check,
-                size: single ? FinnButtonSize.md : FinnButtonSize.sm,
-                onPressed: () => onDecide(CardDecision.approved),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: LedgerButton(
+                  label: 'Approve',
+                  icon: LucideIcons.check,
+                  expand: true,
+                  onPressed: () => onDecide(CardDecision.approved),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       case _Phase.approved:
-        return _StatusRow(
-          pill: const StatusPill(label: 'Approved', color: AgentLight.mint, icon: LucideIcons.check),
+        return _Status(
+          icon: LucideIcons.check,
+          color: c.green,
+          label: 'Approved',
           text: 'Saved when you finish reviewing',
-          action: _TextAction(label: 'Undo', onTap: () => onDecide(null)),
+          action: LedgerButton(label: 'Undo', variant: LedgerButtonVariant.quiet, onPressed: () => onDecide(null)),
         );
       case _Phase.declined:
         final reviewing = slot.current.decision == CardDecision.declined && record == null;
-        return _StatusRow(
-          pill: StatusPill(label: 'Declined', color: c.textTertiary, icon: LucideIcons.circleX),
+        return _Status(
+          icon: LucideIcons.circleSlash,
+          color: c.inkSoft,
+          label: 'Declined',
           text: 'Will not be saved',
-          action: reviewing ? _TextAction(label: 'Undo', onTap: () => onDecide(null)) : null,
+          action: reviewing
+              ? LedgerButton(label: 'Undo', variant: LedgerButtonVariant.quiet, onPressed: () => onDecide(null))
+              : null,
         );
       case _Phase.saving:
       case _Phase.regenerating:
-        // Same height as the settled footer so the card does not jump.
-        return const SizedBox(height: 32);
-      case _Phase.idle:
-        return _StatusRow(
-          pill: StatusPill(label: 'Not reviewed', color: c.textTertiary, icon: LucideIcons.circleMinus),
+        final label = phase == _Phase.saving ? 'Saving…' : 'Finding another way…';
+        return Semantics(
+          liveRegion: true,
+          label: label,
+          excludeSemantics: true,
+          child: SizedBox(
+            height: 48,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(label, style: t.label),
+                const SizedBox(height: Sp.sm),
+                const Padding(
+                  padding: EdgeInsets.only(right: Sp.xs),
+                  child: AgentProgressLine(),
+                ),
+              ],
+            ),
+          ),
         );
+      case _Phase.idle:
+        return _Status(icon: LucideIcons.circleMinus, color: c.inkSoft, label: 'Not reviewed');
       case _Phase.settled:
         final (icon, color, label) = actionStatusVisual(record!, c);
         final route = actionRecordRoute(record);
-        final visual = actionVisualFor(record.proposal.descriptor.id, c);
+        final visual = actionVisualFor(record.proposal.descriptor.id);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (record.message != null && !record.succeeded) ...[
-              Text(record.message!, style: t.caption.copyWith(color: c.textSecondary)),
-              const SizedBox(height: Space.x2),
+              Padding(
+                padding: const EdgeInsets.only(right: Sp.xs),
+                child: Text(record.message!, style: t.label),
+              ),
+              const SizedBox(height: Sp.xs),
             ],
-            Row(
-              children: [
-                StatusPill(label: label, color: color, icon: icon),
-                const Spacer(),
-                if (route != null)
-                  RecordViewLink(label: 'View ${visual.module.toLowerCase()} details', onTap: () => onOpen(route)),
-                if (canRetry)
-                  FinnButton(
-                    label: 'Retry',
-                    icon: LucideIcons.rotateCcw,
-                    size: FinnButtonSize.sm,
-                    variant: FinnButtonVariant.secondary,
-                    onPressed: onRetry,
-                  ),
-              ],
+            _Status(
+              icon: icon,
+              color: color,
+              label: label,
+              action: route != null
+                  ? RecordViewLink(label: 'View ${visual.module.toLowerCase()} details', onTap: () => onOpen(route))
+                  : canRetry
+                  ? LedgerButton(
+                      label: 'Retry',
+                      icon: LucideIcons.rotateCcw,
+                      variant: LedgerButtonVariant.secondary,
+                      small: true,
+                      onPressed: onRetry,
+                    )
+                  : null,
             ),
           ],
         );
@@ -536,216 +436,37 @@ class _DeckCard extends StatelessWidget {
   }
 }
 
-class _StatusRow extends StatelessWidget {
-  const _StatusRow({required this.pill, this.text, this.action});
+/// Status line of a card: icon and label (coloured only for meaning), an
+/// optional note and one action on the right.
+class _Status extends StatelessWidget {
+  const _Status({required this.icon, required this.color, required this.label, this.text, this.action});
 
-  final Widget pill;
+  final IconData icon;
+  final Color color;
+  final String label;
   final String? text;
   final Widget? action;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 32,
+    final t = context.type;
+    final note = text;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
       child: Row(
         children: [
-          pill,
-          if (text != null) ...[
-            const SizedBox(width: Space.x2),
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: Sp.sm),
+          Text(label, style: t.labelStrong.copyWith(color: color)),
+          if (note != null) ...[
+            const SizedBox(width: Sp.sm),
             Expanded(
-              child: Text(
-                text!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.text.caption.copyWith(color: context.colors.textSecondary),
-              ),
+              child: Text(note, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.small),
             ),
           ] else
             const Spacer(),
           ?action,
         ],
-      ),
-    );
-  }
-}
-
-class _TextAction extends StatelessWidget {
-  const _TextAction({required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: label,
-      excludeSemantics: true,
-      child: PressableScale(
-        onTap: onTap,
-        scale: 0.94,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.x2, vertical: Space.x1_5),
-          child: Text(
-            label,
-            style: context.text.caption.copyWith(color: AgentLight.cyan, fontWeight: FontWeight.w800),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// "Regenerated · try 2", with the change it replaces struck through.
-class _RegeneratedRibbon extends StatelessWidget {
-  const _RegeneratedRibbon({required this.slot});
-
-  final DeckSlot slot;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.text;
-    final previous = slot.attempts[slot.attempts.length - 2];
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: Space.x2, vertical: Space.x0_5 + 1),
-          decoration: BoxDecoration(
-            borderRadius: Radii.rFull,
-            gradient: const LinearGradient(colors: [AgentLight.magenta, AgentLight.violet]),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(LucideIcons.sparkles, size: 11, color: Colors.white),
-              const SizedBox(width: Space.x1),
-              Text(
-                'REGENERATED · TRY ${slot.attempts.length}',
-                style: t.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 0.6),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: Space.x2),
-        Expanded(
-          child: Text(
-            previous.proposal.preview.summary,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: t.caption.copyWith(
-              color: Colors.white.withValues(alpha: 0.45),
-              decoration: TextDecoration.lineThrough,
-              decorationColor: Colors.white.withValues(alpha: 0.45),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// What the agent said on this card (e.g. a question after a retry).
-class _AgentNote extends StatelessWidget {
-  const _AgentNote({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(Space.x2_5),
-      decoration: BoxDecoration(
-        color: AgentLight.magenta.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(Radii.lg),
-        border: Border.all(color: AgentLight.magenta.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const FinnAgentMark(size: 18),
-          const SizedBox(width: Space.x2),
-          Expanded(
-            child: Text(
-              text,
-              style: context.text.caption.copyWith(color: Colors.white.withValues(alpha: 0.9), height: 1.4),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Rubber-stamp mark on a declined card.
-class _DeclinedStamp extends StatelessWidget {
-  const _DeclinedStamp();
-
-  @override
-  Widget build(BuildContext context) {
-    final color = Colors.white.withValues(alpha: 0.78);
-    return Semantics(
-      label: 'Declined',
-      excludeSemantics: true,
-      child: Transform.rotate(
-        angle: -0.14,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: Space.x2_5, vertical: Space.x1),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0A1330).withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(Radii.md),
-            border: Border.all(color: color, width: 1.6),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(LucideIcons.ban, size: 13, color: color),
-              const SizedBox(width: Space.x1),
-              Text(
-                'DECLINED',
-                style: context.text.micro.copyWith(color: color, fontWeight: FontWeight.w900, letterSpacing: 1.6),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Loader over one card (saving it, or regenerating it).
-class _CardLoader extends StatelessWidget {
-  const _CardLoader({required this.colors, required this.label});
-
-  final List<Color> colors;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      liveRegion: true,
-      label: label,
-      excludeSemantics: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(Radii.xl),
-          gradient: RadialGradient(
-            colors: [const Color(0xFF070E26).withValues(alpha: 0.72), const Color(0xFF070E26).withValues(alpha: 0.2)],
-          ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              OrbitLoader(size: 52, colors: colors),
-              const SizedBox(height: Space.x2),
-              ShaderMask(
-                blendMode: BlendMode.srcIn,
-                shaderCallback: (r) => LinearGradient(colors: [colors[0], colors[2]]).createShader(r),
-                child: Text(label, style: context.text.label.copyWith(fontWeight: FontWeight.w800)),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -769,59 +490,25 @@ class _PageDots extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.text;
+    final t = context.type;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _Arrow(icon: LucideIcons.chevronLeft, tooltip: 'Previous change', onTap: onPrevious),
-        const SizedBox(width: Space.x2),
+        LedgerIconButton(icon: LucideIcons.chevronLeft, tooltip: 'Previous change', onPressed: onPrevious),
+        const SizedBox(width: Sp.xs),
         for (var i = 0; i < count; i++)
           AnimatedContainer(
             duration: context.motion.fast,
             margin: const EdgeInsets.symmetric(horizontal: 3),
-            width: i == page ? 20 : 7,
-            height: 7,
-            decoration: BoxDecoration(
-              color: colors[i].withValues(alpha: i == page ? 1 : 0.55),
-              borderRadius: Radii.rFull,
-            ),
+            width: i == page ? 16 : 6,
+            height: 6,
+            decoration: BoxDecoration(color: colors[i], borderRadius: Rad.pill),
           ),
-        const SizedBox(width: Space.x2),
-        Text('${page + 1} / $count', style: t.micro.copyWith(color: Colors.white.withValues(alpha: 0.6))),
-        const SizedBox(width: Space.x2),
-        _Arrow(icon: LucideIcons.chevronRight, tooltip: 'Next change', onTap: onNext),
+        const SizedBox(width: Sp.sm),
+        Text('${page + 1} / $count', style: t.small),
+        const SizedBox(width: Sp.xs),
+        LedgerIconButton(icon: LucideIcons.chevronRight, tooltip: 'Next change', onPressed: onNext),
       ],
-    );
-  }
-}
-
-class _Arrow extends StatelessWidget {
-  const _Arrow({required this.icon, required this.tooltip, required this.onTap});
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onTap != null;
-    return Tooltip(
-      message: tooltip,
-      child: Semantics(
-        button: true,
-        enabled: enabled,
-        label: tooltip,
-        excludeSemantics: true,
-        child: PressableScale(
-          onTap: onTap,
-          enabled: enabled,
-          scale: 0.9,
-          child: SizedBox.square(
-            dimension: 40,
-            child: Icon(icon, size: 18, color: Colors.white.withValues(alpha: enabled ? 0.85 : 0.25)),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -862,8 +549,10 @@ class _AdaptivePagerState extends State<_AdaptivePager> {
       builder: (context, child) {
         final c = widget.controller;
         final fallback = c.initialPage.toDouble();
-        final page = (c.hasClients && c.position.haveDimensions ? c.page ?? fallback : fallback)
-            .clamp(0.0, math.max(0, widget.count - 1).toDouble());
+        final page = (c.hasClients && c.position.haveDimensions ? c.page ?? fallback : fallback).clamp(
+          0.0,
+          math.max(0, widget.count - 1).toDouble(),
+        );
         final lo = page.floor();
         final hi = page.ceil();
         final known = _heights[lo] ?? _heights.values.firstOrNull ?? 320;
@@ -880,7 +569,10 @@ class _AdaptivePagerState extends State<_AdaptivePager> {
           maxHeight: double.infinity,
           child: _SizeReporter(
             onHeight: (h) => _measured(i, h),
-            child: Padding(padding: const EdgeInsets.symmetric(horizontal: Space.x1), child: widget.builder(i)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Sp.xs),
+              child: widget.builder(i),
+            ),
           ),
         ),
       ),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../design_system/design_system.dart';
+import '../../kit/kit.dart';
 
 /// Lets screens inside the shell open the side drawer (Profile, Net worth,
 /// Subscriptions, Settings…) that replaced the old "More" tab. Provided by
@@ -19,23 +18,10 @@ class AppDrawerScope extends InheritedWidget {
 }
 
 /// The "menu" button that opens the side drawer from a tab's header.
+/// Prefer [LedgerMenuButton]; kept for existing callers.
 class AppMenuButton extends StatelessWidget {
-  const AppMenuButton({super.key, this.size = FinnButtonSize.md, this.variant = FinnIconButtonVariant.filled});
-
-  final FinnButtonSize size;
-  final FinnIconButtonVariant variant;
+  const AppMenuButton({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final open = AppDrawerScope.maybeOf(context);
-    if (open == null) return const SizedBox.shrink();
-    return FinnIconButton(
-      key: const ValueKey('app-menu'),
-      icon: LucideIcons.panelLeft,
-      tooltip: 'Menu',
-      variant: variant,
-      size: size,
-      onPressed: open,
-    );
-  }
+  Widget build(BuildContext context) => const LedgerMenuButton();
 }

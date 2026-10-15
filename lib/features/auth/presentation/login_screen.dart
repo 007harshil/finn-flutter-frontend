@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../application/auth_controller.dart';
 import '../domain/auth_session.dart';
 import 'auth_scaffold.dart';
@@ -59,11 +58,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return AuthScaffold(
-      footer: FinnButton(
+      footer: LedgerButton(
         key: const ValueKey('send-code'),
         label: 'Send verification code',
-        icon: LucideIcons.arrowRight,
-        size: FinnButtonSize.lg,
         expand: true,
         loading: _sending,
         onPressed: _sending ? null : _submit,
@@ -72,18 +69,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const AuthHeader(
-            icon: LucideIcons.wallet,
-            eyebrow: 'WELCOME TO FINN',
             title: 'Sign in or sign up',
             body: Text('Enter your email and we\'ll send you a 6-digit code. No password needed.'),
           ),
-          const SizedBox(height: Space.x8),
-          FinnTextField(
+          const SizedBox(height: Sp.xl),
+          LedgerTextField(
             key: const ValueKey('login-email'),
             controller: _email,
             label: 'Email address',
             hint: 'you@example.com',
-            prefixIcon: LucideIcons.mail,
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.go,
             errorText: _error,
@@ -93,7 +87,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             },
             onSubmitted: (_) => _submit(),
           ),
-          const SizedBox(height: Space.x5),
+          const SizedBox(height: Sp.lg),
           const AuthPrivacyNote(
             text: 'Your email is only used to sign you in. Your financial records stay on this device.',
           ),

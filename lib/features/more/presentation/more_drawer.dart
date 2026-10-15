@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import 'more_screen.dart';
 
-/// Side drawer holding what used to be the "More" tab: profile, net worth,
-/// money modules and app settings. Every destination closes the drawer
-/// before navigating so the page opens on a clean screen.
+/// Side drawer holding what used to be the "More" tab: profile, money
+/// modules, insights and account settings. Every destination closes the
+/// drawer before navigating so the page opens on a clean screen.
 class MoreDrawer extends StatelessWidget {
   const MoreDrawer({super.key});
 
@@ -25,30 +25,27 @@ class MoreDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final width = math.min(_maxWidth, MediaQuery.sizeOf(context).width * 0.88);
     return Drawer(
       key: const ValueKey('app-drawer'),
       width: width,
-      backgroundColor: c.background,
+      backgroundColor: c.paper,
       surfaceTintColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.horizontal(right: Radius.circular(Radii.xxxl))),
+      shape: const RoundedRectangleBorder(),
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(Space.x5, Space.x3, Space.x2, Space.x1),
+              padding: const EdgeInsets.fromLTRB(Sp.xl - 4, Sp.sm, Sp.sm, 0),
               child: Row(
                 children: [
                   Expanded(
-                    child: Semantics(
-                      header: true,
-                      child: Text('Menu', style: t.sectionTitle.copyWith(color: c.textSecondary)),
-                    ),
+                    child: Semantics(header: true, child: Text('Menu', style: t.heading)),
                   ),
-                  FinnIconButton(
+                  LedgerIconButton(
                     icon: LucideIcons.x,
                     tooltip: 'Close menu',
                     onPressed: () => Scaffold.maybeOf(context)?.closeDrawer(),
@@ -59,7 +56,7 @@ class MoreDrawer extends StatelessWidget {
             Expanded(
               child: ListView(
                 key: const PageStorageKey<String>('app-drawer'),
-                padding: const EdgeInsets.fromLTRB(Space.x4, Space.x2, Space.x4, Space.x6),
+                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.xl),
                 children: const [MoreMenu(open: _open)],
               ),
             ),

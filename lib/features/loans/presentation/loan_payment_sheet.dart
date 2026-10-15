@@ -8,7 +8,7 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../transactions/domain/transaction.dart';
 import '../application/loan_actions.dart';
@@ -52,7 +52,9 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
     _kind = k;
     _errors = const {};
     final next = s.nextDue;
-    _amount.text = k != LoanPaymentKind.principal && next != null ? MoneyFormatter.editable(next.payment) : '';
+    _amount.text = k != LoanPaymentKind.principal && next != null
+        ? MoneyFormatter.editable(next.payment)
+        : '';
   });
 
   LoanPaymentInput _input(LoanState s, LoanPaymentKind kind, DateTime today) {
@@ -60,7 +62,7 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
     return LoanPaymentInput(
       loanId: s.loan.id,
       kind: kind,
-      amount: AmountField.parse(_amount.text) ?? Money.zero,
+      amount: LedgerAmountField.parse(_amount.text) ?? Money.zero,
       date: _date ?? today,
       method: _method,
       recordCashMovement: _recordCash,
@@ -69,9 +71,11 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
   }
 
   Future<void> _submit(LoanState s, LoanPaymentKind kind) async {
-    final amount = AmountField.parse(_amount.text);
+    final amount = LedgerAmountField.parse(_amount.text);
     if (amount == null || !amount.isPositive) {
-      setState(() => _errors = {'amount': 'Enter an amount greater than zero.'});
+      setState(
+        () => _errors = {'amount': 'Enter an amount greater than zero.'},
+      );
       return;
     }
     final input = _input(s, kind, ref.read(todayProvider));
@@ -102,23 +106,14 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
     final snapshot = ref.watch(financeSnapshotProvider).value;
     if (s == null || snapshot == null) {
       return const FinnSheetScaffold(
-        title: 'Record a payment',
-        child: SkeletonPulse(
-          child: Column(
-            children: [
-              CardSkeleton(height: 120),
-              SizedBox(height: Space.x4),
-              CardSkeleton(height: 220),
-            ],
-          ),
-        ),
+        title: 'Record payment',
+        child: _FormSkeleton(),
       );
     }
     if (s.isClosed) return _Closed(state: s);
 
     final today = ref.watch(todayProvider);
-    final t = context.text;
-    final c = context.colors;
+    final t = context.type;
     final l = s.loan;
     final borrowed = l.isBorrowed;
     final next = s.nextDue;
@@ -129,17 +124,19 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
       if (next != null) _amount.text = MoneyFormatter.editable(next.payment);
     }
     final kind = _kind!;
-    final entered = AmountField.parse(_amount.text);
+    final entered = LedgerAmountField.parse(_amount.text);
     final split = entered == null || !entered.isPositive
         ? null
-        : const RecordLoanPaymentAction().split(_input(s, kind, today), snapshot);
+        : const RecordLoanPaymentAction().split(
+            _input(s, kind, today),
+            snapshot,
+          );
 
     return FinnSheetScaffold(
-      title: borrowed ? 'Record a payment' : 'Record money received',
+      title: borrowed ? 'Record payment' : 'Record money received',
       description: '${l.name} · ${l.direction.sentence(l.counterparty)}',
-      footer: FinnButton(
-        label: borrowed ? 'Record payment to ${l.counterparty}' : 'Record money from ${l.counterparty}',
-        icon: LucideIcons.circleCheck,
+      footer: LedgerButton(
+        label: borrowed ? 'Record payment' : 'Record receipt',
         expand: true,
         loading: _busy,
         onPressed: _busy ? null : () => _submit(s, kind),
@@ -147,56 +144,61 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          FinnCard(
-            variant: FinnCardVariant.muted,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                LoanDirectionPill(direction: l.direction),
-                const SizedBox(height: Space.x2),
-                Text('OUTSTANDING PRINCIPAL', style: t.eyebrow),
-                const SizedBox(height: Space.x0_5),
-                AmountText(s.outstanding, style: t.amountLarge.copyWith(color: l.direction.color(c)), fit: true),
-                const SizedBox(height: Space.x1),
-                Text(
-                  next == null
-                      ? 'Nothing scheduled right now'
-                      : '${loanDueName(l, next)} #${next.number} of ${maskedAmount(context, next.payment)} '
-                            '${DateFormats.dueIn(next.dueDate, s.today)} (${DateFormats.dayMonth.format(next.dueDate)})',
-                  style: t.caption,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Space.x5),
-          const LoanFieldLabel('What is this payment?'),
-          SegmentedTabs<LoanPaymentKind>(
-            items: [
-              SegmentItem(scheduled, next == null ? (l.isAmortizing ? 'EMI' : 'Interest') : loanDueName(l, next)),
-              const SegmentItem(LoanPaymentKind.principal, 'Principal only'),
-            ],
-            selected: kind,
-            onChanged: (k) => _selectKind(s, k),
-          ),
-          const SizedBox(height: Space.x1_5),
-          Text(
-            kind == LoanPaymentKind.principal
-                ? (l.isAmortizing
-                      ? 'A part-prepayment. It reduces the principal: ${l.prepaymentStrategy.description.toLowerCase()}.'
-                      : 'Repays part or all of the principal. Future interest goes down.')
-                : 'Interest due is covered first; anything above the scheduled amount reduces the principal.',
-            style: t.micro,
-          ),
-          const SizedBox(height: Space.x5),
-          AmountField(
+          LedgerAmountField(
+            hero: true,
             label: borrowed ? 'Amount paid' : 'Amount received',
             controller: _amount,
             errorText: _errors['amount'],
             onChanged: (_) => setState(() {}),
           ),
-          if (split != null) ...[const SizedBox(height: Space.x3), _SplitPreview(result: split, borrowed: borrowed)],
-          const SizedBox(height: Space.x5),
-          DateField(
+          const SizedBox(height: Sp.md),
+          LedgerPanel(
+            children: [
+              LedgerFact(
+                label: 'Outstanding principal',
+                value: AmountText(s.outstanding, style: t.bodyStrong),
+              ),
+              LedgerFact(
+                label: next == null
+                    ? 'Next payment'
+                    : '${loanDueName(l, next)} #${next.number}',
+                text: next == null
+                    ? 'Nothing scheduled'
+                    : '${maskedAmount(context, next.payment)} ${DateFormats.dueIn(next.dueDate, s.today)}',
+              ),
+            ],
+          ),
+          if (split != null) ...[
+            const SizedBox(height: Sp.md),
+            _SplitPreview(result: split, borrowed: borrowed),
+          ],
+          const SizedBox(height: LedgerForm.groupGap),
+          LedgerField(
+            label: 'Payment type',
+            helper: kind == LoanPaymentKind.principal
+                ? (l.isAmortizing
+                      ? 'Part-prepayment: ${l.prepaymentStrategy.description.toLowerCase()}.'
+                      : 'Repays part or all of the principal. Future interest goes down.')
+                : 'Interest due is covered first; any extra reduces the principal.',
+            child: LedgerSegmented<LoanPaymentKind>(
+              segments: [
+                LedgerSegment(
+                  scheduled,
+                  next == null
+                      ? (l.isAmortizing ? 'EMI' : 'Interest')
+                      : loanDueName(l, next),
+                ),
+                const LedgerSegment(
+                  LoanPaymentKind.principal,
+                  'Principal only',
+                ),
+              ],
+              selected: kind,
+              onChanged: (k) => _selectKind(s, k),
+            ),
+          ),
+          const SizedBox(height: LedgerForm.gap),
+          LedgerDateField(
             label: borrowed ? 'Paid on' : 'Received on',
             value: _date ?? today,
             firstDate: l.startDate,
@@ -204,22 +206,31 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
             errorText: _errors['date'],
             onChanged: (d) => setState(() => _date = d),
           ),
-          const SizedBox(height: Space.x5),
-          const LoanFieldLabel('Method'),
-          LoanMethodChips(selected: _method, onChanged: (m) => setState(() => _method = m)),
-          const SizedBox(height: Space.x4),
-          LoanSwitchCard(
+          const SizedBox(height: LedgerForm.gap),
+          LedgerField(
+            label: 'Method',
+            child: LedgerChoiceChips<PaymentMethod>(
+              options: [
+                for (final m in PaymentMethod.values)
+                  LedgerOption(m, m.label, icon: _methodIcons[m]),
+              ],
+              selected: _method,
+              onChanged: (m) => setState(() => _method = m),
+            ),
+          ),
+          const SizedBox(height: LedgerForm.gap),
+          LedgerSwitchRow(
             title: 'Record as cash movement',
-            message: _recordCash
+            subtitle: _recordCash
                 ? (borrowed
-                      ? 'Adds an expense and lowers your balance once.'
-                      : 'Adds income and raises your balance once.')
-                : 'Off: paid outside your FiNN-tracked cash. The loan updates; your balance stays the same.',
+                      ? 'Adds an expense and lowers your balance.'
+                      : 'Adds income and raises your balance.')
+                : 'Off: paid outside FiNN. The loan updates; balance unchanged.',
             value: _recordCash,
             onChanged: (b) => setState(() => _recordCash = b),
           ),
-          const SizedBox(height: Space.x4),
-          FinnTextField(
+          const SizedBox(height: LedgerForm.gap),
+          LedgerTextField(
             label: 'Note (optional)',
             hint: 'e.g. Ref no. 4821',
             controller: _note,
@@ -227,6 +238,38 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
             errorText: _errors['note'],
           ),
         ],
+      ),
+    );
+  }
+}
+
+const _methodIcons = {
+  PaymentMethod.upi: LucideIcons.smartphone,
+  PaymentMethod.card: LucideIcons.creditCard,
+  PaymentMethod.cash: LucideIcons.banknote,
+  PaymentMethod.bankTransfer: LucideIcons.landmark,
+  PaymentMethod.wallet: LucideIcons.wallet,
+  PaymentMethod.other: LucideIcons.circleDot,
+};
+
+class _FormSkeleton extends StatelessWidget {
+  const _FormSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Loading',
+      child: const ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LedgerSkeleton(width: 200, height: 44),
+            SizedBox(height: LedgerForm.gap),
+            LedgerSkeleton(height: 104),
+            SizedBox(height: LedgerForm.gap),
+            LedgerSkeleton(height: 52),
+          ],
+        ),
       ),
     );
   }
@@ -241,63 +284,44 @@ class _SplitPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.text;
-    final c = context.colors;
+    final t = context.type;
     final r = result;
     if (r case Err(:final failure)) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(LucideIcons.info, size: 14, color: c.warning),
-          const SizedBox(width: Space.x1_5),
-          Expanded(
-            child: Text(failure.message, style: t.micro.copyWith(color: c.textPrimary)),
-          ),
-        ],
-      );
+      return LedgerNote(tone: NoteTone.caution, text: failure.message);
     }
     final p = (r as Ok<LoanPaymentPreview>).value;
-    const pad = EdgeInsets.symmetric(vertical: Space.x1);
-    return FinnCard(
-      variant: FinnCardVariant.outlined,
-      padding: const EdgeInsets.symmetric(horizontal: Space.x4, vertical: Space.x2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          KeyValueRow(
-            label: 'Towards interest',
-            valueWidget: AmountText(p.interestPortion, style: t.bodyStrong),
-            padding: pad,
-          ),
-          KeyValueRow(
-            label: 'Towards principal',
-            valueWidget: AmountText(p.principalPortion, style: t.bodyStrong),
-            padding: pad,
-          ),
-          KeyValueRow(
-            label: 'Outstanding after',
-            valueWidget: AmountText(p.outstandingAfter, style: t.bodyStrong),
-            padding: pad,
-          ),
-          if (p.closesLoan || (p.includesPrepayment && p.kind != LoanPaymentKind.principal)) ...[
-            const SizedBox(height: Space.x1),
-            Row(
-              children: [
-                Icon(p.closesLoan ? LucideIcons.partyPopper : LucideIcons.trendingDown, size: 14, color: c.positive),
-                const SizedBox(width: Space.x1_5),
-                Expanded(
-                  child: Text(
-                    p.closesLoan
-                        ? (borrowed ? 'This payment closes the loan.' : 'This repayment settles the loan in full.')
-                        : 'More than the scheduled amount: the extra reduces the principal.',
-                    style: t.micro,
-                  ),
-                ),
-              ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LedgerPanel(
+          children: [
+            LedgerFact(
+              label: 'Towards interest',
+              value: AmountText(p.interestPortion, style: t.bodyStrong),
+            ),
+            LedgerFact(
+              label: 'Towards principal',
+              value: AmountText(p.principalPortion, style: t.bodyStrong),
+            ),
+            LedgerFact(
+              label: 'Outstanding after',
+              value: AmountText(p.outstandingAfter, style: t.bodyStrong),
             ),
           ],
+        ),
+        if (p.closesLoan ||
+            (p.includesPrepayment && p.kind != LoanPaymentKind.principal)) ...[
+          const SizedBox(height: Sp.sm),
+          Text(
+            p.closesLoan
+                ? (borrowed
+                      ? 'This payment closes the loan.'
+                      : 'This repayment settles the loan in full.')
+                : 'More than scheduled: the extra reduces the principal.',
+            style: t.small,
+          ),
         ],
-      ),
+      ],
     );
   }
 }
@@ -310,15 +334,13 @@ class _Closed extends StatelessWidget {
   @override
   Widget build(BuildContext context) => FinnSheetScaffold(
     title: 'Fully repaid',
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: Space.x6),
-      child: EmptyState(
-        icon: LucideIcons.circleCheck,
-        title: 'Nothing left to pay',
-        message: '${state.loan.name} is fully repaid. No further payments can be recorded.',
-        actionLabel: 'Close',
-        onAction: () => Navigator.of(context).maybePop(),
-      ),
+    child: LedgerEmpty(
+      icon: LucideIcons.circleCheck,
+      title: 'Nothing left to pay',
+      message:
+          '${state.loan.name} is fully repaid. No further payments can be recorded.',
+      actionLabel: 'Close',
+      onAction: () => Navigator.of(context).maybePop(),
     ),
   );
 }

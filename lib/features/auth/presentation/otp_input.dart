@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../domain/auth_session.dart';
 
 /// Six digit boxes (3 – 3) backed by one invisible text field, so typing,
@@ -51,10 +51,10 @@ class _OtpInputState extends State<OtpInput> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
     return LayoutBuilder(
       builder: (context, constraints) {
-        const gap = Space.x2;
+        const gap = Sp.sm;
         const separator = 24.0;
         final boxWidth = math.min(48.0, (constraints.maxWidth - gap * (otpLength - 2) - separator) / otpLength);
         final boxHeight = math.max(48.0, boxWidth * 1.15);
@@ -82,7 +82,7 @@ class _OtpInputState extends State<OtpInput> {
                           if (i == otpLength ~/ 2)
                             SizedBox(
                               width: separator,
-                              child: Center(child: Container(width: 8, height: 2, color: c.borderStrong)),
+                              child: Center(child: Container(width: 8, height: 2, color: c.lineStrong)),
                             )
                           else if (i > 0)
                             const SizedBox(width: gap),
@@ -145,15 +145,15 @@ class _DigitBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final Color borderColor;
     if (hasError) {
-      borderColor = c.negative;
+      borderColor = c.red;
     } else if (active) {
-      borderColor = c.primary;
+      borderColor = c.ink;
     } else {
-      borderColor = digit == null ? c.border : c.borderStrong;
+      borderColor = digit == null ? c.line : c.lineStrong;
     }
     return AnimatedContainer(
       duration: context.motion.fast,
@@ -161,11 +161,11 @@ class _DigitBox extends StatelessWidget {
       height: height,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: enabled ? c.surface : c.surfaceMuted,
-        borderRadius: Radii.rLg,
+        color: enabled ? c.surface : c.sunken,
+        borderRadius: Rad.rMd,
         border: Border.all(color: borderColor, width: active || hasError ? 2 : 1),
       ),
-      child: Text(digit ?? '', style: t.title.copyWith(fontSize: 22, fontFeatures: const [FontFeature.tabularFigures()])),
+      child: Text(digit ?? '', style: t.figureL.copyWith( fontFeatures: const [FontFeature.tabularFigures()])),
     );
   }
 }

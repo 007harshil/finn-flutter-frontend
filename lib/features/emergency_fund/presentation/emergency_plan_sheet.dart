@@ -5,7 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../goals/presentation/savings_widgets.dart';
 import '../application/emergency_actions.dart';
@@ -60,17 +60,20 @@ class _EmergencyPlanSheetState extends ConsumerState<EmergencyPlanSheet> {
   }
 
   void _clearError(String field) {
-    if (_errors.containsKey(field)) setState(() => _errors = {..._errors}..remove(field));
+    if (_errors.containsKey(field))
+      setState(() => _errors = {..._errors}..remove(field));
   }
 
   void _setMonths(int m) => setState(() {
-        _months = m.clamp(minEmergencyMonths, maxEmergencyMonths);
-        _errors = {..._errors}..remove('targetMonths');
-      });
+    _months = m.clamp(minEmergencyMonths, maxEmergencyMonths);
+    _errors = {..._errors}..remove('targetMonths');
+  });
 
   void _useSuggestion(Money m) {
     _essentials.text = MoneyFormatter.editable(m);
-    _essentials.selection = TextSelection.collapsed(offset: _essentials.text.length);
+    _essentials.selection = TextSelection.collapsed(
+      offset: _essentials.text.length,
+    );
     setState(() {
       _essentialsValue = m;
       _errors = {..._errors}..remove('essentialMonthlyExpenses');
@@ -78,12 +81,13 @@ class _EmergencyPlanSheetState extends ConsumerState<EmergencyPlanSheet> {
   }
 
   Future<void> _submit() async {
-    final essentials = AmountField.parse(_essentials.text);
-    final override = _custom ? AmountField.parse(_override.text) : null;
+    final essentials = LedgerAmountField.parse(_essentials.text);
+    final override = _custom ? LedgerAmountField.parse(_override.text) : null;
     final local = <String, String>{
       if (essentials == null || !essentials.isPositive)
         'essentialMonthlyExpenses': 'Enter your essential monthly spending.',
-      if (_custom && (override == null || !override.isPositive)) 'targetOverride': 'Enter a target greater than zero.',
+      if (_custom && (override == null || !override.isPositive))
+        'targetOverride': 'Enter a target greater than zero.',
     };
     if (local.isNotEmpty) {
       setState(() => _errors = local);
@@ -104,7 +108,9 @@ class _EmergencyPlanSheetState extends ConsumerState<EmergencyPlanSheet> {
         targetOverride: override,
       ),
       idempotencyKey: _key,
-      successTitle: _isEdit ? 'Emergency fund plan updated' : 'Emergency fund plan saved',
+      successTitle: _isEdit
+          ? 'Emergency fund plan updated'
+          : 'Emergency fund plan saved',
       onFieldErrors: (e) {
         if (mounted) setState(() => _errors = e);
       },
@@ -120,27 +126,26 @@ class _EmergencyPlanSheetState extends ConsumerState<EmergencyPlanSheet> {
     if (value.hasValue) _load(value.requireValue);
     return FinnSheetScaffold(
       title: _isEdit ? 'Edit emergency fund plan' : 'Plan your emergency fund',
-      description: 'A safety net for job loss, medical bills or urgent repairs. '
-          'Most people aim for 3–6 months of essential spending.',
-      footer: FinnButton(
+      footer: LedgerButton(
         label: _isEdit ? 'Save changes' : 'Save plan',
-        icon: LucideIcons.check,
         expand: true,
-        size: FinnButtonSize.lg,
         loading: _submitting,
         onPressed: _submitting || !value.hasValue ? null : _submit,
       ),
       child: value.hasValue
           ? _form(context, value.requireValue)
           : value.hasError
-              ? const ErrorState(title: 'Could not load your emergency fund')
-              : const SkeletonPulse(child: ListSkeleton(count: 4, padding: EdgeInsets.zero)),
+          ? const LedgerEmpty(
+              title: 'Could not load your emergency fund',
+              message: 'Please try again.',
+            )
+          : const SavingsMovementSkeleton(),
     );
   }
 
   Widget _form(BuildContext context, EmergencyFundStatus s) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final suggestion = s.suggestedEssentialMonthly;
     final essentials = _essentialsValue ?? Money.zero;
     final preview = ConfigureEmergencyFundInput(
@@ -153,10 +158,14 @@ class _EmergencyPlanSheetState extends ConsumerState<EmergencyPlanSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AmountField(
+        LedgerAmountField(
+          hero: true,
           controller: _essentials,
           label: 'Essential spending per month',
-          hint: 'Rent, groceries, bills, EMIs',
+          hint: '0',
+          helper: suggestion == null
+              ? 'Needs only: rent, groceries, bills, EMIs.'
+              : null,
           autofocus: !_isEdit && suggestion == null,
           errorText: _errors['essentialMonthlyExpenses'],
           textInputAction: TextInputAction.next,
@@ -165,80 +174,89 @@ class _EmergencyPlanSheetState extends ConsumerState<EmergencyPlanSheet> {
             _clearError('essentialMonthlyExpenses');
           },
         ),
-        const SizedBox(height: Space.x2),
-        if (suggestion != null)
-          _SuggestionRow(
-            suggestion: suggestion,
-            applied: suggestion == _essentialsValue,
-            onUse: () => _useSuggestion(suggestion),
-          )
-        else
-          Text(
-            'Only needs, not wants. Mark categories as essential to get a suggestion from your spending.',
-            style: t.caption,
-          ),
-        const SizedBox(height: Space.x5),
-        Text('Months of cover', style: t.label),
-        const SizedBox(height: Space.x2),
-        Row(
-          children: [
-            FinnIconButton(
-              icon: LucideIcons.minus,
-              tooltip: 'Fewer months',
-              variant: FinnIconButtonVariant.outline,
-              onPressed: _months > minEmergencyMonths ? () => _setMonths(_months - 1) : null,
-            ),
-            Expanded(
-              child: Semantics(
-                liveRegion: true,
+        if (suggestion != null) ...[
+          const SizedBox(height: Sp.sm),
+          Row(
+            children: [
+              Expanded(
                 child: Text(
-                  '$_months month${_months == 1 ? '' : 's'}',
-                  textAlign: TextAlign.center,
-                  style: t.sectionTitle,
+                  'Last 3 months: ${savingsMoney(context, suggestion)}/month',
+                  style: t.label,
                 ),
               ),
-            ),
-            FinnIconButton(
-              icon: LucideIcons.plus,
-              tooltip: 'More months',
-              variant: FinnIconButtonVariant.outline,
-              onPressed: _months < maxEmergencyMonths ? () => _setMonths(_months + 1) : null,
-            ),
-          ],
-        ),
-        const SizedBox(height: Space.x2),
-        Wrap(
-          spacing: Space.x2,
-          runSpacing: Space.x2,
-          children: [
-            for (final m in _presetMonths)
-              ChoiceChip(
-                label: Text('$m months'),
-                selected: _months == m,
-                onSelected: (_) => _setMonths(m),
-              ),
-          ],
-        ),
-        if (_errors['targetMonths'] != null) ...[
-          const SizedBox(height: Space.x1_5),
-          Text(_errors['targetMonths']!, style: t.caption.copyWith(color: c.negative)),
+              if (suggestion == _essentialsValue)
+                Text('Applied', style: t.labelStrong.copyWith(color: c.green))
+              else
+                LedgerButton(
+                  label: 'Use this',
+                  variant: LedgerButtonVariant.quiet,
+                  small: true,
+                  onPressed: () => _useSuggestion(suggestion),
+                ),
+            ],
+          ),
         ],
-        const SizedBox(height: Space.x4),
-        SwitchListTile.adaptive(
-          contentPadding: EdgeInsets.zero,
+        const SizedBox(height: LedgerForm.gap),
+        LedgerField(
+          label: 'Months of cover',
+          errorText: _errors['targetMonths'],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  LedgerIconButton(
+                    icon: LucideIcons.minus,
+                    tooltip: 'Fewer months',
+                    onPressed: _months > minEmergencyMonths
+                        ? () => _setMonths(_months - 1)
+                        : null,
+                  ),
+                  Expanded(
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        '$_months month${_months == 1 ? '' : 's'}',
+                        textAlign: TextAlign.center,
+                        style: t.heading,
+                      ),
+                    ),
+                  ),
+                  LedgerIconButton(
+                    icon: LucideIcons.plus,
+                    tooltip: 'More months',
+                    onPressed: _months < maxEmergencyMonths
+                        ? () => _setMonths(_months + 1)
+                        : null,
+                  ),
+                ],
+              ),
+              const SizedBox(height: Sp.md),
+              LedgerChoiceChips<int>(
+                options: [
+                  for (final m in _presetMonths) LedgerOption(m, '$m months'),
+                ],
+                selected: _months,
+                onChanged: _setMonths,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: Sp.md),
+        LedgerSwitchRow(
+          title: 'Custom target',
+          subtitle: 'Use your own amount instead of essentials × months.',
           value: _custom,
-          title: Text('Set a custom target', style: t.bodyStrong),
-          subtitle: Text('Use your own amount instead of essentials × months.', style: t.caption),
           onChanged: (v) => setState(() {
             _custom = v;
             _errors = {..._errors}..remove('targetOverride');
           }),
         ),
         if (_custom) ...[
-          const SizedBox(height: Space.x2),
-          AmountField(
+          const SizedBox(height: Sp.sm),
+          LedgerAmountField(
             controller: _override,
-            label: 'Custom target',
+            label: 'Target amount',
             errorText: _errors['targetOverride'],
             onChanged: (m) {
               setState(() => _overrideValue = m);
@@ -246,72 +264,24 @@ class _EmergencyPlanSheetState extends ConsumerState<EmergencyPlanSheet> {
             },
           ),
         ],
-        const SizedBox(height: Space.x5),
-        FinnCard(
-          variant: FinnCardVariant.muted,
-          padding: const EdgeInsets.symmetric(horizontal: Space.x4, vertical: Space.x2),
-          child: Column(
-            children: [
-              KeyValueRow(
-                label: 'Your target',
-                value: target.isPositive ? savingsMoney(context, target) : '—',
-                valueColor: target.isPositive ? null : c.textSecondary,
-              ),
-              KeyValueRow(label: 'Saved so far', value: savingsMoney(context, s.saved)),
-              KeyValueRow(
-                label: 'Still to set aside',
-                value: target.isPositive ? savingsMoney(context, remaining) : '—',
-              ),
-            ],
-          ),
+        const SizedBox(height: LedgerForm.gap),
+        LedgerPanel(
+          children: [
+            LedgerFact(
+              label: 'Your target',
+              text: target.isPositive ? savingsMoney(context, target) : '—',
+            ),
+            LedgerFact(
+              label: 'Saved so far',
+              text: savingsMoney(context, s.saved),
+            ),
+            LedgerFact(
+              label: 'Still to set aside',
+              text: target.isPositive ? savingsMoney(context, remaining) : '—',
+            ),
+          ],
         ),
-        const SizedBox(height: Space.x2),
-        Text('Saving the plan does not move any money.', style: t.caption),
       ],
-    );
-  }
-}
-
-/// "Last 3 months: ₹X/month · Use this".
-class _SuggestionRow extends StatelessWidget {
-  const _SuggestionRow({required this.suggestion, required this.applied, required this.onUse});
-
-  final Money suggestion;
-  final bool applied;
-  final VoidCallback onUse;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return FinnCard(
-      variant: FinnCardVariant.outlined,
-      padding: const EdgeInsets.fromLTRB(Space.x3, Space.x2, Space.x2, Space.x2),
-      child: Row(
-        children: [
-          Icon(LucideIcons.sparkles, size: 16, color: c.textSecondary),
-          const SizedBox(width: Space.x2),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Suggested from your spending', style: t.caption),
-                Text('${savingsMoney(context, suggestion)}/month', style: t.bodyStrong),
-                Text('Average of essentials and EMIs, last 3 months', style: t.micro.copyWith(color: c.textTertiary)),
-              ],
-            ),
-          ),
-          if (applied)
-            StatusPill(label: 'Applied', color: c.positive, icon: LucideIcons.check)
-          else
-            FinnButton(
-              label: 'Use this',
-              variant: FinnButtonVariant.ghost,
-              size: FinnButtonSize.sm,
-              onPressed: onUse,
-            ),
-        ],
-      ),
     );
   }
 }

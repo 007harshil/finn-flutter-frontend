@@ -24,6 +24,7 @@ class LedgerColors {
     required this.redSoft,
     required this.amber,
     required this.amberSoft,
+    required this.scrim,
   });
 
   final bool isDark;
@@ -67,6 +68,9 @@ class LedgerColors {
   final Color amber;
   final Color amberSoft;
 
+  /// Barrier behind sheets, dialogs and overlays.
+  final Color scrim;
+
   static const light = LedgerColors._(
     isDark: false,
     paper: Color(0xFFF4F4F0),
@@ -84,6 +88,7 @@ class LedgerColors {
     redSoft: Color(0xFFF8E6E4),
     amber: Color(0xFF8F5300),
     amberSoft: Color(0xFFF6EBDA),
+    scrim: Color(0x6617191C),
   );
 
   static const dark = LedgerColors._(
@@ -103,6 +108,7 @@ class LedgerColors {
     redSoft: Color(0xFF3A1F1B),
     amber: Color(0xFFE2A954),
     amberSoft: Color(0xFF33281A),
+    scrim: Color(0x99000000),
   );
 
   static LedgerColors of(BuildContext context) => Theme.of(context).brightness == Brightness.dark ? dark : light;

@@ -7,7 +7,7 @@ import '../../../app/router/routes.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../../../shared/presentation/category_icons.dart';
 import '../application/net_worth_view.dart';
@@ -19,49 +19,17 @@ class NetWorthScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Net worth'),
-        actions: [
-          FinnIconButton(
-            icon: LucideIcons.plus,
-            tooltip: 'Add asset',
-            onPressed: () => context.push(AppRoutes.newAsset),
-          ),
-          const SizedBox(width: Space.x2),
-        ],
+    return AsyncView<NetWorthView>(
+      value: ref.watch(netWorthViewProvider),
+      loading: Scaffold(
+        backgroundColor: context.ink.paper,
+        appBar: const LedgerAppBar(title: 'Net worth'),
+        body: const LedgerPageSkeleton(),
       ),
-      body: AsyncView<NetWorthView>(
-        value: ref.watch(netWorthViewProvider),
-        loading: const _Skeleton(),
-        errorTitle: 'Could not load your net worth',
-        builder: (context, view) => _Body(view: view),
-      ),
+      errorTitle: 'Could not load your net worth',
+      builder: (context, view) => _Body(view: view),
     );
   }
-}
-
-class _Skeleton extends StatelessWidget {
-  const _Skeleton();
-
-  @override
-  Widget build(BuildContext context) => const SkeletonPulse(
-    child: SingleChildScrollView(
-      physics: NeverScrollableScrollPhysics(),
-      child: ResponsiveCenter(
-        padding: EdgeInsets.all(Space.gutter),
-        child: Column(
-          children: [
-            CardSkeleton(height: 200, radius: Radii.xxxl),
-            SizedBox(height: Space.x4),
-            CardSkeleton(height: 150),
-            SizedBox(height: Space.x4),
-            CardSkeleton(height: 260),
-          ],
-        ),
-      ),
-    ),
-  );
 }
 
 class _Body extends StatelessWidget {
@@ -70,46 +38,37 @@ class _Body extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sections = <Widget>[
-      _Hero(view: view),
-      if (view.slices.isNotEmpty) _Composition(view: view),
-      _CashCard(snapshot: view.snapshot),
-      _AssetsSection(view: view),
-      if (view.receivables.isNotEmpty)
-        _LinesSection(
-          title: 'Owed to you',
-          subtitle: 'Money others are expected to pay back',
-          icon: LucideIcons.handCoins,
-          lines: view.receivables,
-          liability: false,
-        ),
-      _LinesSection(
-        title: 'What you owe',
-        subtitle: 'Outstanding loan principal and pending dues',
-        icon: LucideIcons.creditCard,
-        lines: view.liabilities,
-        liability: true,
+    return LedgerPage(
+      storageKey: 'net-worth',
+      appBar: LedgerAppBar(
+        title: 'Net worth',
+        actions: [
+          LedgerIconButton(
+            icon: LucideIcons.plus,
+            tooltip: 'Add asset',
+            onPressed: () => context.push(AppRoutes.newAsset),
+          ),
+        ],
       ),
-      const InfoBanner(
-        tone: FinnTone.info,
-        title: 'How this is worked out',
-        message:
-            'Cash is counted once — it already includes money set aside for goals and your emergency fund. '
-            'Asset values are your own estimates; update them when they change.',
-      ),
-    ];
-    return CustomScrollView(
-      key: const PageStorageKey('net-worth'),
       slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(0, Space.x2, 0, Space.x10),
-          sliver: SliverList.separated(
-            itemCount: sections.length,
-            separatorBuilder: (_, _) => const SizedBox(height: Space.x5),
-            itemBuilder: (context, i) => ResponsiveCenter(
-              padding: const EdgeInsets.symmetric(horizontal: Space.gutter),
-              child: StaggeredEntrance(index: i, child: sections[i]),
-            ),
+        PageBlock(top: Sp.lg, child: _Hero(view: view)),
+        if (view.slices.isNotEmpty) PageBlock(top: Sp.section, child: _Composition(view: view)),
+        PageBlock(top: Sp.section, child: _CashSection(snapshot: view.snapshot)),
+        PageBlock(top: Sp.section, child: _AssetsSection(view: view)),
+        if (view.receivables.isNotEmpty)
+          PageBlock(
+            top: Sp.section,
+            child: _LinesSection(title: 'Owed to you', lines: view.receivables, liability: false),
+          ),
+        PageBlock(
+          top: Sp.section,
+          child: _LinesSection(title: 'What you owe', lines: view.liabilities, liability: true),
+        ),
+        const PageBlock(
+          top: Sp.section,
+          child: LedgerNote(
+            text: 'Cash is counted once. It already includes money set aside for goals and your emergency fund. '
+                'Asset values are your own estimates; update them when they change.',
           ),
         ),
       ],
@@ -117,103 +76,55 @@ class _Body extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Hero
-// ---------------------------------------------------------------------------
-
+/// The one number, then what is owned and owed beside it.
 class _Hero extends StatelessWidget {
   const _Hero({required this.view});
   final NetWorthView view;
 
   @override
   Widget build(BuildContext context) {
-    final t = context.text;
+    final t = context.type;
     final s = view.snapshot;
-    final white70 = Colors.white.withValues(alpha: 0.72);
     final ratio = view.debtRatioBps;
-    return GradientHeroCard(
-      watermark: LucideIcons.scale,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('NET WORTH', style: t.eyebrow.copyWith(color: white70)),
-          const SizedBox(height: Space.x1),
-          AnimatedAmount(
-            s.netWorth,
-            style: t.amountHero.copyWith(color: Colors.white),
-            decimals: DecimalDisplay.none,
-            fit: true,
-          ),
-          const SizedBox(height: Space.x1),
-          Text('What you own minus what you owe', style: t.caption.copyWith(color: white70)),
-          const SizedBox(height: Space.x4),
-          Container(height: 1, color: Colors.white.withValues(alpha: 0.16)),
-          const SizedBox(height: Space.x4),
-          Row(
-            children: [
-              Expanded(
-                child: _HeroStat(label: 'You own', icon: LucideIcons.trendingUp, amount: s.totalAssets),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('What you own minus what you owe', style: t.label),
+        const SizedBox(height: Sp.xs),
+        AnimatedAmount(s.netWorth, style: t.figureXL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
+        const SizedBox(height: Sp.lg),
+        Row(
+          children: [
+            Expanded(
+              child: LedgerStat(
+                label: 'You own',
+                value: AmountText(s.totalAssets, style: t.figure, decimals: DecimalDisplay.none, fit: true),
               ),
-              Expanded(
-                child: _HeroStat(label: 'You owe', icon: LucideIcons.trendingDown, amount: s.liabilities),
+            ),
+            const SizedBox(width: Sp.lg),
+            Expanded(
+              child: LedgerStat(
+                label: 'You owe',
+                value: AmountText(s.liabilities, style: t.figure, decimals: DecimalDisplay.none, fit: true),
               ),
-            ],
-          ),
-          if (ratio != null && s.liabilities.isPositive) ...[
-            const SizedBox(height: Space.x3),
-            Text(
-              'Debts are ${formatBps(ratio, decimals: 0)} of what you own',
-              style: t.caption.copyWith(color: white70),
             ),
           ],
+        ),
+        if (ratio != null && s.liabilities.isPositive) ...[
+          const SizedBox(height: Sp.md),
+          Text('Debts are ${formatBps(ratio, decimals: 0)} of what you own', style: t.label),
         ],
-      ),
+      ],
     );
   }
 }
 
-class _HeroStat extends StatelessWidget {
-  const _HeroStat({required this.label, required this.icon, required this.amount});
-  final String label;
-  final IconData icon;
-  final Money amount;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.text;
-    return MergeSemantics(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: Colors.white.withValues(alpha: 0.8)),
-              const SizedBox(width: Space.x1),
-              Text(label, style: t.caption.copyWith(color: Colors.white.withValues(alpha: 0.8))),
-            ],
-          ),
-          const SizedBox(height: Space.x0_5),
-          AmountText(
-            amount,
-            style: t.amountSmall.copyWith(color: Colors.white),
-            decimals: DecimalDisplay.none,
-            fit: true,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Composition
-// ---------------------------------------------------------------------------
-
-Color _sliceColor(FinnColors c, NetWorthGroup g) => switch (g) {
-  NetWorthGroup.cash => c.primary,
-  NetWorthGroup.assets => c.positive,
-  NetWorthGroup.receivables => c.info,
-  NetWorthGroup.liabilities => c.negative,
+/// Neutral ink steps: the bar shows share, not good or bad.
+Color _sliceColor(LedgerColors c, NetWorthGroup g) => switch (g) {
+  NetWorthGroup.cash => c.ink,
+  NetWorthGroup.assets => c.inkSoft,
+  NetWorthGroup.receivables => c.inkFaint,
+  NetWorthGroup.liabilities => c.red,
 };
 
 class _Composition extends StatelessWidget {
@@ -222,50 +133,34 @@ class _Composition extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return FinnCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    final c = context.ink;
+    final t = context.type;
+    return LedgerSection(
+      title: 'What you own',
+      child: LedgerPanel(
+        padding: const EdgeInsets.all(Sp.lg),
         children: [
-          Text('What you own', style: t.title),
-          const SizedBox(height: Space.x3),
-          ExcludeSemantics(
-            child: ClipRRect(
-              borderRadius: Radii.rFull,
-              child: SizedBox(
-                height: 12,
-                child: Row(
-                  children: [
-                    for (var i = 0; i < view.slices.length; i++) ...[
-                      if (i > 0) SizedBox(width: 2, child: ColoredBox(color: c.surface)),
-                      Expanded(
-                        flex: (view.slices[i].fraction * 1000).round().clamp(1, 1000),
-                        child: ColoredBox(color: _sliceColor(c, view.slices[i].group)),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
+          LedgerStackBar(
+            height: 10,
+            parts: [for (final s in view.slices) BarPart(s.fraction, _sliceColor(c, s.group))],
           ),
-          const SizedBox(height: Space.x3),
+          const SizedBox(height: Sp.md),
           for (final s in view.slices)
             MergeSemantics(
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: Space.x1),
+                padding: const EdgeInsets.symmetric(vertical: Sp.xs),
                 child: Row(
                   children: [
                     Container(
                       width: 10,
                       height: 10,
-                      decoration: BoxDecoration(color: _sliceColor(c, s.group), borderRadius: Radii.rSm),
+                      decoration: BoxDecoration(color: _sliceColor(c, s.group), shape: BoxShape.circle),
                     ),
-                    const SizedBox(width: Space.x2),
+                    const SizedBox(width: Sp.sm),
                     Expanded(child: Text(s.label, style: t.body)),
-                    Text('${(s.fraction * 100).round()}%', style: t.caption),
-                    const SizedBox(width: Space.x3),
-                    AmountText(s.amount, style: t.amountSmall, decimals: DecimalDisplay.none),
+                    Text('${(s.fraction * 100).round()}%', style: t.small),
+                    const SizedBox(width: Sp.md),
+                    AmountText(s.amount, style: t.figureSmall.copyWith(color: c.ink), decimals: DecimalDisplay.none),
                   ],
                 ),
               ),
@@ -276,72 +171,35 @@ class _Composition extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Cash
-// ---------------------------------------------------------------------------
-
-class _CashCard extends StatelessWidget {
-  const _CashCard({required this.snapshot});
+class _CashSection extends StatelessWidget {
+  const _CashSection({required this.snapshot});
   final NetWorthSnapshot snapshot;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final b = snapshot.balance;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionHeader(
-          icon: LucideIcons.wallet,
-          title: 'Cash & bank',
-          tileColor: c.primary,
-          subtitle: 'Tracked in FiNN from your transactions',
-        ),
-        const SizedBox(height: Space.x3),
-        FinnCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(child: Text('Total cash', style: t.bodyStrong)),
-                  AmountText(snapshot.cash, style: t.amountMedium, decimals: DecimalDisplay.none),
-                ],
-              ),
-              if (b.earmarked.isPositive) ...[
-                const SizedBox(height: Space.x2),
-                const FinnDivider(),
-                KeyValueRow(
-                  label: 'Set aside for goals',
-                  valueWidget: AmountText(b.earmarkedGoals, style: t.amountSmall, decimals: DecimalDisplay.none),
-                ),
-                KeyValueRow(
-                  label: 'Emergency fund',
-                  valueWidget: AmountText(b.earmarkedEmergency, style: t.amountSmall, decimals: DecimalDisplay.none),
-                ),
-                KeyValueRow(
-                  label: 'Free to spend',
-                  valueWidget: AmountText(
-                    b.available,
-                    style: t.amountSmall,
-                    decimals: DecimalDisplay.none,
-                    color: b.available.isNegative ? c.negative : null,
-                  ),
-                ),
-                Text('These are parts of your cash, not added on top.', style: t.caption),
-              ],
-            ],
-          ),
-        ),
-      ],
+    AmountText amt(Money money, {Color? color}) =>
+        AmountText(money, style: t.figure, decimals: DecimalDisplay.none, color: color);
+    return LedgerSection(
+      title: 'Cash & bank',
+      child: LedgerPanel(
+        children: [
+          LedgerFact(label: 'Total cash', value: amt(snapshot.cash)),
+          if (b.earmarked.isPositive) ...[
+            LedgerFact(label: 'Set aside for goals', value: amt(b.earmarkedGoals)),
+            LedgerFact(label: 'Emergency fund', value: amt(b.earmarkedEmergency)),
+            LedgerFact(
+              label: 'Free to spend',
+              value: amt(b.available, color: b.available.isNegative ? c.red : null),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Assets
-// ---------------------------------------------------------------------------
 
 class _AssetsSection extends StatelessWidget {
   const _AssetsSection({required this.view});
@@ -349,58 +207,42 @@ class _AssetsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionHeader(
+    if (view.assets.isEmpty) {
+      return LedgerSection(
+        title: 'Assets',
+        child: LedgerEmpty(
           icon: LucideIcons.landmark,
-          title: 'Assets',
-          tileColor: c.accentNetWorth,
-          subtitle: view.assets.isEmpty
-              ? null
-              : 'Your estimates · ${view.snapshot.assets.format(decimals: DecimalDisplay.none)}',
-          trailing: view.assets.isEmpty
-              ? null
-              : TextButton.icon(
-                  onPressed: () => context.push(AppRoutes.newAsset),
-                  icon: const Icon(LucideIcons.plus, size: 16),
-                  label: const Text('Add'),
-                ),
+          title: 'No assets added yet',
+          message: 'Add investments, gold, property or deposits to see your full net worth.',
+          actionLabel: 'Add asset',
+          onAction: () => context.push(AppRoutes.newAsset),
         ),
-        const SizedBox(height: Space.x3),
-        if (view.assets.isEmpty)
-          EmptyState(
-            icon: LucideIcons.landmark,
-            title: 'No assets added yet',
-            message: 'Add investments, gold, property or deposits to see your full net worth.',
-            actionLabel: 'Add asset',
-            actionIcon: LucideIcons.plus,
-            onAction: () => context.push(AppRoutes.newAsset),
-          )
-        else ...[
+      );
+    }
+    return LedgerSection(
+      title: 'Assets',
+      count: view.assets.length,
+      actionLabel: 'Add',
+      onAction: () => context.push(AppRoutes.newAsset),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           if (view.staleCount > 0) ...[
-            InfoBanner(
-              tone: FinnTone.warning,
-              message: view.staleCount == 1
+            LedgerNote(
+              icon: LucideIcons.clock,
+              tone: NoteTone.caution,
+              text: view.staleCount == 1
                   ? '1 value is more than 6 months old. Tap it to update.'
                   : '${view.staleCount} values are more than 6 months old. Tap one to update.',
             ),
-            const SizedBox(height: Space.x3),
+            const SizedBox(height: Sp.md),
           ],
-          FinnCard(
-            padding: const EdgeInsets.symmetric(vertical: Space.x1),
-            child: Column(
-              children: [
-                for (var i = 0; i < view.assets.length; i++) ...[
-                  if (i > 0) const FinnDivider(indent: Space.x4 + 40 + Space.x3),
-                  _AssetTile(key: ValueKey(view.assets[i].asset.id), row: view.assets[i]),
-                ],
-              ],
-            ),
+          LedgerPanel(
+            dividerIndent: Sp.lg + 40 + Sp.md + 2,
+            children: [for (final r in view.assets) _AssetTile(key: ValueKey(r.asset.id), row: r)],
           ),
         ],
-      ],
+      ),
     );
   }
 }
@@ -411,167 +253,60 @@ class _AssetTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final a = row.asset;
-    return Semantics(
-      button: true,
-      hint: 'Edit',
-      child: InkWell(
-        onTap: () => context.push(AppRoutes.editAsset(a.id)),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 64),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: Space.x4, vertical: Space.x2_5),
-            child: Row(
-              children: [
-                CategoryIconTile(
-                  icon: CategoryIcons.of(a.type.iconKey),
-                  colorIndex: a.type.index,
-                  size: 40,
-                  radius: Radii.lg,
-                ),
-                const SizedBox(width: Space.x3),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(a.name, style: t.bodyStrong, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: Space.x0_5),
-                      Text(
-                        '${a.type.label} · valued ${DateFormats.dayMonthYear.format(a.valuedOn)}',
-                        style: t.caption,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (row.stale) ...[
-                        const SizedBox(height: Space.x1),
-                        StatusPill(label: 'Update value', color: c.attention, icon: LucideIcons.clock),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: Space.x2),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    AmountText(a.value, style: t.amountSmall, decimals: DecimalDisplay.none),
-                    Text('${formatBps(row.shareBps, decimals: 0)} of assets', style: t.micro),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    final valued = 'valued ${DateFormats.dayMonthYear.format(a.valuedOn)}';
+    return LedgerRow(
+      leading: IconWell(icon: CategoryIcons.of(a.type.iconKey)),
+      title: a.name,
+      subtitle: row.stale ? '${a.type.label}, $valued, update value' : '${a.type.label}, $valued',
+      subtitleColor: row.stale ? c.amber : null,
+      subtitleLines: 2,
+      trailing: AmountText(a.value, style: t.figure, decimals: DecimalDisplay.none),
+      trailingSub: Text('${formatBps(row.shareBps, decimals: 0)} of assets', style: t.small),
+      semanticLabel: '${a.name}, ${a.type.label}, ${AmountText.spokenLabel(a.value)}, $valued'
+          '${row.stale ? ', needs a new value' : ''}, Edit',
+      onTap: () => context.push(AppRoutes.editAsset(a.id)),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Receivables & liabilities
-// ---------------------------------------------------------------------------
-
 class _LinesSection extends StatelessWidget {
-  const _LinesSection({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.lines,
-    required this.liability,
-  });
+  const _LinesSection({required this.title, required this.lines, required this.liability});
 
   final String title;
-  final String subtitle;
-  final IconData icon;
   final List<NetWorthLine> lines;
   final bool liability;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionHeader(icon: icon, title: title, tileColor: liability ? c.negative : c.info, subtitle: subtitle),
-        const SizedBox(height: Space.x3),
-        if (lines.isEmpty)
-          FinnCard(
-            variant: FinnCardVariant.muted,
-            child: Row(
+    final t = context.type;
+    return LedgerSection(
+      title: title,
+      child: lines.isEmpty
+          ? const LedgerNote(icon: LucideIcons.circleCheck, text: 'Nothing owed right now.')
+          : LedgerPanel(
               children: [
-                Icon(LucideIcons.circleCheck, size: 18, color: c.positive),
-                const SizedBox(width: Space.x2),
-                Expanded(child: Text('Nothing owed right now.', style: t.body)),
-              ],
-            ),
-          )
-        else
-          FinnCard(
-            padding: const EdgeInsets.symmetric(vertical: Space.x1),
-            child: Column(
-              children: [
-                for (var i = 0; i < lines.length; i++) ...[
-                  if (i > 0) const FinnDivider(indent: Space.x4),
-                  _LineTile(
-                    key: ValueKey('${lines[i].label}-${lines[i].recordId}'),
-                    line: lines[i],
-                    liability: liability,
+                for (final line in lines)
+                  LedgerRow(
+                    key: ValueKey('${line.label}-${line.recordId}'),
+                    title: line.label,
+                    titleLines: 2,
+                    subtitle: line.detail,
+                    trailing: AmountText(
+                      liability ? -line.amount : line.amount,
+                      style: t.figure,
+                      decimals: DecimalDisplay.none,
+                    ),
+                    chevron: true,
+                    onTap: () {
+                      final id = line.recordId;
+                      context.push(id != null ? AppRoutes.loan(id) : AppRoutes.pending);
+                    },
                   ),
-                ],
               ],
             ),
-          ),
-      ],
-    );
-  }
-}
-
-class _LineTile extends StatelessWidget {
-  const _LineTile({super.key, required this.line, required this.liability});
-  final NetWorthLine line;
-  final bool liability;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final id = line.recordId;
-    final route = id != null ? AppRoutes.loan(id) : AppRoutes.pending;
-    return Semantics(
-      button: true,
-      child: InkWell(
-        onTap: () => context.push(route),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 56),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: Space.x4, vertical: Space.x2_5),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(line.label, style: t.bodyStrong, maxLines: 2, overflow: TextOverflow.ellipsis),
-                      if (line.detail != null) Text(line.detail!, style: t.caption),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: Space.x2),
-                AmountText(
-                  liability ? -line.amount : line.amount,
-                  style: t.amountSmall,
-                  decimals: DecimalDisplay.none,
-                  color: liability ? c.negative : null,
-                ),
-                const SizedBox(width: Space.x1),
-                Icon(LucideIcons.chevronRight, size: 16, color: c.textTertiary),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

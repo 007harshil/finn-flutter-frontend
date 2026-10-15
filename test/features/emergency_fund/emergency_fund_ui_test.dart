@@ -1,6 +1,6 @@
 import 'package:finn/core/money/money.dart';
 import 'package:finn/data/local/local_data_store.dart';
-import 'package:finn/design_system/design_system.dart';
+import 'package:finn/kit/kit.dart';
 import 'package:finn/features/emergency_fund/domain/emergency_fund.dart';
 import 'package:finn/features/emergency_fund/presentation/emergency_fund_screen.dart';
 import 'package:finn/features/emergency_fund/presentation/emergency_movement_sheet.dart';
@@ -23,7 +23,7 @@ Future<void> _settle(WidgetTester tester) async {
 }
 
 Future<void> _enterAmount(WidgetTester tester, int index, String text) async {
-  final field = find.descendant(of: find.byType(AmountField).at(index), matching: find.byType(TextField));
+  final field = find.descendant(of: find.byWidgetPredicate((w) => w is LedgerAmountField).at(index), matching: find.byType(TextField));
   await tester.enterText(field, text);
   await tester.pump();
 }
@@ -146,7 +146,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Nothing is saved in your emergency fund yet.'), findsOneWidget);
-      final button = tester.widget<FinnButton>(find.widgetWithText(FinnButton, 'Withdraw'));
+      final button = tester.widget<LedgerButton>(find.widgetWithText(LedgerButton, 'Withdraw'));
       expect(button.onPressed, isNull);
       expect(tester.takeException(), isNull);
     });

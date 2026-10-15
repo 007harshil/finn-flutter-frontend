@@ -26,10 +26,10 @@ void main() {
     // Record the scheduled EMI (pre-filled) and approve the review.
     await tapButton(tester, 'Record a payment');
     await tester.pumpAndSettle();
-    expect(find.text('TOWARDS PRINCIPAL'), findsOneWidget);
-    await tapButton(tester, 'Record payment to HDFC Bank');
+    expect(find.text('Towards principal'), findsOneWidget);
+    await tapButton(tester, 'Record payment');
     await confirmReview(tester);
-    expect(find.text('TOWARDS PRINCIPAL'), findsNothing, reason: 'the sheet closes after saving');
+    expect(find.text('Towards principal'), findsNothing, reason: 'the sheet closes after saving');
 
     final after = await env.snapshot();
     final loanAfter = after.loan(loanId)!;

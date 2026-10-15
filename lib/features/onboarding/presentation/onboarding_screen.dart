@@ -1,53 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/di/core_providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/time/clock.dart';
 import '../../../data/local/local_data_store.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../settings/domain/financial_profile.dart';
 
 class _IntroPage {
-  const _IntroPage(this.icon, this.eyebrow, this.title, this.body, this.points);
-  final IconData icon;
-  final String eyebrow;
+  const _IntroPage(this.title, this.body, this.points);
   final String title;
   final String body;
-  final List<(IconData, String)> points;
+  final List<String> points;
 }
 
 const _intro = [
   _IntroPage(
-    LucideIcons.sun,
-    'CLARITY',
     'See where your money stands',
     'One calm view of what you can spend, what is set aside, and what is coming up.',
-    [
-      (LucideIcons.wallet, 'Available to spend, explained'),
-      (LucideIcons.calendarClock, 'EMIs, renewals and dues ahead of time'),
-    ],
+    ['Available to spend, explained', 'EMIs, renewals and dues ahead of time'],
   ),
   _IntroPage(
-    LucideIcons.target,
-    'CONTROL',
     'Plan with intention',
     'Budgets, goals, loans and an emergency fund that work together, not in silos.',
-    [
-      (LucideIcons.chartPie, 'Budgets that warn before you overspend'),
-      (LucideIcons.piggyBank, 'Goals and a safety net that grow steadily'),
-    ],
+    ['Budgets that warn before you overspend', 'Goals and a safety net that grow steadily'],
   ),
   _IntroPage(
-    LucideIcons.lock,
-    'PRIVACY FIRST',
     'Your data stays on this device',
     'No bank logins, no ads, no selling your data. You decide what to record.',
-    [
-      (LucideIcons.smartphone, 'Stored locally on your phone'),
-      (LucideIcons.download, 'Export a copy whenever you like'),
-    ],
+    ['Stored locally on your phone', 'Export a copy whenever you like'],
   ),
 ];
 
@@ -83,14 +65,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   void _goTo(int index) {
     FocusScope.of(context).unfocus();
-    _pages.animateToPage(index, duration: context.motion.page, curve: Curves2.standard);
+    _pages.animateToPage(index, duration: context.motion.page, curve: context.motion.standard);
   }
 
   Future<void> _finish() async {
     if (_busy) return;
     final name = _name.text.trim();
     final rawBalance = _balance.text.trim();
-    final balance = rawBalance.isEmpty ? Money.zero : AmountField.parse(rawBalance);
+    final balance = rawBalance.isEmpty ? Money.zero : LedgerAmountField.parse(rawBalance);
     setState(() {
       _nameError = name.isEmpty ? 'Please tell us what to call you' : null;
       _balanceError = _mode == _StartMode.fresh && balance == null ? 'Enter a valid amount, e.g. 25,000' : null;
@@ -124,71 +106,85 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
+    final t = context.type;
     final onSetup = _page == _setupIndex;
+    const total = _setupIndex + 1;
     return Scaffold(
-      backgroundColor: c.background,
+      backgroundColor: c.paper,
       body: SafeArea(
-        child: ResponsiveCenter(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Space.gutter, Space.x2, Space.x2, 0),
-                child: Row(
-                  children: [
-                    Text('FiNN', style: context.text.title.copyWith(fontWeight: FontWeight.w900, letterSpacing: -0.5)),
-                    const Spacer(),
-                    if (!onSetup)
-                      TextButton(
-                        onPressed: () => _goTo(_setupIndex),
-                        style: TextButton.styleFrom(
-                          foregroundColor: c.textSecondary,
-                          minimumSize: const Size(Dimens.minTouch, Dimens.minTouch),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: Sp.maxWidth),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(Sp.gutter, Sp.sm, Sp.sm, 0),
+                  child: Row(
+                    children: [
+                      Text('FiNN', style: t.heading.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.4)),
+                      const Spacer(),
+                      if (!onSetup)
+                        TextButton(
+                          onPressed: () => _goTo(_setupIndex),
+                          style: TextButton.styleFrom(
+                            foregroundColor: c.inkSoft,
+                            textStyle: t.button,
+                            minimumSize: const Size(44, 44),
+                          ),
+                          child: const Text('Skip'),
+                        )
+                      else
+                        const SizedBox(height: 44),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: PageView(
+                    controller: _pages,
+                    onPageChanged: (i) => setState(() => _page = i),
+                    children: [
+                      for (final p in _intro) _IntroView(page: p),
+                      _buildSetup(context),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(Sp.gutter, Sp.md, Sp.gutter, Sp.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Semantics(
+                        label: 'Step ${_page + 1} of $total',
+                        excludeSemantics: true,
+                        child: Row(
+                          children: [
+                            Expanded(child: LedgerBar(value: (_page + 1) / total, height: 4)),
+                            const SizedBox(width: Sp.md),
+                            Text('${_page + 1} of $total', style: t.small),
+                          ],
                         ),
-                        child: const Text('Skip'),
-                      )
-                    else
-                      const SizedBox(height: Dimens.minTouch),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: PageView(
-                  controller: _pages,
-                  onPageChanged: (i) => setState(() => _page = i),
-                  children: [
-                    for (final p in _intro) _IntroView(page: p),
-                    _buildSetup(context),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Space.gutter, Space.x3, Space.gutter, Space.x4),
-                child: Column(
-                  children: [
-                    _PageDots(count: _setupIndex + 1, index: _page),
-                    const SizedBox(height: Space.x4),
-                    if (onSetup)
-                      FinnButton(
-                        label: _mode == _StartMode.fresh ? 'Start fresh' : 'Explore with sample data',
-                        icon: LucideIcons.arrowRight,
-                        size: FinnButtonSize.lg,
-                        expand: true,
-                        loading: _busy,
-                        onPressed: _busy ? null : _finish,
-                      )
-                    else
-                      FinnButton(
-                        label: _page == _setupIndex - 1 ? 'Set up FiNN' : 'Continue',
-                        icon: LucideIcons.arrowRight,
-                        size: FinnButtonSize.lg,
-                        expand: true,
-                        onPressed: () => _goTo(_page + 1),
                       ),
-                  ],
+                      const SizedBox(height: Sp.lg),
+                      if (onSetup)
+                        LedgerButton(
+                          label: _mode == _StartMode.fresh ? 'Start fresh' : 'Explore with sample data',
+                          expand: true,
+                          loading: _busy,
+                          onPressed: _busy ? null : _finish,
+                        )
+                      else
+                        LedgerButton(
+                          label: _page == _setupIndex - 1 ? 'Set up FiNN' : 'Continue',
+                          expand: true,
+                          onPressed: () => _goTo(_page + 1),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -196,26 +192,22 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Widget _buildSetup(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final t = context.type;
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(Space.gutter, Space.x4, Space.gutter, Space.x4),
+      padding: const EdgeInsets.fromLTRB(Sp.gutter, Sp.lg, Sp.gutter, Sp.lg),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('LET\'S GET YOU SET UP', style: t.eyebrow),
-          const SizedBox(height: Space.x2),
-          Text('A few details to begin', style: t.pageTitle),
-          const SizedBox(height: Space.x1_5),
-          Text('You can change any of this later in Settings.', style: t.caption),
-          const SizedBox(height: Space.x6),
-          FinnTextField(
+          Semantics(header: true, child: Text('A few details to begin', style: t.title)),
+          const SizedBox(height: Sp.xs),
+          Text('You can change any of this later in Settings.', style: t.label),
+          const SizedBox(height: Sp.xl),
+          LedgerTextField(
             label: 'What should we call you?',
             hint: 'Your first name',
             controller: _name,
             errorText: _nameError,
-            prefixIcon: LucideIcons.userRound,
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.done,
             maxLength: 40,
@@ -223,58 +215,47 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               if (_nameError != null) setState(() => _nameError = null);
             },
           ),
-          const SizedBox(height: Space.x5),
-          Text('HOW WOULD YOU LIKE TO START?', style: t.eyebrow),
-          const SizedBox(height: Space.x2_5),
-          _ModeCard(
-            selected: _mode == _StartMode.fresh,
-            icon: LucideIcons.sprout,
-            title: 'Start fresh',
-            body: 'Begin with a clean slate and your own numbers.',
-            onTap: () => setState(() => _mode = _StartMode.fresh),
-          ),
-          // Sample data exists only in the local (mock) mode.
-          if (!ref.watch(remoteModeProvider)) ...[
-            const SizedBox(height: Space.x2_5),
-            _ModeCard(
-              selected: _mode == _StartMode.sample,
-              icon: LucideIcons.sparkles,
-              title: 'Explore with sample data',
-              body: 'Look around with six months of realistic example data first.',
-              onTap: () => setState(() => _mode = _StartMode.sample),
+          const SizedBox(height: Sp.xl),
+          LedgerSection(
+            title: 'How would you like to start?',
+            child: LedgerPanel(
+              children: [
+                LedgerOptionRow(
+                  selected: _mode == _StartMode.fresh,
+                  title: 'Start fresh',
+                  subtitle: 'Begin with a clean slate and your own numbers.',
+                  onTap: () => setState(() => _mode = _StartMode.fresh),
+                ),
+                // Sample data exists only in the local (mock) mode.
+                if (!ref.watch(remoteModeProvider))
+                  LedgerOptionRow(
+                    selected: _mode == _StartMode.sample,
+                    title: 'Explore with sample data',
+                    subtitle: 'Look around with six months of realistic example data first.',
+                    onTap: () => setState(() => _mode = _StartMode.sample),
+                  ),
+              ],
             ),
-          ],
+          ),
           MotionAnimatedSize(
             child: _mode == _StartMode.fresh
                 ? Padding(
-                    padding: const EdgeInsets.only(top: Space.x5),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        AmountField(
-                          label: 'Opening balance · bank + cash today',
-                          controller: _balance,
-                          errorText: _balanceError,
-                          textInputAction: TextInputAction.done,
-                          onChanged: (_) {
-                            if (_balanceError != null) setState(() => _balanceError = null);
-                          },
-                        ),
-                        const SizedBox(height: Space.x1_5),
-                        Text(
-                          'Add up your bank accounts and cash in hand. Your balance builds from this number.',
-                          style: t.caption,
-                        ),
-                      ],
+                    padding: const EdgeInsets.only(top: Sp.xl),
+                    child: LedgerAmountField(
+                      label: 'Opening balance · bank + cash today',
+                      helper: 'Your balance builds from this number.',
+                      controller: _balance,
+                      errorText: _balanceError,
+                      textInputAction: TextInputAction.done,
+                      onChanged: (_) {
+                        if (_balanceError != null) setState(() => _balanceError = null);
+                      },
                     ),
                   )
-                : Padding(
-                    padding: const EdgeInsets.only(top: Space.x4),
-                    child: InfoBanner(
-                      message: 'Sample data is for exploring. You can reset to a clean slate any time from Settings.',
-                      icon: LucideIcons.info,
-                      tone: FinnTone.info,
-                      title: c.isDark ? null : null,
+                : const Padding(
+                    padding: EdgeInsets.only(top: Sp.lg),
+                    child: LedgerNote(
+                      text: 'Sample data is for exploring. You can reset to a clean slate any time from Settings.',
                     ),
                   ),
           ),
@@ -291,135 +272,26 @@ class _IntroView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: Space.x6, vertical: Space.x8),
+      padding: const EdgeInsets.fromLTRB(Sp.gutter + Sp.xs, Sp.xl, Sp.gutter + Sp.xs, Sp.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconTile(
-            icon: page.icon,
-            background: c.primary,
-            foreground: c.onPrimary,
-            size: 64,
-            radius: Radii.xxl,
-            iconSize: 30,
+          Semantics(header: true, child: Text(page.title, style: t.title)),
+          const SizedBox(height: Sp.sm),
+          Text(page.body, style: t.body.copyWith(color: c.inkSoft)),
+          const SizedBox(height: Sp.xl),
+          LedgerPanel(
+            children: [
+              for (final text in page.points)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md + 2),
+                  child: Text(text, style: t.bodyStrong),
+                ),
+            ],
           ),
-          const SizedBox(height: Space.x8),
-          Text(page.eyebrow, style: t.eyebrow.copyWith(color: c.attention)),
-          const SizedBox(height: Space.x2),
-          Semantics(header: true, child: Text(page.title, style: t.display)),
-          const SizedBox(height: Space.x3),
-          Text(page.body, style: t.body.copyWith(color: c.textSecondary, fontSize: 16)),
-          const SizedBox(height: Space.x6),
-          for (final (icon, text) in page.points)
-            Padding(
-              padding: const EdgeInsets.only(bottom: Space.x3),
-              child: Row(
-                children: [
-                  IconTile(
-                    icon: icon,
-                    background: c.surfaceMuted,
-                    foreground: c.textPrimary,
-                    size: 36,
-                    radius: Radii.lg,
-                    iconSize: 17,
-                  ),
-                  const SizedBox(width: Space.x3),
-                  Expanded(child: Text(text, style: t.bodyStrong)),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ModeCard extends StatelessWidget {
-  const _ModeCard({
-    required this.selected,
-    required this.icon,
-    required this.title,
-    required this.body,
-    required this.onTap,
-  });
-
-  final bool selected;
-  final IconData icon;
-  final String title;
-  final String body;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return Semantics(
-      selected: selected,
-      inMutuallyExclusiveGroup: true,
-      child: FinnCard(
-        onTap: onTap,
-        border: BorderSide(color: selected ? c.primary : c.border, width: selected ? 2 : 1),
-        child: Row(
-          children: [
-            IconTile(
-              icon: icon,
-              background: selected ? c.primary : c.surfaceMuted,
-              foreground: selected ? c.onPrimary : c.textPrimary,
-              size: 40,
-              radius: Radii.lg,
-              iconSize: 19,
-            ),
-            const SizedBox(width: Space.x3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: t.bodyStrong),
-                  const SizedBox(height: Space.x0_5),
-                  Text(body, style: t.caption),
-                ],
-              ),
-            ),
-            const SizedBox(width: Space.x2),
-            Icon(
-              selected ? LucideIcons.circleCheck : LucideIcons.circle,
-              size: 22,
-              color: selected ? c.primary : c.textTertiary,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PageDots extends StatelessWidget {
-  const _PageDots({required this.count, required this.index});
-
-  final int count;
-  final int index;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Semantics(
-      label: 'Page ${index + 1} of $count',
-      excludeSemantics: true,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          for (var i = 0; i < count; i++)
-            AnimatedContainer(
-              duration: context.motion.normal,
-              curve: Curves2.standard,
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              width: i == index ? 22 : 7,
-              height: 7,
-              decoration: BoxDecoration(color: i == index ? c.primary : c.borderStrong, borderRadius: Radii.rFull),
-            ),
         ],
       ),
     );

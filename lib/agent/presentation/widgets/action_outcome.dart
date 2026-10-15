@@ -2,20 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../execution/proposals.dart';
 
-/// Icon, colour and label of what happened to an action.
-(IconData, Color, String) actionStatusVisual(ActionRecord record, FinnColors c) => switch (record.status) {
-      ActionResultStatus.completed => (LucideIcons.circleCheck, c.positive, 'Saved'),
-      ActionResultStatus.alreadyDone => (LucideIcons.circleCheck, c.positive, 'Already saved'),
-      ActionResultStatus.declined => (LucideIcons.circleX, c.textTertiary, 'Not approved'),
-      ActionResultStatus.cancelled => (LucideIcons.circleStop, c.textTertiary, 'Stopped'),
-      ActionResultStatus.needsReapproval => (LucideIcons.circleAlert, c.warning, 'Needs review again'),
-      ActionResultStatus.skipped => (LucideIcons.circleMinus, c.textTertiary, 'Skipped'),
-      ActionResultStatus.failed when record.outcomeUnknown => (LucideIcons.circleHelp, c.warning, 'Not confirmed'),
-      ActionResultStatus.failed => (LucideIcons.circleX, c.negative, 'Failed'),
-    };
+/// Icon, colour and label of what happened to an action. Colour only for
+/// meaning: green saved, amber needs a look, red failed, ink-soft otherwise.
+(IconData, Color, String) actionStatusVisual(ActionRecord record, LedgerColors c) => switch (record.status) {
+  ActionResultStatus.completed => (LucideIcons.circleCheck, c.green, 'Saved'),
+  ActionResultStatus.alreadyDone => (LucideIcons.circleCheck, c.green, 'Already saved'),
+  ActionResultStatus.declined => (LucideIcons.circleSlash, c.inkSoft, 'Declined'),
+  ActionResultStatus.cancelled => (LucideIcons.circleStop, c.inkSoft, 'Stopped'),
+  ActionResultStatus.needsReapproval => (LucideIcons.circleAlert, c.amber, 'Needs review again'),
+  ActionResultStatus.skipped => (LucideIcons.circleMinus, c.inkSoft, 'Skipped'),
+  ActionResultStatus.failed when record.outcomeUnknown => (LucideIcons.circleHelp, c.amber, 'Not confirmed'),
+  ActionResultStatus.failed => (LucideIcons.circleX, c.red, 'Failed'),
+};
 
 /// Where to see the record a saved action created or changed, or null
 /// (nothing to show, e.g. after a delete).
@@ -54,7 +55,8 @@ String? actionRecordRoute(ActionRecord record) {
   };
 }
 
-/// Small "View" pill that opens the saved record.
+/// Quiet "View" link that opens the saved record; [label] is what a
+/// screen reader announces ("View transactions details").
 class RecordViewLink extends StatelessWidget {
   const RecordViewLink({super.key, required this.label, required this.onTap});
 
@@ -63,31 +65,15 @@ class RecordViewLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
     return Semantics(
       button: true,
       label: label,
       excludeSemantics: true,
-      child: PressableScale(
-        onTap: onTap,
-        scale: 0.94,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 32),
-          padding: const EdgeInsets.symmetric(horizontal: Space.x2_5, vertical: Space.x1_5),
-          decoration: BoxDecoration(
-            color: c.info.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(Radii.full),
-            border: Border.all(color: c.info.withValues(alpha: 0.35)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('View', style: context.text.caption.copyWith(color: c.info, fontWeight: FontWeight.w700)),
-              const SizedBox(width: 2),
-              Icon(LucideIcons.chevronRight, size: 14, color: c.info),
-            ],
-          ),
-        ),
+      child: LedgerButton(
+        label: 'View',
+        icon: LucideIcons.arrowUpRight,
+        variant: LedgerButtonVariant.quiet,
+        onPressed: onTap,
       ),
     );
   }

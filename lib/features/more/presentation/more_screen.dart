@@ -5,12 +5,9 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
-import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
-import '../../../design_system/design_system.dart';
-import '../../../shared/presentation/async_view.dart';
+import '../../../kit/kit.dart';
 import '../../home/application/home_overview.dart';
-import '../../net_worth/domain/net_worth.dart';
 import '../../profile/presentation/profile_entry_card.dart';
 
 /// Opens a menu destination. The side drawer closes itself first.
@@ -25,18 +22,14 @@ class MoreScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
     return Scaffold(
-      backgroundColor: c.background,
+      backgroundColor: context.ink.paper,
       body: SafeArea(
         bottom: false,
         child: CustomScrollView(
           key: const PageStorageKey<String>('more'),
           slivers: [
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(Space.gutter, Space.x4, Space.gutter, context.bottomClearance),
-              sliver: const SliverToBoxAdapter(child: ResponsiveCenter(child: MoreMenu())),
-            ),
+            PageBlock(top: Sp.lg, bottom: Sp.xxl, child: const MoreMenu()),
           ],
         ),
       ),
@@ -44,8 +37,11 @@ class MoreScreen extends ConsumerWidget {
   }
 }
 
-/// Profile entry, then the financial overview hub: net worth teaser, money
-/// modules, then app-level settings. Shared by [MoreScreen] and the drawer.
+/// Aligns row hairlines with the text (16 pad + 36 well + 14 gap).
+const double _indent = Sp.lg + 36 + Sp.md + 2;
+
+/// Profile, money modules, insights, then account settings.
+/// Shared by [MoreScreen] and the drawer.
 class MoreMenu extends StatelessWidget {
   const MoreMenu({super.key, this.open = _push});
 
@@ -53,94 +49,54 @@ class MoreMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        StaggeredEntrance(index: 0, child: ProfileEntryCard(onTap: () => open(context, AppRoutes.account))),
-        const SizedBox(height: Space.x6),
-        Semantics(header: true, child: Text('Financial overview', style: t.pageTitle)),
-        const SizedBox(height: Space.x1),
-        Text('Everything you own, owe and have planned, in one place.', style: t.caption),
-        const SizedBox(height: Space.x5),
-        StaggeredEntrance(index: 0, child: _NetWorthTeaser(open: open)),
-        const SizedBox(height: Space.section),
-        StaggeredEntrance(
-          index: 1,
-          child: _Group(
-            title: 'Money',
+        ProfileEntryCard(onTap: () => open(context, AppRoutes.account)),
+        const SizedBox(height: Sp.xl),
+        LedgerSection(
+          title: 'Money',
+          child: LedgerPanel(
+            dividerIndent: _indent,
             children: [
-              _ModuleTile(
-                icon: LucideIcons.landmark,
-                color: c.accentLoans,
-                title: 'Loans & EMIs',
-                summary: const Text('Repayments and outstanding balances'),
-                route: AppRoutes.loans,
-                open: open,
-              ),
-              _ModuleTile(
-                icon: LucideIcons.handCoins,
-                color: c.accentPending,
-                title: 'Pending payments',
-                summary: const Text('What you owe and what is owed to you'),
-                route: AppRoutes.pending,
-                open: open,
-              ),
-              _SubscriptionsTile(open: open),
-              _ModuleTile(
-                icon: LucideIcons.chartColumnIncreasing,
-                color: c.accentAnalytics,
-                title: 'Insights',
-                summary: const Text('Patterns and trends in your money'),
-                route: AppRoutes.analytics,
-                open: open,
-              ),
+              _Item(icon: LucideIcons.landmark, title: 'Loans & EMIs', route: AppRoutes.loans, open: open),
+              _Item(icon: LucideIcons.handCoins, title: 'Pending payments', route: AppRoutes.pending, open: open),
+              _SubscriptionsItem(open: open),
             ],
           ),
         ),
-        const SizedBox(height: Space.section),
-        StaggeredEntrance(
-          index: 2,
-          child: _Group(
-            title: 'App',
+        const SizedBox(height: Sp.xl),
+        LedgerSection(
+          title: 'Insights',
+          child: LedgerPanel(
+            dividerIndent: _indent,
             children: [
-              _ModuleTile(
-                icon: LucideIcons.settings,
-                color: c.accentTransactions,
-                title: 'Settings',
-                summary: const Text('Profile, privacy, alerts and appearance'),
-                route: AppRoutes.settings,
-                open: open,
-              ),
-              _ModuleTile(
-                icon: LucideIcons.tags,
-                color: c.accentBudgets,
-                title: 'Categories',
-                summary: const Text('Organise how income and spending are grouped'),
-                route: AppRoutes.categories,
-                open: open,
-              ),
-              _ModuleTile(
-                icon: LucideIcons.download,
-                color: c.accentNetWorth,
-                title: 'Export data',
-                summary: const Text('Download a copy of your records'),
-                route: AppRoutes.export,
-                open: open,
-              ),
+              _NetWorthItem(open: open),
+              _Item(icon: LucideIcons.chartColumnIncreasing, title: 'Insights', route: AppRoutes.analytics, open: open),
             ],
           ),
         ),
-        const SizedBox(height: Space.x5),
+        const SizedBox(height: Sp.xl),
+        LedgerSection(
+          title: 'Account',
+          child: LedgerPanel(
+            dividerIndent: _indent,
+            children: [
+              _Item(icon: LucideIcons.settings, title: 'Settings', route: AppRoutes.settings, open: open),
+              _Item(icon: LucideIcons.tags, title: 'Categories', route: AppRoutes.categories, open: open),
+              _Item(icon: LucideIcons.download, title: 'Export data', route: AppRoutes.export, open: open),
+            ],
+          ),
+        ),
+        const SizedBox(height: Sp.lg),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(LucideIcons.lock, size: 12, color: c.textTertiary),
-            const SizedBox(width: Space.x1_5),
-            Flexible(
-              child: Text('Your data stays on this device', style: t.micro, textAlign: TextAlign.center),
-            ),
+            Icon(LucideIcons.lock, size: 13, color: c.inkSoft),
+            const SizedBox(width: Sp.xs + 2),
+            Flexible(child: Text('Your data stays on this device', style: t.small, textAlign: TextAlign.center)),
           ],
         ),
       ],
@@ -148,211 +104,80 @@ class MoreMenu extends StatelessWidget {
   }
 }
 
-class _NetWorthTeaser extends ConsumerWidget {
-  const _NetWorthTeaser({required this.open});
+class _Item extends StatelessWidget {
+  const _Item({
+    required this.icon,
+    required this.title,
+    required this.route,
+    required this.open,
+    this.subtitle,
+    this.trailing,
+    this.semanticLabel,
+  });
+
+  final IconData icon;
+  final String title;
+  final String route;
+  final MoreOpen open;
+  final String? subtitle;
+  final Widget? trailing;
+  final String? semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return LedgerRow(
+      leading: IconWell(icon: icon, size: 36),
+      title: title,
+      subtitle: subtitle,
+      trailing: trailing,
+      chevron: true,
+      semanticLabel: semanticLabel,
+      onTap: () => open(context, route),
+    );
+  }
+}
+
+class _NetWorthItem extends ConsumerWidget {
+  const _NetWorthItem({required this.open});
   final MoreOpen open;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return AsyncView<NetWorthSnapshot>(
-      value: ref.watch(netWorthProvider),
-      loading: const SkeletonPulse(child: CardSkeleton(height: 132)),
-      builder: (context, nw) {
-        final c = context.colors;
-        final t = context.text;
-        return FinnCard(
-          onTap: () => open(context, AppRoutes.netWorth),
-          semanticLabel: 'Net worth. Open details',
-          padding: const EdgeInsets.all(Space.x5),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  IconTile(
-                    icon: LucideIcons.scale,
-                    background: c.accentNetWorth,
-                    foreground: Colors.white,
-                    size: 28,
-                    radius: Radii.md,
-                    iconSize: 15,
-                  ),
-                  const SizedBox(width: Space.x2_5),
-                  Expanded(child: Text('NET WORTH', style: t.sectionTitle)),
-                  Icon(LucideIcons.chevronRight, size: 16, color: c.textTertiary),
-                ],
-              ),
-              const SizedBox(height: Space.x3),
-              AnimatedAmount(nw.netWorth, style: t.amountLarge, decimals: DecimalDisplay.none, fit: true),
-              const SizedBox(height: Space.x2),
-              Row(
-                children: [
-                  Expanded(
-                    child: _Mini(label: 'Own', amount: nw.totalAssets, color: c.positive),
-                  ),
-                  Expanded(
-                    child: _Mini(label: 'Owe', amount: nw.liabilities, color: c.negative),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
+    final nw = ref.watch(netWorthProvider).value;
+    return _Item(
+      icon: LucideIcons.scale,
+      title: 'Net worth',
+      route: AppRoutes.netWorth,
+      open: open,
+      semanticLabel: 'Net worth. Open details',
+      trailing: nw == null
+          ? null
+          : AmountText(nw.netWorth, style: context.type.figure, decimals: DecimalDisplay.none),
     );
   }
 }
 
-class _Mini extends StatelessWidget {
-  const _Mini({required this.label, required this.amount, required this.color});
-
-  final String label;
-  final Money amount;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.text;
-    return MergeSemantics(
-      child: Row(
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: Space.x1_5),
-          Text('$label ', style: t.caption),
-          Flexible(child: AmountText(amount, compact: true, style: t.amountSmall)),
-        ],
-      ),
-    );
-  }
-}
-
-class _Group extends StatelessWidget {
-  const _Group({required this.title, required this.children});
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.text;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: Space.x1, bottom: Space.x2_5),
-          child: Semantics(header: true, child: Text(title.toUpperCase(), style: t.eyebrow)),
-        ),
-        FinnCard(
-          padding: EdgeInsets.zero,
-          child: Material(
-            type: MaterialType.transparency,
-            child: Column(
-              children: [
-                for (var i = 0; i < children.length; i++) ...[if (i > 0) const FinnDivider(indent: 64), children[i]],
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// A module entry with its accent colour and a live summary line.
-class _ModuleTile extends StatelessWidget {
-  const _ModuleTile({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.summary,
-    required this.route,
-    required this.open,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String title;
-  final Widget summary;
-  final String route;
-  final MoreOpen open;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return Semantics(
-      button: true,
-      child: InkWell(
-        onTap: () => open(context, route),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 64),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: Space.x4, vertical: Space.x3),
-            child: Row(
-              children: [
-                IconTile(
-                  icon: icon,
-                  background: color.withValues(alpha: c.isDark ? 0.2 : 0.12),
-                  foreground: color,
-                  size: 36,
-                  radius: Radii.lg,
-                  iconSize: 18,
-                ),
-                const SizedBox(width: Space.x3),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: t.bodyStrong),
-                      const SizedBox(height: Space.x0_5),
-                      DefaultTextStyle.merge(
-                        style: t.caption,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        child: summary,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: Space.x2),
-                Icon(LucideIcons.chevronRight, size: 16, color: c.textTertiary),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SubscriptionsTile extends ConsumerWidget {
-  const _SubscriptionsTile({required this.open});
+class _SubscriptionsItem extends ConsumerWidget {
+  const _SubscriptionsItem({required this.open});
   final MoreOpen open;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(subscriptionOverviewProvider).value;
-    final String summary;
-    if (AmountVisibility.hiddenOf(context)) {
-      summary = 'Recurring payments and renewals';
-    } else if (s == null) {
-      summary = ' ';
+    final String? summary;
+    if (AmountVisibility.hiddenOf(context) || s == null) {
+      summary = null;
     } else if (s.activeCount == 0) {
       summary = 'No active subscriptions';
     } else {
       summary = '${s.monthlyCommitment.format(decimals: DecimalDisplay.none)}/month · ${s.activeCount} active';
     }
-    return _ModuleTile(
+    return _Item(
       icon: LucideIcons.repeat,
-      color: context.colors.accentSubscriptions,
       title: 'Subscriptions',
       route: AppRoutes.subscriptions,
-      summary: Text(summary),
       open: open,
+      subtitle: summary,
     );
   }
 }

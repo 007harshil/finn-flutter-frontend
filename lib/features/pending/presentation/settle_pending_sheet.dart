@@ -7,7 +7,7 @@ import '../../../app/di/data_providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../transactions/domain/transaction.dart';
 import '../application/pending_actions.dart';
@@ -21,7 +21,12 @@ final _siblingsProvider = Provider.family<List<PendingView>, String>((ref, id) {
   if (self == null) return const [];
   final name = self.payment.counterparty.trim().toLowerCase();
   return all
-      .where((v) => v.payment.id != id && v.status.isActive && v.payment.counterparty.trim().toLowerCase() == name)
+      .where(
+        (v) =>
+            v.payment.id != id &&
+            v.status.isActive &&
+            v.payment.counterparty.trim().toLowerCase() == name,
+      )
       .toList();
 });
 
@@ -55,15 +60,17 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
   }
 
   void _setFull(PendingView v) => setState(() {
-        _full = true;
-        _amount.text = MoneyFormatter.editable(v.outstanding);
-        _errors = const {};
-      });
+    _full = true;
+    _amount.text = MoneyFormatter.editable(v.outstanding);
+    _errors = const {};
+  });
 
   Future<void> _submit(PendingView v) async {
-    final amount = AmountField.parse(_amount.text);
+    final amount = LedgerAmountField.parse(_amount.text);
     if (amount == null || !amount.isPositive) {
-      setState(() => _errors = {'amount': 'Enter an amount greater than zero.'});
+      setState(
+        () => _errors = {'amount': 'Enter an amount greater than zero.'},
+      );
       return;
     }
     final note = _note.text.trim();
@@ -85,7 +92,9 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
       ),
       idempotencyKey: _key,
       celebrate: true,
-      successTitle: amount >= v.outstanding ? 'Settled in full' : 'Partial settlement recorded',
+      successTitle: amount >= v.outstanding
+          ? 'Settled in full'
+          : 'Partial settlement recorded',
       onFieldErrors: (e) => setState(() => _errors = e),
     );
     if (!mounted) return;
@@ -97,10 +106,7 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
   Widget build(BuildContext context) {
     final v = ref.watch(pendingViewProvider(widget.pendingId)).value;
     if (v == null) {
-      return const FinnSheetScaffold(
-        title: 'Settle',
-        child: SkeletonPulse(child: Column(children: [CardSkeleton(height: 120), SizedBox(height: Space.x4), CardSkeleton(height: 200)])),
-      );
+      return const FinnSheetScaffold(title: 'Settle', child: _FormSkeleton());
     }
     if (!_prefilled) {
       _prefilled = true;
@@ -109,20 +115,18 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
     if (!v.status.isActive) return _Closed(view: v);
 
     final today = ref.watch(todayProvider);
-    final c = context.colors;
-    final t = context.text;
     final p = v.payment;
     final owe = p.direction.isOwe;
     final siblings = ref.watch(_siblingsProvider(p.id));
-    final entered = AmountField.parse(_amount.text) ?? Money.zero;
+    final entered = LedgerAmountField.parse(_amount.text) ?? Money.zero;
     final leaves = v.outstanding - entered;
+    final tooMuch = entered > v.outstanding;
 
     return FinnSheetScaffold(
-      title: owe ? 'Settle · I paid' : 'Settle · I received',
+      title: 'Settle',
       description: '${p.direction.sentence(p.counterparty)} · ${p.purpose}',
-      footer: FinnButton(
-        label: owe ? 'Record payment to ${p.counterparty}' : 'Record money from ${p.counterparty}',
-        icon: LucideIcons.circleCheck,
+      footer: LedgerButton(
+        label: owe ? 'Record payment' : 'Record receipt',
         expand: true,
         loading: _busy,
         onPressed: _busy ? null : () => _submit(v),
@@ -130,26 +134,24 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _SettlePreview(view: v, entered: entered),
-          if (siblings.isNotEmpty) ...[
-            const SizedBox(height: Space.x3),
-            InfoBanner(
-              title: 'Other open items with ${p.counterparty}',
-              message: [
-                for (final s in siblings)
-                  '• ${s.payment.purpose}: ${s.outstanding.format()} (${s.payment.direction.label.toLowerCase()})',
-                'This settlement applies only to "${p.purpose}". Settle the others separately.',
-              ].join('\n'),
-            ),
-          ],
-          const SizedBox(height: Space.x4),
-          AmountField(
+          LedgerAmountField(
+            hero: true,
             label: owe ? 'Amount paid' : 'Amount received',
             controller: _amount,
-            errorText: _errors['amount'],
-            onChanged: (m) => setState(() => _full = m != null && m == v.outstanding),
+            helper: entered.isPositive && leaves.isPositive
+                ? '${leaves.format()} will remain outstanding.'
+                : (_full
+                      ? 'This settles the item in full.'
+                      : 'Enter the amount that changed hands.'),
+            errorText:
+                _errors['amount'] ??
+                (tooMuch
+                    ? 'More than the ${v.outstanding.format()} outstanding.'
+                    : null),
+            onChanged: (m) =>
+                setState(() => _full = m != null && m == v.outstanding),
           ),
-          const SizedBox(height: Space.x2),
+          const SizedBox(height: Sp.md),
           _QuickAmounts(
             outstanding: v.outstanding,
             entered: entered,
@@ -165,17 +167,21 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
               }
             },
           ),
-          const SizedBox(height: Space.x1_5),
-          Text(
-            entered > v.outstanding
-                ? 'More than the ${v.outstanding.format()} outstanding.'
-                : (entered.isPositive && leaves.isPositive
-                    ? '${leaves.format()} will remain outstanding.'
-                    : (_full ? 'This settles the item in full.' : 'Enter the amount that changed hands.')),
-            style: t.micro.copyWith(color: entered > v.outstanding ? c.negative : null),
-          ),
-          const SizedBox(height: Space.x4),
-          DateField(
+          const SizedBox(height: LedgerForm.gap),
+          _SettlePreview(view: v, entered: entered),
+          if (siblings.isNotEmpty) ...[
+            const SizedBox(height: Sp.md),
+            LedgerNote(
+              text: [
+                'Other open items with ${p.counterparty}',
+                for (final s in siblings)
+                  '• ${s.payment.purpose}: ${s.outstanding.format()} (${s.payment.direction.label.toLowerCase()})',
+                'This settlement applies only to "${p.purpose}". Settle the others separately.',
+              ].join('\n'),
+            ),
+          ],
+          const SizedBox(height: LedgerForm.groupGap),
+          LedgerDateField(
             label: owe ? 'Paid on' : 'Received on',
             value: _date ?? today,
             firstDate: p.createdDate,
@@ -183,17 +189,31 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
             errorText: _errors['date'],
             onChanged: (d) => setState(() => _date = d),
           ),
-          const SizedBox(height: Space.x4),
-          const PendingFieldLabel('Method'),
-          PendingMethodChips(selected: _method, onChanged: (m) => setState(() => _method = m)),
-          const SizedBox(height: Space.x4),
-          _CashSwitch(
+          const SizedBox(height: LedgerForm.gap),
+          LedgerField(
+            label: 'Method',
+            child: LedgerChoiceChips<PaymentMethod>(
+              options: [
+                for (final m in PaymentMethod.values)
+                  LedgerOption(m, m.label, icon: _methodIcons[m]),
+              ],
+              selected: _method,
+              onChanged: (m) => setState(() => _method = m),
+            ),
+          ),
+          const SizedBox(height: LedgerForm.gap),
+          LedgerSwitchRow(
+            title: 'Record as cash movement',
+            subtitle: _recordCash
+                ? (owe
+                      ? 'Adds an expense and lowers your balance.'
+                      : 'Adds income and raises your balance.')
+                : 'Off: settled outside FiNN. Balance unchanged.',
             value: _recordCash,
-            owe: owe,
             onChanged: (b) => setState(() => _recordCash = b),
           ),
-          const SizedBox(height: Space.x4),
-          FinnTextField(
+          const SizedBox(height: LedgerForm.gap),
+          LedgerTextField(
             label: 'Note (optional)',
             hint: 'e.g. UPI ref 4821',
             controller: _note,
@@ -206,9 +226,41 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
   }
 }
 
+const _methodIcons = {
+  PaymentMethod.upi: LucideIcons.smartphone,
+  PaymentMethod.card: LucideIcons.creditCard,
+  PaymentMethod.cash: LucideIcons.banknote,
+  PaymentMethod.bankTransfer: LucideIcons.landmark,
+  PaymentMethod.wallet: LucideIcons.wallet,
+  PaymentMethod.other: LucideIcons.circleDot,
+};
+
+class _FormSkeleton extends StatelessWidget {
+  const _FormSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Loading',
+      child: const ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LedgerSkeleton(width: 200, height: 44),
+            SizedBox(height: LedgerForm.gap),
+            LedgerSkeleton(height: 104),
+            SizedBox(height: LedgerForm.gap),
+            LedgerSkeleton(height: 52),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// What is outstanding and what this settlement does to it: the bar shows
-/// already settled, this payment and what will be left, and follows the
-/// amount as it is typed.
+/// what was settled before and this payment, and follows the amount as it
+/// is typed.
 class _SettlePreview extends StatelessWidget {
   const _SettlePreview({required this.view, required this.entered});
 
@@ -217,162 +269,52 @@ class _SettlePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final v = view;
     final p = v.payment;
-    final tone = p.direction.color(c);
     final whole = p.originalAmount.paise;
     double frac(Money m) => whole <= 0 ? 0 : (m.paise / whole).clamp(0.0, 1.0);
-    final over = entered > v.outstanding;
     final now = Money.min(Money.max(entered, Money.zero), v.outstanding);
-    return FinnCard(
-      variant: FinnCardVariant.muted,
-      padding: const EdgeInsets.all(Space.x3),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              PendingAvatar(
-                name: p.counterparty,
-                color: tone,
-                progress: v.settledBps / 10000,
-                direction: p.direction,
-              ),
-              const SizedBox(width: Space.x3),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('OUTSTANDING', style: t.eyebrow),
-                    AmountText(v.outstanding, style: t.amountLarge.copyWith(color: tone), fit: true),
-                  ],
-                ),
-              ),
-              const SizedBox(width: Space.x2),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('ORIGINAL', style: t.eyebrow),
-                  AmountText(p.originalAmount, style: t.amountSmall.copyWith(color: c.textSecondary)),
-                ],
-              ),
+    return LedgerPanel(
+      children: [
+        LedgerFact(
+          label: 'Outstanding',
+          value: AmountText(v.outstanding, style: t.bodyStrong),
+        ),
+        LedgerFact(
+          label: 'Original',
+          value: AmountText(
+            p.originalAmount,
+            style: t.body.copyWith(color: c.inkSoft),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: Sp.lg,
+            vertical: Sp.md + 2,
+          ),
+          child: LedgerStackBar(
+            semanticLabel: 'Settled before, this settlement and what is left',
+            parts: [
+              BarPart(frac(v.settled), c.lineStrong),
+              BarPart(frac(now), c.green),
+              BarPart(1 - frac(v.settled) - frac(now), c.sunken),
             ],
           ),
-          const SizedBox(height: Space.x2_5),
-          ExcludeSemantics(
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(end: frac(now)),
-              duration: context.motion.normal,
-              curve: Curves2.emphasized,
-              builder: (context, n, _) => CustomPaint(
-                size: const Size(double.infinity, 10),
-                painter: _PreviewPainter(
-                  settled: frac(v.settled),
-                  now: n,
-                  settledColor: tone.withValues(alpha: 0.38),
-                  nowColor: tone,
-                  track: c.surface,
-                  outline: over ? c.negative : null,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: Space.x1_5),
-          Wrap(
-            spacing: Space.x3,
-            runSpacing: Space.x1,
-            children: [
-              if (v.settled.isPositive) _Legend(color: tone.withValues(alpha: 0.38), label: 'Settled before'),
-              _Legend(color: tone, label: 'This settlement'),
-              _Legend(color: c.surface, label: 'Left after', border: c.border),
-            ],
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-class _Legend extends StatelessWidget {
-  const _Legend({required this.color, required this.label, this.border});
-
-  final Color color;
-  final String label;
-  final Color? border;
-
-  @override
-  Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              border: border == null ? null : Border.all(color: border!),
-            ),
-          ),
-          const SizedBox(width: Space.x1),
-          Text(label, style: context.text.micro),
-        ],
-      );
-}
-
-class _PreviewPainter extends CustomPainter {
-  const _PreviewPainter({
-    required this.settled,
-    required this.now,
-    required this.settledColor,
-    required this.nowColor,
-    required this.track,
-    this.outline,
-  });
-
-  final double settled;
-  final double now;
-  final Color settledColor;
-  final Color nowColor;
-  final Color track;
-  final Color? outline;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bar = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(size.height / 2));
-    canvas.drawRRect(bar, Paint()..color = track);
-    canvas.save();
-    canvas.clipRRect(bar);
-    final a = settled * size.width;
-    final b = (settled + now).clamp(0.0, 1.0) * size.width;
-    canvas.drawRect(Rect.fromLTRB(0, 0, a, size.height), Paint()..color = settledColor);
-    canvas.drawRect(Rect.fromLTRB(a, 0, b, size.height), Paint()..color = nowColor);
-    canvas.restore();
-    if (outline != null) {
-      canvas.drawRRect(
-        bar.deflate(0.75),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5
-          ..color = outline!,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_PreviewPainter old) =>
-      old.settled != settled ||
-      old.now != now ||
-      old.settledColor != settledColor ||
-      old.nowColor != nowColor ||
-      old.track != track ||
-      old.outline != outline;
-}
-
 /// One-tap amounts: the full outstanding, half, or a quarter.
 class _QuickAmounts extends StatelessWidget {
-  const _QuickAmounts({required this.outstanding, required this.entered, required this.onPick});
+  const _QuickAmounts({
+    required this.outstanding,
+    required this.entered,
+    required this.onPick,
+  });
 
   final Money outstanding;
   final Money entered;
@@ -387,60 +329,25 @@ class _QuickAmounts extends StatelessWidget {
       if (outstanding >= const Money.rupees(2)) ('Half', part(2)),
       if (outstanding >= const Money.rupees(4)) ('Quarter', part(4)),
     ];
-    return FilterChipBar<int>(
-      padding: EdgeInsets.zero,
-      multiSelect: false,
-      items: [
+    int? selected;
+    for (var i = 0; i < options.length; i++) {
+      if (options[i].$2 == entered) {
+        selected = i;
+        break;
+      }
+    }
+    return LedgerChoiceChips<int>(
+      options: [
         for (var i = 0; i < options.length; i++)
-          FilterChipItem(
+          LedgerOption(
             i,
-            hidden ? options[i].$1 : '${options[i].$1} · ${AmountText.formatted(options[i].$2, compact: true)}',
+            hidden
+                ? options[i].$1
+                : '${options[i].$1} · ${AmountText.formatted(options[i].$2, compact: true)}',
           ),
       ],
-      selected: {
-        for (var i = 0; i < options.length; i++)
-          if (options[i].$2 == entered) i,
-      },
-      onChanged: (s) => onPick(options[s.first].$2),
-    );
-  }
-}
-
-class _CashSwitch extends StatelessWidget {
-  const _CashSwitch({required this.value, required this.owe, required this.onChanged});
-
-  final bool value;
-  final bool owe;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.text;
-    return FinnCard(
-      variant: FinnCardVariant.outlined,
-      padding: const EdgeInsets.fromLTRB(Space.x4, Space.x2, Space.x2, Space.x2),
-      child: MergeSemantics(
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Record as cash movement', style: t.bodyStrong),
-                  const SizedBox(height: 2),
-                  Text(
-                    value
-                        ? (owe ? 'Adds an expense and lowers your balance once.' : 'Adds income and raises your balance once.')
-                        : 'Off: settled outside your FiNN-tracked cash (e.g. adjusted against something else). Balance stays the same.',
-                    style: t.caption,
-                  ),
-                ],
-              ),
-            ),
-            Switch(value: value, onChanged: onChanged),
-          ],
-        ),
-      ),
+      selected: selected,
+      onChanged: (i) => onPick(options[i].$2),
     );
   }
 }
@@ -455,17 +362,14 @@ class _Closed extends StatelessWidget {
     final settled = view.status == PendingStatus.settled;
     return FinnSheetScaffold(
       title: settled ? 'Fully settled' : 'Written off',
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: Space.x6),
-        child: EmptyState(
-          icon: settled ? LucideIcons.circleCheck : LucideIcons.ban,
-          title: settled ? 'Nothing left to settle' : 'This item was written off',
-          message: settled && view.settledOn != null
-              ? 'Settled on ${DateFormats.dayMonthYear.format(view.settledOn!)}.'
-              : 'No further settlements can be recorded.',
-          actionLabel: 'Close',
-          onAction: () => Navigator.of(context).maybePop(),
-        ),
+      child: LedgerEmpty(
+        icon: settled ? LucideIcons.circleCheck : LucideIcons.ban,
+        title: settled ? 'Nothing left to settle' : 'This item was written off',
+        message: settled && view.settledOn != null
+            ? 'Settled on ${DateFormats.dayMonthYear.format(view.settledOn!)}.'
+            : 'No further settlements can be recorded.',
+        actionLabel: 'Close',
+        onAction: () => Navigator.of(context).maybePop(),
       ),
     );
   }

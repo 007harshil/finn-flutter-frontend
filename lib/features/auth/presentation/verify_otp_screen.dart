@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../application/auth_controller.dart';
 import '../domain/auth_session.dart';
 import 'auth_scaffold.dart';
@@ -128,11 +128,9 @@ class _VerifyOtpScreenState extends ConsumerState<VerifyOtpScreen> {
       footer: switch (_status) {
         _Status.pending || _Status.verifying => ListenableBuilder(
             listenable: _code,
-            builder: (context, _) => FinnButton(
+            builder: (context, _) => LedgerButton(
               key: const ValueKey('verify-code'),
               label: 'Verify code',
-              icon: LucideIcons.shieldCheck,
-              size: FinnButtonSize.lg,
               expand: true,
               loading: busy,
               onPressed: busy || !isWellFormedOtp(_code.text) ? null : _verify,
@@ -142,17 +140,15 @@ class _VerifyOtpScreenState extends ConsumerState<VerifyOtpScreen> {
         _Status.failed => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              FinnButton(
+              LedgerButton(
                 label: 'Try again',
-                icon: LucideIcons.rotateCcw,
-                size: FinnButtonSize.lg,
                 expand: true,
                 onPressed: _retry,
               ),
-              const SizedBox(height: Space.x2),
-              FinnButton(
+              const SizedBox(height: Sp.sm),
+              LedgerButton(
                 label: 'Use a different email',
-                variant: FinnButtonVariant.ghost,
+                variant: LedgerButtonVariant.quiet,
                 expand: true,
                 onPressed: _changeEmail,
               ),
@@ -181,45 +177,43 @@ class _VerifyOtpScreenState extends ConsumerState<VerifyOtpScreen> {
   }
 
   Widget _codeForm(BuildContext context, bool busy) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final hint = ref.watch(authServiceProvider).demoHint;
     return Column(
       key: const ValueKey('form'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AuthHeader(
-          icon: LucideIcons.mailCheck,
-          eyebrow: 'CHECK YOUR INBOX',
           title: 'Enter verification code',
           body: Text.rich(
             TextSpan(
               children: [
                 const TextSpan(text: 'We sent a 6-digit code to '),
-                TextSpan(text: widget.email, style: TextStyle(color: c.primary, fontWeight: FontWeight.w600)),
+                TextSpan(text: widget.email, style: TextStyle(color: c.ink, fontWeight: FontWeight.w600)),
                 const TextSpan(text: '.'),
               ],
             ),
           ),
         ),
-        const SizedBox(height: Space.x8),
+        const SizedBox(height: Sp.xl),
         OtpInput(controller: _code, enabled: !busy, onCompleted: (_) => _verify()),
-        const SizedBox(height: Space.x4),
+        const SizedBox(height: Sp.lg),
         Center(
           child: _cooldown > 0
               ? Padding(
-                  padding: const EdgeInsets.symmetric(vertical: Space.x3),
-                  child: Text('Resend code in 0:${_cooldown.toString().padLeft(2, '0')}', style: t.caption),
+                  padding: const EdgeInsets.symmetric(vertical: Sp.md),
+                  child: Text('Resend code in 0:${_cooldown.toString().padLeft(2, '0')}', style: t.small),
                 )
               : TextButton(
                   onPressed: busy || _resending ? null : _resend,
-                  style: TextButton.styleFrom(minimumSize: const Size(Dimens.minTouch, Dimens.minTouch)),
+                  style: TextButton.styleFrom(foregroundColor: c.ink, textStyle: t.button, minimumSize: const Size(44, 44)),
                   child: Text(_resending ? 'Sending…' : 'Resend code'),
                 ),
         ),
         if (hint != null) ...[
-          const SizedBox(height: Space.x4),
-          InfoBanner(tone: FinnTone.info, icon: LucideIcons.flaskConical, message: hint),
+          const SizedBox(height: Sp.lg),
+          LedgerNote(icon: LucideIcons.flaskConical, text: hint),
         ],
       ],
     );
@@ -235,27 +229,20 @@ class _Outcome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final color = success ? c.positive : c.negative;
+    final c = context.ink;
+    final t = context.type;
     return Semantics(
       liveRegion: true,
       child: Padding(
-        padding: const EdgeInsets.only(top: Space.x12),
+        padding: const EdgeInsets.only(top: Sp.xxl),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            IconTile(
-              icon: success ? LucideIcons.circleCheck : LucideIcons.triangleAlert,
-              background: success ? c.positiveSoft : c.negativeSoft,
-              foreground: color,
-              size: 80,
-              radius: Radii.full,
-              iconSize: 40,
-            ),
-            const SizedBox(height: Space.x6),
-            Semantics(header: true, child: Text(title, style: t.pageTitle.copyWith(color: color), textAlign: TextAlign.center)),
-            const SizedBox(height: Space.x2),
-            Text(message, style: t.body.copyWith(color: c.textSecondary), textAlign: TextAlign.center),
+            Icon(success ? LucideIcons.circleCheck : LucideIcons.triangleAlert, size: 28, color: success ? c.green : c.red),
+            const SizedBox(height: Sp.lg),
+            Semantics(header: true, child: Text(title, style: t.title)),
+            const SizedBox(height: Sp.sm),
+            Text(message, style: t.body.copyWith(color: c.inkSoft)),
           ],
         ),
       ),

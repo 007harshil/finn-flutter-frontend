@@ -54,7 +54,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await openMenu(tester);
-    expect(find.text('Financial overview'), findsOneWidget);
+    expect(inDrawer(find.text('Money')), findsOneWidget);
     await scrollAndTap(tester, inDrawer(find.text('Settings')));
     expect(find.byKey(const ValueKey('app-drawer')), findsNothing, reason: 'the drawer closes before navigating');
     expect(find.byKey(const ValueKey('hide-balances')), findsWidgets);

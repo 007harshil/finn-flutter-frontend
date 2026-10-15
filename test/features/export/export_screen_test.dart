@@ -1,11 +1,13 @@
 import 'dart:convert';
 
 import 'package:finn/design_system/design_system.dart';
+import 'package:finn/kit/kit.dart';
 import 'package:finn/features/export/application/export_controller.dart';
 import 'package:finn/features/export/application/export_file_sink.dart';
 import 'package:finn/features/export/application/export_service.dart';
 import 'package:finn/features/export/presentation/export_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -39,8 +41,16 @@ Future<void> _pump(WidgetTester tester, TestEnv env, _FakeSink sink) async {
   await tester.pumpAndSettle();
 }
 
+Future<Finder> _exportButton(WidgetTester tester) async {
+  final share = find.byIcon(LucideIcons.share2);
+  await tester.scrollUntilVisible(share, 300, scrollable: find.byType(Scrollable).first);
+  await tester.ensureVisible(share);
+  await tester.pumpAndSettle();
+  return find.ancestor(of: share, matching: find.byType(LedgerButton));
+}
+
 Future<void> _runExport(WidgetTester tester) async {
-  await tester.tap(find.byType(FinnButton).last);
+  await tester.tap(await _exportButton(tester));
   await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
   await tester.pump();
   await tester.pump(const Duration(seconds: 5));
@@ -61,7 +71,7 @@ void main() {
     await tester.tap(find.text('Clear all'));
     await tester.pumpAndSettle();
     expect(find.text('Choose at least one thing to export.'), findsOneWidget);
-    final button = tester.widget<FinnButton>(find.byType(FinnButton).last);
+    final button = tester.widget<LedgerButton>(await _exportButton(tester));
     expect(button.onPressed, isNull);
 
     await tester.tap(find.byKey(const ValueKey('module-assets')));

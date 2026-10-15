@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/category_icons.dart';
 import '../application/goal_actions.dart';
 import '../domain/goal.dart';
-import 'savings_widgets.dart';
+import 'savings_widgets.dart' show savingsMoney;
 
 /// Create or edit a savings goal.
 class GoalFormSheet extends ConsumerStatefulWidget {
@@ -31,6 +30,9 @@ class _GoalFormSheetState extends ConsumerState<GoalFormSheet> {
   final _starting = TextEditingController();
   GoalCategory _category = GoalCategory.travel;
   DateTime? _targetDate;
+
+  /// Kept as stored (new goals get the default); the ledger UI does not
+  /// colour goals, so there is no picker for it.
   int _colorIndex = 5;
   Money? _startingValue;
   Map<String, String> _errors = const {};
@@ -69,9 +71,9 @@ class _GoalFormSheetState extends ConsumerState<GoalFormSheet> {
   }
 
   Future<void> _submit() async {
-    final target = AmountField.parse(_target.text);
-    final monthly = _monthly.text.trim().isEmpty ? null : AmountField.parse(_monthly.text);
-    final starting = _starting.text.trim().isEmpty ? null : AmountField.parse(_starting.text);
+    final target = LedgerAmountField.parse(_target.text);
+    final monthly = _monthly.text.trim().isEmpty ? null : LedgerAmountField.parse(_monthly.text);
+    final starting = _starting.text.trim().isEmpty ? null : LedgerAmountField.parse(_starting.text);
     final available = ref.read(balanceProvider).value?.available;
     final local = <String, String>{
       if (_name.text.trim().isEmpty) 'name': 'Give your goal a name.',
@@ -140,38 +142,39 @@ class _GoalFormSheetState extends ConsumerState<GoalFormSheet> {
     final missing = _isEdit && ready && _existing == null;
     return FinnSheetScaffold(
       title: _isEdit ? 'Edit goal' : 'New goal',
-      description: 'Something you\'re saving towards. Money you add is set aside, not spent.',
-      footer: FinnButton(
+      footer: LedgerButton(
         label: _isEdit ? 'Save changes' : 'Create goal',
-        icon: LucideIcons.check,
         expand: true,
-        size: FinnButtonSize.lg,
         loading: _submitting,
         onPressed: _submitting || !ready || missing ? null : _submit,
       ),
       child: !ready
-          ? const SkeletonPulse(child: ListSkeleton(count: 4, padding: EdgeInsets.zero))
+          ? const _FormSkeleton()
           : missing
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(vertical: Space.x6),
-                  child: ErrorState(title: 'Goal not found', message: 'It may have been deleted.'),
-                )
-              : _form(context),
+          ? const LedgerEmpty(title: 'Goal not found', message: 'It may have been deleted.')
+          : _form(context),
     );
   }
 
   Widget _form(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
     final today = ref.watch(todayProvider);
     final available = ref.watch(balanceProvider.select((b) => b.value?.available));
     final startingTooHigh = _startingValue != null && available != null && _startingValue! > available;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        FinnTextField(
+        LedgerAmountField(
+          hero: true,
+          controller: _target,
+          label: 'Target',
+          errorText: _errors['target'],
+          textInputAction: TextInputAction.next,
+          onChanged: (_) => _clearError('target'),
+        ),
+        const SizedBox(height: LedgerForm.gap),
+        LedgerTextField(
           controller: _name,
-          label: 'Goal name',
+          label: 'Name',
           hint: 'e.g. Goa trip with friends',
           errorText: _errors['name'],
           maxLength: 50,
@@ -179,141 +182,82 @@ class _GoalFormSheetState extends ConsumerState<GoalFormSheet> {
           textInputAction: TextInputAction.next,
           onChanged: (_) => _clearError('name'),
         ),
-        const SizedBox(height: Space.x3),
-        Text('Type', style: t.label),
-        const SizedBox(height: Space.x2),
-        FilterChipBar<GoalCategory>(
-          padding: EdgeInsets.zero,
-          multiSelect: false,
-          items: [
-            for (final cat in GoalCategory.values)
-              FilterChipItem(cat, cat.label, icon: CategoryIcons.of(cat.iconKey)),
-          ],
-          selected: {_category},
-          onChanged: (s) => setState(() => _category = s.first),
-        ),
-        const SizedBox(height: Space.x5),
-        AmountField(
-          controller: _target,
-          label: 'Target amount',
-          errorText: _errors['target'],
-          textInputAction: TextInputAction.next,
-          onChanged: (_) => _clearError('target'),
-        ),
-        const SizedBox(height: Space.x5),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: DateField(
-                label: 'Target date (optional)',
-                hint: 'No deadline',
-                value: _targetDate,
-                firstDate: today.add(const Duration(days: 1)),
-                lastDate: DateTime(today.year + 40, today.month, today.day),
-                errorText: _errors['targetDate'],
-                onChanged: (d) => setState(() {
-                  _targetDate = d;
-                  _errors = {..._errors}..remove('targetDate');
-                }),
-              ),
-            ),
-            if (_targetDate != null) ...[
-              const SizedBox(width: Space.x2),
-              FinnIconButton(
-                icon: LucideIcons.x,
-                tooltip: 'Clear target date',
-                onPressed: () => setState(() => _targetDate = null),
-              ),
+        const SizedBox(height: LedgerForm.gap),
+        LedgerField(
+          label: 'Type',
+          child: LedgerChoiceChips<GoalCategory>(
+            options: [
+              for (final cat in GoalCategory.values) LedgerOption(cat, cat.label, icon: CategoryIcons.of(cat.iconKey)),
             ],
-          ],
+            selected: _category,
+            onChanged: (v) => setState(() => _category = v),
+          ),
         ),
-        const SizedBox(height: Space.x5),
-        AmountField(
+        const SizedBox(height: LedgerForm.groupGap),
+        LedgerDateField(
+          label: 'Target date (optional)',
+          hint: 'No deadline',
+          value: _targetDate,
+          firstDate: today.add(const Duration(days: 1)),
+          lastDate: DateTime(today.year + 40, today.month, today.day),
+          errorText: _errors['targetDate'],
+          onClear: () => setState(() => _targetDate = null),
+          onChanged: (d) => setState(() {
+            _targetDate = d;
+            _errors = {..._errors}..remove('targetDate');
+          }),
+        ),
+        const SizedBox(height: LedgerForm.gap),
+        LedgerAmountField(
           controller: _monthly,
           label: 'Monthly plan (optional)',
-          hint: 'How much you plan to add each month',
+          helper: "Used to estimate when you'll get there.",
           errorText: _errors['plannedMonthlyContribution'],
           onChanged: (_) => _clearError('plannedMonthlyContribution'),
         ),
-        const SizedBox(height: Space.x1_5),
-        Text('Used to estimate when you\'ll reach your goal.', style: t.caption),
-        const SizedBox(height: Space.x5),
-        Text('Colour', style: t.label),
-        const SizedBox(height: Space.x2),
-        Wrap(
-          spacing: Space.x2,
-          runSpacing: Space.x2,
-          children: [
-            for (var i = 0; i < AccentSwatches.gradients.length; i++)
-              _Swatch(
-                key: ValueKey('swatch-$i'),
-                index: i,
-                selected: i == _colorIndex,
-                onTap: () => setState(() => _colorIndex = i),
-              ),
-          ],
-        ),
         if (!_isEdit) ...[
-          const SizedBox(height: Space.x5),
-          AmountField(
+          const SizedBox(height: LedgerForm.gap),
+          LedgerAmountField(
             controller: _starting,
-            label: 'Starting amount (optional)',
-            hint: 'Set aside now',
-            errorText: _errors['initialAllocation'],
+            label: 'Set aside now (optional)',
+            helper: available == null
+                ? 'Moves money from your balance into this goal.'
+                : 'Available: ${savingsMoney(context, available)}',
+            errorText:
+                _errors['initialAllocation'] ??
+                (startingTooHigh ? 'More than the ${savingsMoney(context, available)} you have available.' : null),
             onChanged: (m) => setState(() {
               _startingValue = m;
               _errors = {..._errors}..remove('initialAllocation');
             }),
           ),
-          const SizedBox(height: Space.x1_5),
-          Text(
-            available == null
-                ? 'Moves money from your available balance into this goal.'
-                : 'Available to set aside: ${savingsMoney(context, available)}',
-            style: t.caption.copyWith(color: startingTooHigh ? c.negative : null),
-          ),
-          if (startingTooHigh)
-            Text('That is more than you have available.', style: t.caption.copyWith(color: c.negative)),
         ],
       ],
     );
   }
 }
 
-class _Swatch extends StatelessWidget {
-  const _Swatch({super.key, required this.index, required this.selected, required this.onTap});
-
-  final int index;
-  final bool selected;
-  final VoidCallback onTap;
+class _FormSkeleton extends StatelessWidget {
+  const _FormSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
     return Semantics(
-      button: true,
-      selected: selected,
-      label: 'Colour ${index + 1}',
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: SizedBox.square(
-          dimension: Dimens.minTouch,
-          child: Center(
-            child: AnimatedContainer(
-              duration: context.motion.fast,
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                gradient: AccentSwatches.gradient(index),
-                shape: BoxShape.circle,
-                border: Border.all(color: selected ? c.textPrimary : c.surface, width: selected ? 3 : 2),
-              ),
-              child: selected ? const Icon(LucideIcons.check, size: 16, color: Colors.white) : null,
-            ),
-          ),
+      label: 'Loading',
+      child: const ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LedgerSkeleton(width: 80, height: 14),
+            SizedBox(height: Sp.sm),
+            LedgerSkeleton(width: 200, height: 44),
+            SizedBox(height: LedgerForm.gap),
+            LedgerSkeleton(height: 52),
+            SizedBox(height: LedgerForm.gap),
+            LedgerSkeleton(height: 52),
+            SizedBox(height: LedgerForm.gap),
+            LedgerSkeleton(height: 52),
+          ],
         ),
       ),
     );

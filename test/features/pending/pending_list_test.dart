@@ -126,7 +126,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Name A–Z'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OWED TO ME'));
+      await tester.tap(find.text('Owed to me'));
       await tester.pumpAndSettle();
       expect(find.text('Show 5 items'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('pending-apply')));
@@ -176,7 +176,7 @@ void main() {
     await scrollTo(tester, find.byKey(ValueKey(id)));
     await tester.drag(find.byKey(ValueKey(id)), const Offset(260, 0));
     await tester.pumpAndSettle();
-    expect(find.text('OUTSTANDING'), findsOneWidget);
-    expect(find.text('Record money from Priya Nair'), findsOneWidget);
+    expect(find.text('Outstanding'), findsOneWidget);
+    expect(find.text('Record receipt'), findsOneWidget);
   });
 }

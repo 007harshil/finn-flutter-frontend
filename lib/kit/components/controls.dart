@@ -40,7 +40,9 @@ class LedgerButton extends StatelessWidget {
   final bool expand;
   final bool loading;
 
-  /// Overrides the fill (primary) or text colour (quiet). Use sparingly.
+  /// Overrides the fill (primary), text and outline (secondary) or text
+  /// colour (quiet). Use sparingly: `c.red` on a secondary button is the
+  /// destructive action.
   final Color? color;
 
   @override
@@ -50,7 +52,11 @@ class LedgerButton extends StatelessWidget {
     final enabled = onPressed != null && !loading;
     final (Color bg, Color fg, BorderSide side) = switch (variant) {
       LedgerButtonVariant.primary => (color ?? c.ink, c.onInk, BorderSide.none),
-      LedgerButtonVariant.secondary => (c.surface, c.ink, BorderSide(color: c.lineStrong)),
+      LedgerButtonVariant.secondary => (
+          c.surface,
+          color ?? c.ink,
+          BorderSide(color: color?.withValues(alpha: 0.55) ?? c.lineStrong),
+        ),
       LedgerButtonVariant.quiet => (Colors.transparent, color ?? c.ink, BorderSide.none),
     };
     final height = small ? 36.0 : 48.0;

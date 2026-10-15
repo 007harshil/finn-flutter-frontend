@@ -3,19 +3,20 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../kit/tokens.dart';
 import '../motion/motion.dart';
-import '../theme/finn_theme.dart';
-import '../tokens/tokens.dart';
-import 'tone.dart';
+import '../tokens/tokens.dart' show Durations2;
 
-/// Animated emerald checkmark (circle scales in, check draws on).
+/// Quiet success mark: a check in a soft green circle. Static (no
+/// bounce or drawing animation); [onCompleted] fires after the first frame.
 class SuccessCheck extends StatefulWidget {
-  const SuccessCheck({super.key, this.size = 72, this.color, this.onCompleted});
+  const SuccessCheck({super.key, this.size = 56, this.color, this.onCompleted});
 
   final double size;
 
-  /// Defaults to `colors.positive`.
+  /// Defaults to the ledger green.
   final Color? color;
   final VoidCallback? onCompleted;
 
@@ -23,103 +24,29 @@ class SuccessCheck extends StatefulWidget {
   State<SuccessCheck> createState() => _SuccessCheckState();
 }
 
-class _SuccessCheckState extends State<SuccessCheck> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
-  bool _started = false;
-
+class _SuccessCheckState extends State<SuccessCheck> {
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_started) return;
-    _started = true;
-    if (context.reduceMotion) {
-      _controller.value = 1;
-      final done = widget.onCompleted;
-      if (done != null) WidgetsBinding.instance.addPostFrameCallback((_) => done());
-    } else {
-      _controller.forward().whenCompleteOrCancel(() {
-        if (mounted && _controller.isCompleted) widget.onCompleted?.call();
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    final done = widget.onCompleted;
+    if (done != null) WidgetsBinding.instance.addPostFrameCallback((_) => done());
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final color = widget.color ?? c.positive;
+    final c = context.ink;
+    final color = widget.color ?? c.green;
     return Semantics(
       label: 'Success',
       image: true,
-      child: RepaintBoundary(
-        child: SizedBox.square(
-          dimension: widget.size,
-          child: CustomPaint(
-            painter: _CheckPainter(
-              animation: _controller,
-              color: color,
-              halo: color.withValues(alpha: 0.16),
-              checkColor: Colors.white,
-            ),
-          ),
-        ),
+      child: Container(
+        width: widget.size,
+        height: widget.size,
+        decoration: BoxDecoration(color: c.greenSoft, shape: BoxShape.circle),
+        child: Icon(LucideIcons.check, size: widget.size * 0.46, color: color),
       ),
     );
   }
-}
-
-class _CheckPainter extends CustomPainter {
-  _CheckPainter({
-    required this.animation,
-    required this.color,
-    required this.halo,
-    required this.checkColor,
-  }) : super(repaint: animation);
-
-  final Animation<double> animation;
-  final Color color;
-  final Color halo;
-  final Color checkColor;
-
-  static const Interval _circle = Interval(0, 0.5, curve: Curves.easeOutBack);
-  static const Interval _check = Interval(0.35, 1, curve: Curves.easeOutCubic);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final t = animation.value;
-    final circleT = _circle.transform(t);
-    final checkT = _check.transform(t);
-    final center = size.center(Offset.zero);
-    final r = size.shortestSide / 2;
-    canvas.drawCircle(center, r * circleT, Paint()..color = halo);
-    canvas.drawCircle(center, r * 0.76 * circleT, Paint()..color = color);
-    if (checkT <= 0) return;
-    final w = size.width;
-    final h = size.height;
-    final path = Path()
-      ..moveTo(w * 0.34, h * 0.52)
-      ..lineTo(w * 0.45, h * 0.63)
-      ..lineTo(w * 0.67, h * 0.40);
-    final paint = Paint()
-      ..color = checkColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size.shortestSide * 0.07
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    for (final metric in path.computeMetrics()) {
-      canvas.drawPath(metric.extractPath(0, metric.length * checkT), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_CheckPainter old) =>
-      old.animation != animation || old.color != color || old.halo != halo || old.checkColor != checkColor;
 }
 
 /// Shows a brief centred success overlay; completes once it is removed.
@@ -164,12 +91,7 @@ Future<void> showSuccessOverlay(
 }
 
 class _SuccessOverlay extends StatefulWidget {
-  const _SuccessOverlay({
-    required this.title,
-    required this.subtitle,
-    required this.duration,
-    required this.onDone,
-  });
+  const _SuccessOverlay({required this.title, required this.subtitle, required this.duration, required this.onDone});
 
   final String title;
   final String? subtitle;
@@ -181,8 +103,7 @@ class _SuccessOverlay extends StatefulWidget {
 }
 
 class _SuccessOverlayState extends State<_SuccessOverlay> with SingleTickerProviderStateMixin {
-  late final AnimationController _fade =
-      AnimationController(vsync: this, duration: Durations2.normal);
+  late final AnimationController _fade = AnimationController(vsync: this, duration: Durations2.fast);
   Timer? _timer;
   bool _started = false;
   bool _closing = false;
@@ -217,8 +138,8 @@ class _SuccessOverlayState extends State<_SuccessOverlay> with SingleTickerProvi
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final sub = widget.subtitle;
     return FadeTransition(
       opacity: _fade,
@@ -226,34 +147,29 @@ class _SuccessOverlayState extends State<_SuccessOverlay> with SingleTickerProvi
         behavior: HitTestBehavior.opaque,
         onTap: _close,
         child: ColoredBox(
-          color: c.scrim.withValues(alpha: c.scrim.a * 0.5),
+          color: c.scrim,
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.all(Space.x8),
+              padding: const EdgeInsets.all(Sp.xxl),
               child: Material(
                 type: MaterialType.transparency,
                 child: Container(
-                  constraints: const BoxConstraints(maxWidth: 320),
-                  padding: const EdgeInsets.symmetric(horizontal: Space.x6, vertical: Space.x8),
+                  constraints: const BoxConstraints(minWidth: 240, maxWidth: 320),
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.xl, vertical: Sp.xl + Sp.xs),
                   decoration: BoxDecoration(
                     color: c.surface,
-                    borderRadius: Radii.rXxxl,
-                    border: Border.all(color: FinnTone.positive.color(c).withValues(alpha: 0.25), width: 2),
-                    boxShadow: Elevation.xl,
+                    borderRadius: Rad.rLg,
+                    border: Border.all(color: c.line),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const SuccessCheck(size: 88),
-                      const SizedBox(height: Space.x4),
-                      Text(
-                        widget.title,
-                        textAlign: TextAlign.center,
-                        style: t.title.copyWith(fontWeight: FontWeight.w900),
-                      ),
+                      const SuccessCheck(),
+                      const SizedBox(height: Sp.lg),
+                      Text(widget.title, textAlign: TextAlign.center, style: t.heading),
                       if (sub != null) ...[
-                        const SizedBox(height: Space.x1),
-                        Text(sub, textAlign: TextAlign.center, style: t.caption),
+                        const SizedBox(height: Sp.xs),
+                        Text(sub, textAlign: TextAlign.center, style: t.label),
                       ],
                     ],
                   ),

@@ -26,8 +26,8 @@ void main() {
     await scrollAndTap(tester, find.descendant(of: item, matching: find.text('Priya Nair')));
     await tapButton(tester, 'Settle');
     await tester.pumpAndSettle();
-    expect(find.text('OUTSTANDING'), findsOneWidget);
-    await tapButton(tester, 'Record money from Priya Nair'); // "Full" is pre-selected
+    expect(find.text('Outstanding'), findsOneWidget);
+    await tapButton(tester, 'Record receipt'); // "Full" is pre-selected
     await confirmReview(tester);
 
     final after = await env.snapshot();

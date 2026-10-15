@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/result/result.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../application/agent_providers.dart';
 import '../../history/agent_history.dart';
 
@@ -79,72 +79,81 @@ class _AgentHistorySheetState extends ConsumerState<AgentHistorySheet> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     return FinnSheetScaffold(
       title: 'Agent history',
       description: 'What you asked FiNN to do and what was saved. Kept for 180 days and never sent to the AI.',
-      bodyPadding: const EdgeInsets.fromLTRB(0, Space.x2, 0, Space.x5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          FilterChipBar<AgentRunStatus?>(
-            multiSelect: false,
-            padding: const EdgeInsets.symmetric(horizontal: Space.x5),
-            items: [
-              const FilterChipItem(null, 'All'),
-              for (final s in AgentRunStatus.values) FilterChipItem(s, s.label),
-            ],
-            selected: {_filter},
+          LedgerChoiceChips<AgentRunStatus?>(
+            options: [const LedgerOption(null, 'All'), for (final s in AgentRunStatus.values) LedgerOption(s, s.label)],
+            selected: _filter,
             onChanged: (v) {
-              setState(() => _filter = v.firstOrNull);
+              setState(() => _filter = v);
               _load(reset: true);
             },
           ),
-          const SizedBox(height: Space.x3),
+          const SizedBox(height: Sp.lg),
           if (_error != null && _items.isEmpty)
-            ErrorState(message: _error, onRetry: () => _load(reset: true))
+            LedgerEmpty(
+              icon: LucideIcons.cloudOff,
+              title: 'Could not load history',
+              message: _error!,
+              actionLabel: 'Try again',
+              onAction: () => _load(reset: true),
+            )
           else if (_items.isEmpty && _loading)
-            const Padding(padding: EdgeInsets.symmetric(horizontal: Space.x5), child: ListSkeleton())
+            Semantics(
+              label: 'Loading',
+              child: Column(
+                children: [
+                  for (var i = 0; i < 4; i++) ...[const LedgerSkeleton(height: 60), const SizedBox(height: Sp.sm)],
+                ],
+              ),
+            )
           else if (_items.isEmpty)
-            EmptyState(
+            LedgerEmpty(
               icon: LucideIcons.history,
               title: _filter == null ? 'Nothing here yet' : 'No ${_filter!.label.toLowerCase()} requests',
               message: 'Changes you ask the agent to make will appear here.',
             )
           else ...[
-            for (final e in _items)
-              _EntryTile(
-                entry: e,
-                expanded: _expanded.contains(e.id),
-                onTap: () => setState(() => _expanded.contains(e.id) ? _expanded.remove(e.id) : _expanded.add(e.id)),
+            LedgerPanel(
+              children: [
+                for (final e in _items)
+                  _EntryRow(
+                    entry: e,
+                    expanded: _expanded.contains(e.id),
+                    onTap: () =>
+                        setState(() => _expanded.contains(e.id) ? _expanded.remove(e.id) : _expanded.add(e.id)),
+                  ),
+              ],
+            ),
+            if (_nextBefore != null) ...[
+              const SizedBox(height: Sp.md),
+              LedgerButton(
+                label: 'Show older',
+                variant: LedgerButtonVariant.secondary,
+                expand: true,
+                loading: _loading,
+                onPressed: _load,
               ),
-            if (_nextBefore != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Space.x5, Space.x2, Space.x5, 0),
-                child: FinnButton(
-                  label: 'Show older',
-                  variant: FinnButtonVariant.secondary,
-                  loading: _loading,
-                  onPressed: _load,
-                ),
-              ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Space.x5, Space.x2, Space.x5, 0),
-                child: Text(_error!, style: t.caption.copyWith(color: c.negative)),
-              ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Space.x5, Space.x4, Space.x5, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: FinnButton(
-                  label: 'Clear history',
-                  icon: LucideIcons.trash2,
-                  variant: FinnButtonVariant.ghost,
-                  size: FinnButtonSize.sm,
-                  onPressed: _clear,
-                ),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: Sp.sm),
+              Text(_error!, style: t.label.copyWith(color: c.red)),
+            ],
+            const SizedBox(height: Sp.md),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: LedgerButton(
+                label: 'Clear history',
+                icon: LucideIcons.trash2,
+                variant: LedgerButtonVariant.quiet,
+                color: c.inkSoft,
+                onPressed: _clear,
               ),
             ),
           ],
@@ -154,8 +163,8 @@ class _AgentHistorySheetState extends ConsumerState<AgentHistorySheet> {
   }
 }
 
-class _EntryTile extends StatelessWidget {
-  const _EntryTile({required this.entry, required this.expanded, required this.onTap});
+class _EntryRow extends StatelessWidget {
+  const _EntryRow({required this.entry, required this.expanded, required this.onTap});
 
   final AgentHistoryEntry entry;
   final bool expanded;
@@ -175,98 +184,79 @@ class _EntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final (Color tone, IconData icon) = switch (entry.status) {
-      AgentRunStatus.completed => (c.positive, LucideIcons.badgeCheck),
-      AgentRunStatus.partial => (c.warning, LucideIcons.circleAlert),
-      AgentRunStatus.failed => (c.negative, LucideIcons.circleX),
-      AgentRunStatus.declined => (c.textTertiary, LucideIcons.circleSlash),
+      AgentRunStatus.completed => (c.green, LucideIcons.circleCheck),
+      AgentRunStatus.partial => (c.amber, LucideIcons.circleAlert),
+      AgentRunStatus.failed => (c.red, LucideIcons.circleX),
+      AgentRunStatus.declined => (c.inkSoft, LucideIcons.circleSlash),
     };
+    final details = expanded && (entry.operations.isNotEmpty || entry.notes.isNotEmpty);
     return Semantics(
-      button: true,
       expanded: expanded,
-      label: '${entry.request}. ${entry.status.label}. ${entry.summary}',
-      excludeSemantics: !expanded,
-      child: InkWell(
+      child: LedgerRow(
+        title: '"${entry.request}"',
+        titleLines: expanded ? 6 : 2,
+        subtitle: '${_when(entry.createdAt)} · ${entry.summary}',
+        subtitleLines: expanded ? 3 : 1,
+        leading: Icon(icon, size: 20, color: tone),
+        trailing: Icon(expanded ? LucideIcons.chevronUp : LucideIcons.chevronDown, size: 18, color: c.inkSoft),
+        semanticLabel: expanded ? null : '${entry.request}. ${entry.status.label}. ${entry.summary}',
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.x5, vertical: Space.x3),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        below: details
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Padding(padding: const EdgeInsets.only(top: 2), child: Icon(icon, size: 18, color: tone)),
-                  const SizedBox(width: Space.x3),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '"${entry.request}"',
-                          maxLines: expanded ? 6 : 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: t.bodyStrong.copyWith(color: c.textPrimary),
-                        ),
-                        const SizedBox(height: Space.x1),
-                        Text(
-                          '${_when(entry.createdAt)} · ${entry.summary}',
-                          style: t.caption.copyWith(color: c.textSecondary),
-                        ),
-                      ],
+                  for (final op in entry.operations) _OperationLine(op: op),
+                  for (final note in entry.notes)
+                    Padding(
+                      padding: const EdgeInsets.only(top: Sp.xs),
+                      child: Text(note, style: t.label),
                     ),
-                  ),
-                  Icon(expanded ? LucideIcons.chevronUp : LucideIcons.chevronDown, size: 18, color: c.textTertiary),
                 ],
-              ),
-              if (expanded) ...[
-                const SizedBox(height: Space.x2),
-                for (final op in entry.operations) _OperationRow(op: op),
-                for (final note in entry.notes)
-                  Padding(
-                    padding: const EdgeInsets.only(left: Space.x8, top: Space.x1),
-                    child: Text(note, style: t.caption.copyWith(color: c.textSecondary)),
-                  ),
-              ],
-            ],
-          ),
-        ),
+              )
+            : null,
       ),
     );
   }
 }
 
-class _OperationRow extends StatelessWidget {
-  const _OperationRow({required this.op});
+class _OperationLine extends StatelessWidget {
+  const _OperationLine({required this.op});
   final AgentHistoryOperation op;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final (Color tone, String label) = switch (op.status) {
-      'saved' => (c.positive, 'Saved'),
-      'alreadySaved' => (c.positive, 'Already saved'),
-      'declined' => (c.textTertiary, 'Not approved'),
-      'skipped' => (c.textTertiary, 'Skipped'),
-      'changed' => (c.warning, 'Changed before saving'),
-      _ => (c.negative, 'Failed'),
+      'saved' => (c.green, 'Saved'),
+      'alreadySaved' => (c.green, 'Already saved'),
+      'declined' => (c.inkSoft, 'Declined'),
+      'skipped' => (c.inkSoft, 'Skipped'),
+      'changed' => (c.amber, 'Changed before saving'),
+      _ => (c.red, 'Failed'),
     };
     return Padding(
-      padding: const EdgeInsets.only(left: Space.x8, top: Space.x1_5),
+      padding: const EdgeInsets.only(top: Sp.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: Text(op.summary, style: t.body.copyWith(color: c.textPrimary))),
-              const SizedBox(width: Space.x2),
-              Text(label.toUpperCase(), style: t.micro.copyWith(color: tone, fontWeight: FontWeight.w800)),
+              Expanded(
+                child: Text(op.summary, style: t.label.copyWith(color: c.ink)),
+              ),
+              const SizedBox(width: Sp.sm),
+              Text(
+                label,
+                style: t.small.copyWith(color: tone, fontWeight: FontWeight.w600),
+              ),
             ],
           ),
-          if (op.message case final m?) Text(m, style: t.caption.copyWith(color: c.textSecondary)),
+          if (op.message case final m?) Text(m, style: t.small),
         ],
       ),
     );

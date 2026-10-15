@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,11 +9,9 @@ import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/result/result.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../../features/transactions/domain/transaction.dart';
 import '../../../shared/presentation/action_runner.dart';
-import '../../../shared/presentation/category_icons.dart';
-import '../../categories/domain/category.dart';
 import '../application/transaction_actions.dart';
 import '../application/transaction_form_support.dart';
 
@@ -24,7 +20,11 @@ import '../application/transaction_form_support.dart';
 /// Editing loads the transaction first; linked transactions (created by
 /// loans, subscriptions or settlements) cannot be edited here.
 class TransactionFormSheet extends ConsumerWidget {
-  const TransactionFormSheet({super.key, this.transactionId, this.initialType = TransactionType.expense});
+  const TransactionFormSheet({
+    super.key,
+    this.transactionId,
+    this.initialType = TransactionType.expense,
+  });
 
   final String? transactionId;
   final TransactionType initialType;
@@ -32,7 +32,8 @@ class TransactionFormSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final id = transactionId;
-    if (id == null) return _TransactionForm(initial: null, initialType: initialType);
+    if (id == null)
+      return _TransactionForm(initial: null, initialType: initialType);
 
     const title = 'Edit transaction';
     final value = ref.watch(transactionByIdProvider(id));
@@ -40,24 +41,23 @@ class TransactionFormSheet extends ConsumerWidget {
       final e = value.error;
       return FinnSheetScaffold(
         title: title,
-        child: ErrorState(
+        child: LedgerEmpty(
           title: 'Could not load this transaction',
           message: e is AppFailure ? e.message : 'Please try again.',
-          onRetry: () => refreshFinanceData(ref),
+          actionLabel: 'Try again',
+          onAction: () => refreshFinanceData(ref),
         ),
       );
     }
     if (!value.hasValue) {
       return const FinnSheetScaffold(
         title: title,
-        child: SkeletonPulse(
-          child: Column(
-            children: [
-              SkeletonBox(height: 56, radius: Radii.lg),
-              SizedBox(height: Space.x4),
-              SkeletonBox(height: 200, radius: Radii.lg),
-            ],
-          ),
+        child: Column(
+          children: [
+            LedgerSkeleton(height: 56),
+            SizedBox(height: LedgerForm.gap),
+            LedgerSkeleton(height: 200),
+          ],
         ),
       );
     }
@@ -65,30 +65,35 @@ class TransactionFormSheet extends ConsumerWidget {
     if (tx == null) {
       return const FinnSheetScaffold(
         title: title,
-        child: EmptyState(
-          icon: LucideIcons.searchX,
+        child: LedgerEmpty(
           title: 'Transaction not found',
-          message: 'It may have been deleted. Nothing to edit.',
+          message: 'It may have been deleted.',
         ),
       );
     }
     if (tx.isLinked) {
       return FinnSheetScaffold(
         title: title,
-        child: InfoBanner(
+        child: LedgerEmpty(
           title: 'Created by ${tx.origin.label}',
-          message: 'This transaction is linked to another record. Change or reverse it from there so your '
-              'balances stay accurate.',
-          icon: LucideIcons.link2,
+          message: 'Change or reverse it from the linked record to keep balances accurate.',
         ),
       );
     }
-    return _TransactionForm(key: ValueKey(tx.id), initial: tx, initialType: tx.type);
+    return _TransactionForm(
+      key: ValueKey(tx.id),
+      initial: tx,
+      initialType: tx.type,
+    );
   }
 }
 
 class _TransactionForm extends ConsumerStatefulWidget {
-  const _TransactionForm({super.key, required this.initial, required this.initialType});
+  const _TransactionForm({
+    super.key,
+    required this.initial,
+    required this.initialType,
+  });
 
   final Transaction? initial;
   final TransactionType initialType;
@@ -132,14 +137,19 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       _counterparty.text = t.counterparty ?? '';
       _note.text = t.note ?? '';
       final pickable = ref.read(pickableCategoriesProvider(t.type)).value;
-      final usable = pickable == null || pickable.any((c) => c.id == t.categoryId);
+      final usable =
+          pickable == null || pickable.any((c) => c.id == t.categoryId);
       if (usable) {
         _categoryId = t.categoryId;
       } else {
-        _retiredCategoryName = ref.read(categoryProvider(t.categoryId))?.name ?? 'The previous category';
+        _retiredCategoryName =
+            ref.read(categoryProvider(t.categoryId))?.name ??
+            'The previous category';
       }
     } else {
-      _method = ref.read(lastPaymentMethodProvider)[_type] ?? defaultPaymentMethod(_type);
+      _method =
+          ref.read(lastPaymentMethodProvider)[_type] ??
+          defaultPaymentMethod(_type);
     }
   }
 
@@ -154,10 +164,14 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
   void _setType(TransactionType type) {
     setState(() {
       _type = type;
-      final current = _categoryId == null ? null : ref.read(categoryProvider(_categoryId!));
+      final current = _categoryId == null
+          ? null
+          : ref.read(categoryProvider(_categoryId!));
       if (current != null && current.type != type) _categoryId = null;
       if (!_methodTouched) {
-        _method = ref.read(lastPaymentMethodProvider)[type] ?? defaultPaymentMethod(type);
+        _method =
+            ref.read(lastPaymentMethodProvider)[type] ??
+            defaultPaymentMethod(type);
       }
       _errors = Map.of(_errors)..remove('categoryId');
     });
@@ -169,7 +183,9 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
   }
 
   Future<void> _createCategory() async {
-    final created = await context.push<Object?>(AppRoutes.newCategory(type: _type));
+    final created = await context.push<Object?>(
+      AppRoutes.newCategory(type: _type),
+    );
     if (!mounted || created is! String) return;
     setState(() {
       _categoryId = created;
@@ -185,14 +201,16 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
   Future<void> _submit() async {
     if (_submitting) return;
     FocusScope.of(context).unfocus();
-    final amount = AmountField.parse(_amount.text);
+    final amount = LedgerAmountField.parse(_amount.text);
     final local = <String, String>{
-      if (amount == null || !amount.isPositive) 'amount': 'Enter an amount greater than zero.',
+      if (amount == null || !amount.isPositive)
+        'amount': 'Enter an amount greater than zero.',
       if (_categoryId == null) 'categoryId': 'Choose a category.',
     };
     if (local.isNotEmpty) {
       setState(() => _errors = local);
-      if (ref.read(settingsProvider).hapticsEnabled) HapticFeedback.heavyImpact();
+      if (ref.read(settingsProvider).hapticsEnabled)
+        HapticFeedback.heavyImpact();
       return;
     }
     setState(() {
@@ -230,7 +248,11 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
         context,
         ref,
         action: const UpdateTransactionAction(),
-        input: UpdateTransactionInput(id: initial.id, expectedVersion: initial.version, data: data),
+        input: UpdateTransactionInput(
+          id: initial.id,
+          expectedVersion: initial.version,
+          data: data,
+        ),
         idempotencyKey: _key,
         successTitle: 'Changes saved',
         successSubtitle: [amount.format(), ?categoryName].join(' · '),
@@ -248,40 +270,35 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final t = context.type;
     final today = ref.watch(todayProvider);
     final income = _type.isIncome;
     final categories = ref.watch(pickableCategoriesProvider(_type));
-    final submitLabel = _editing ? 'Save changes' : 'Record ${_type.label.toLowerCase()}';
 
     return FinnSheetScaffold(
       title: _editing ? 'Edit transaction' : 'Record transaction',
-      description: _editing
-          ? 'Balances, budgets and insights update automatically.'
-          : 'Money that has already moved in or out.',
-      footer: FinnButton(
-        label: submitLabel,
-        icon: LucideIcons.check,
-        size: FinnButtonSize.lg,
+      footer: LedgerButton(
+        label: _editing
+            ? 'Save changes'
+            : 'Record ${_type.label.toLowerCase()}',
         expand: true,
         loading: _submitting,
-        variant: income ? FinnButtonVariant.positive : FinnButtonVariant.primary,
         onPressed: _submit,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SegmentedTabs<TransactionType>(
-            items: const [
-              SegmentItem(TransactionType.expense, 'Expense'),
-              SegmentItem(TransactionType.income, 'Income'),
+          LedgerSegmented<TransactionType>(
+            segments: const [
+              LedgerSegment(TransactionType.expense, 'Expense'),
+              LedgerSegment(TransactionType.income, 'Income'),
             ],
             selected: _type,
             onChanged: _submitting ? (_) {} : _setType,
           ),
-          const SizedBox(height: Space.x5),
-          AmountField(
+          const SizedBox(height: LedgerForm.gap),
+          LedgerAmountField(
+            hero: true,
             label: 'Amount',
             controller: _amount,
             autofocus: !_editing,
@@ -289,43 +306,54 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
             textInputAction: TextInputAction.next,
             onChanged: (_) => _clearError('amount'),
           ),
-          const SizedBox(height: Space.x5),
-          Text('Category', style: t.label),
-          const SizedBox(height: Space.x1_5),
+          const SizedBox(height: LedgerForm.gap),
           if (_retiredCategoryName != null && _categoryId == null) ...[
-            InfoBanner(
-              tone: FinnTone.warning,
-              message: '$_retiredCategoryName is no longer available. Choose another category to save changes.',
+            LedgerNote(
+              tone: NoteTone.caution,
+              text:
+                  '$_retiredCategoryName is no longer available. Choose another category.',
             ),
-            const SizedBox(height: Space.x2),
+            const SizedBox(height: Sp.sm),
           ],
           switch (categories) {
-            AsyncValue(:final value?) => _CategoryPicker(
-                categories: value,
-                selectedId: _categoryId,
-                onSelected: (id) => setState(() {
-                  _categoryId = id;
-                  _errors = Map.of(_errors)..remove('categoryId');
-                }),
-              ),
-            AsyncValue(hasError: true) => Text('Categories could not be loaded.', style: t.caption),
-            _ => const SkeletonBox(height: 160, radius: Radii.lg),
-          },
-          if (_errors['categoryId'] != null)
-            Padding(
-              padding: const EdgeInsets.only(top: Space.x1_5, left: Space.x1),
-              child: Text(_errors['categoryId']!, style: t.caption.copyWith(color: c.negative)),
+            AsyncValue(:final value?) => LedgerPickerField<String>(
+              label: 'Category',
+              hint: 'Choose a category',
+              searchHint: 'Search categories',
+              value: _categoryId,
+              errorText: _errors['categoryId'],
+              options: [
+                for (final cat in value)
+                  LedgerOption(
+                    cat.id,
+                    cat.name,
+                    key: ValueKey(cat.id),
+                    leading: CategoryMark(category: cat),
+                  ),
+              ],
+              onChanged: (id) => setState(() {
+                _categoryId = id;
+                _errors = Map.of(_errors)..remove('categoryId');
+              }),
             ),
+            AsyncValue(hasError: true) => Text(
+              'Categories could not be loaded.',
+              style: t.label,
+            ),
+            _ => const LedgerSkeleton(height: 52),
+          },
           Align(
             alignment: AlignmentDirectional.centerStart,
-            child: TextButton.icon(
+            child: LedgerButton(
+              label: 'New category',
+              icon: LucideIcons.plus,
+              variant: LedgerButtonVariant.quiet,
+              small: true,
               onPressed: _submitting ? null : _createCategory,
-              icon: const Icon(LucideIcons.plus, size: 16),
-              label: const Text('Create a category'),
             ),
           ),
-          const SizedBox(height: Space.x3),
-          DateField(
+          const SizedBox(height: Sp.sm),
+          LedgerDateField(
             label: 'Date',
             value: _date,
             firstDate: DateTime(2000),
@@ -336,34 +364,40 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
               _errors = Map.of(_errors)..remove('date');
             }),
           ),
-          const SizedBox(height: Space.x5),
-          Text(income ? 'Received via' : 'Paid via', style: t.label),
-          const SizedBox(height: Space.x1),
-          FilterChipBar<PaymentMethod>(
-            padding: EdgeInsets.zero,
-            multiSelect: false,
-            items: [for (final m in PaymentMethod.values) FilterChipItem(m, m.label, icon: _methodIcon(m))],
-            selected: {?_method},
-            onChanged: (s) => setState(() {
-              _method = s.isEmpty ? null : s.first;
-              _methodTouched = true;
-            }),
+          const SizedBox(height: LedgerForm.gap),
+          LedgerField(
+            label: income ? 'Received via' : 'Paid via',
+            child: LedgerChoiceChips<PaymentMethod>(
+              options: [
+                for (final m in PaymentMethod.values)
+                  LedgerOption(m, m.label, icon: _methodIcon(m)),
+              ],
+              selected: _method,
+              onChanged: (m) => setState(() {
+                _method = m;
+                _methodTouched = true;
+              }),
+              onCleared: () => setState(() {
+                _method = null;
+                _methodTouched = true;
+              }),
+            ),
           ),
-          const SizedBox(height: Space.x5),
-          FinnTextField(
+          const SizedBox(height: LedgerForm.gap),
+          LedgerTextField(
             label: income ? 'Received from' : 'Paid to',
-            hint: income ? 'e.g. Employer, client, Priya' : 'e.g. Swiggy, DMart, landlord',
+            hint: income
+                ? 'e.g. Employer, client, Priya'
+                : 'e.g. Swiggy, DMart, landlord',
             controller: _counterparty,
-            prefixIcon: income ? LucideIcons.user : LucideIcons.store,
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
             errorText: _errors['counterparty'],
             onChanged: (_) => _clearError('counterparty'),
           ),
-          const SizedBox(height: Space.x5),
-          FinnTextField(
+          const SizedBox(height: LedgerForm.gap),
+          LedgerTextField(
             label: 'Note (optional)',
-            hint: 'Anything to remember about this',
             controller: _note,
             minLines: 2,
             maxLines: 4,
@@ -378,145 +412,10 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
 }
 
 IconData _methodIcon(PaymentMethod m) => switch (m) {
-      PaymentMethod.upi => LucideIcons.smartphone,
-      PaymentMethod.card => LucideIcons.creditCard,
-      PaymentMethod.cash => LucideIcons.banknote,
-      PaymentMethod.bankTransfer => LucideIcons.landmark,
-      PaymentMethod.wallet => LucideIcons.wallet,
-      PaymentMethod.other => LucideIcons.circleDot,
-    };
-
-/// Searchable grid of category tiles.
-class _CategoryPicker extends StatefulWidget {
-  const _CategoryPicker({required this.categories, required this.selectedId, required this.onSelected});
-
-  final List<TransactionCategory> categories;
-  final String? selectedId;
-  final ValueChanged<String> onSelected;
-
-  @override
-  State<_CategoryPicker> createState() => _CategoryPickerState();
-}
-
-class _CategoryPickerState extends State<_CategoryPicker> {
-  String _query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final q = _query.trim().toLowerCase();
-    final visible = q.isEmpty
-        ? widget.categories
-        : widget.categories
-            .where((c) => c.name.toLowerCase().contains(q) || c.description.toLowerCase().contains(q))
-            .toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (widget.categories.length > 8) ...[
-          FinnSearchField(
-            hint: 'Search categories',
-            debounce: Duration.zero,
-            onChanged: (v) => setState(() => _query = v),
-          ),
-          const SizedBox(height: Space.x2),
-        ],
-        if (visible.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: Space.x6),
-            child: Text('No matching categories', textAlign: TextAlign.center, style: context.text.caption),
-          )
-        else
-          LayoutBuilder(
-            builder: (context, box) {
-              const gap = Space.x2;
-              final cols = math.max(3, (box.maxWidth / 92).floor());
-              final width = (box.maxWidth - gap * (cols - 1)) / cols;
-              return Wrap(
-                spacing: gap,
-                runSpacing: gap,
-                children: [
-                  for (final cat in visible)
-                    SizedBox(
-                      key: ValueKey(cat.id),
-                      width: width,
-                      child: _CategoryTile(
-                        category: cat,
-                        selected: cat.id == widget.selectedId,
-                        onTap: () => widget.onSelected(cat.id),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-      ],
-    );
-  }
-}
-
-class _CategoryTile extends StatelessWidget {
-  const _CategoryTile({required this.category, required this.selected, required this.onTap});
-
-  final TransactionCategory category;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: category.name,
-      excludeSemantics: true,
-      child: InkWell(
-        borderRadius: Radii.rLg,
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
-        child: AnimatedContainer(
-          duration: context.motion.fast,
-          constraints: const BoxConstraints(minHeight: 88),
-          padding: const EdgeInsets.symmetric(horizontal: Space.x1, vertical: Space.x2),
-          decoration: BoxDecoration(
-            color: selected ? c.surfaceMuted : c.surface,
-            borderRadius: Radii.rLg,
-            border: Border.all(color: selected ? c.primary : c.border, width: selected ? 2 : 1),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  CategoryAvatar(category: category, size: 36),
-                  if (selected)
-                    Positioned(
-                      right: -6,
-                      top: -6,
-                      child: Container(
-                        decoration: BoxDecoration(color: c.surface, shape: BoxShape.circle),
-                        child: Icon(LucideIcons.circleCheck, size: 16, color: c.primary),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: Space.x1_5),
-              Text(
-                category.name,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: context.text.micro.copyWith(
-                  color: c.textPrimary,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+  PaymentMethod.upi => LucideIcons.smartphone,
+  PaymentMethod.card => LucideIcons.creditCard,
+  PaymentMethod.cash => LucideIcons.banknote,
+  PaymentMethod.bankTransfer => LucideIcons.landmark,
+  PaymentMethod.wallet => LucideIcons.wallet,
+  PaymentMethod.other => LucideIcons.circleDot,
+};

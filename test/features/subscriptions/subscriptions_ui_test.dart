@@ -69,7 +69,7 @@ void main() {
     await sized(tester);
     await env.pumpWidget(tester, const SubscriptionFormSheet());
     await tester.pumpAndSettle();
-    expect(find.text('Add a subscription'), findsOneWidget);
+    expect(find.text('New subscription'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     final sub = await byName('Spotify Premium');

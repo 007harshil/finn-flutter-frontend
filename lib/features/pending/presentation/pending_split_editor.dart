@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../domain/pending_payment.dart';
 import 'pending_ui.dart';
 
@@ -12,7 +11,12 @@ import 'pending_ui.dart';
 /// their value.
 @immutable
 class SplitSlot {
-  const SplitSlot({required this.key, required this.name, required this.controller, this.isMe = false});
+  const SplitSlot({
+    required this.key,
+    required this.name,
+    required this.controller,
+    this.isMe = false,
+  });
 
   /// Stable id for keys: `me` or the person's slot id.
   final String key;
@@ -43,13 +47,21 @@ List<String> defaultSplitValues(SplitMethod method, int count, Money? total) {
       return List.filled(count, '1');
     case SplitMethod.percent:
       return [
-        for (final bps in SplitCalculator.compute(const Money.fromPaise(10000), SplitMethod.equally, List.filled(count, 0)).shares)
+        for (final bps in SplitCalculator.compute(
+          const Money.fromPaise(10000),
+          SplitMethod.equally,
+          List.filled(count, 0),
+        ).shares)
           formatSplitPercent(bps.paise).replaceAll('%', ''),
       ];
     case SplitMethod.exact:
       if (total == null || !total.isPositive) return List.filled(count, '');
       return [
-        for (final m in SplitCalculator.compute(total, SplitMethod.equally, List.filled(count, 0)).shares)
+        for (final m in SplitCalculator.compute(
+          total,
+          SplitMethod.equally,
+          List.filled(count, 0),
+        ).shares)
           MoneyFormatter.editable(m),
       ];
   }
@@ -87,81 +99,66 @@ class PendingSplitEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final values = [for (final s in slots) parseSplitValue(s.controller.text, method)];
+    final c = context.ink;
+    final values = [
+      for (final s in slots) parseSplitValue(s.controller.text, method),
+    ];
     final SplitOutcome? outcome = total == null
         ? null
         : (values.contains(null)
-            ? const SplitOutcome.invalid('Some values are not numbers.')
-            : SplitCalculator.compute(total!, method, values.cast<int>()));
+              ? const SplitOutcome.invalid('Some values are not numbers.')
+              : SplitCalculator.compute(total!, method, values.cast<int>()));
     final shares = outcome != null && outcome.isValid ? outcome.shares : null;
     final hasMe = slots.isNotEmpty && slots.first.isMe;
-    final others = shares == null ? null : Money.sum(hasMe ? shares.skip(1) : shares);
-    final error = errorText ?? (outcome?.isValid == false ? outcome!.error : null);
+    final others = shares == null
+        ? null
+        : Money.sum(hasMe ? shares.skip(1) : shares);
+    final error =
+        errorText ?? (outcome?.isValid == false ? outcome!.error : null);
 
     return Column(
       key: const ValueKey('pending-split-editor'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const PendingFieldLabel('Split'),
-        Wrap(
-          spacing: Space.x2,
-          runSpacing: Space.x2,
-          children: [
-            for (final m in SplitMethod.values)
-              FinnTapChip(
-                key: ValueKey('split-method:${m.name}'),
-                label: m.label,
-                selected: m == method,
-                color: m == method ? c.accentPending : null,
-                height: 34,
-                semantics: 'Split ${m.label.toLowerCase()}',
-                onTap: () {
-                  if (m == method) return;
-                  HapticFeedback.selectionClick();
-                  onMethod(m);
-                },
-              ),
-          ],
-        ),
-        const SizedBox(height: Space.x1_5),
-        Text(method.hint, style: t.micro),
-        if (onIncludeMe != null) ...[
-          const SizedBox(height: Space.x3),
-          MergeSemantics(
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Include me', style: t.bodyStrong),
-                      Text(
-                        includeMe
-                            ? 'You had a part too. Your share stays with you; only the others owe you.'
-                            : 'You only paid. The whole bill is split between the others.',
-                        style: t.caption,
-                      ),
-                    ],
-                  ),
+        LedgerField(
+          label: 'Split',
+          helper: method.hint,
+          child: LedgerChoiceChips<SplitMethod>(
+            options: [
+              for (final m in SplitMethod.values)
+                LedgerOption(
+                  m,
+                  m.label,
+                  key: ValueKey('split-method:${m.name}'),
                 ),
-                Switch(key: const ValueKey('split-include-me'), value: includeMe, onChanged: onIncludeMe),
-              ],
-            ),
+            ],
+            selected: method,
+            onChanged: onMethod,
+          ),
+        ),
+        if (onIncludeMe != null) ...[
+          const SizedBox(height: Sp.md),
+          LedgerSwitchRow(
+            key: const ValueKey('split-include-me'),
+            title: 'Include me',
+            subtitle: includeMe
+                ? 'You had a part too. Only the others owe you.'
+                : 'You only paid. The bill is split between the others.',
+            value: includeMe,
+            onChanged: onIncludeMe!,
           ),
         ],
-        const SizedBox(height: Space.x3),
+        const SizedBox(height: Sp.md),
         DecoratedBox(
           decoration: BoxDecoration(
             color: c.surface,
-            borderRadius: Radii.rLg,
-            border: Border.all(color: error != null ? c.warning : c.border),
+            borderRadius: Rad.rLg,
+            border: Border.all(color: error != null ? c.red : c.line),
           ),
           child: Column(
             children: [
               for (var i = 0; i < slots.length; i++) ...[
-                if (i > 0) const FinnDivider(indent: Space.x3 + 32 + Space.x3),
+                if (i > 0) const LedgerDivider(indent: Sp.lg),
                 _SlotRow(
                   slot: slots[i],
                   method: method,
@@ -172,7 +169,7 @@ class PendingSplitEditor extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: Space.x2),
+        const SizedBox(height: Sp.sm),
         _Summary(
           key: const ValueKey('split-summary'),
           error: error,
@@ -188,22 +185,29 @@ class PendingSplitEditor extends StatelessWidget {
   }
 
   String _summary(List<Money> shares, List<int> values) => switch (method) {
-        SplitMethod.equally => shares.toSet().length == 1
-            ? '${shares.first.format()} each'
-            : 'About ${shares.last.format()} each (paise rounded)',
-        SplitMethod.exact => 'Adds up to ${total!.format()}',
-        SplitMethod.percent => 'Adds up to 100%',
-        SplitMethod.shares => () {
-            final n = values.fold<int>(0, (a, b) => a + b);
-            return '$n ${n == 1 ? 'share' : 'shares'} · '
-                '${Money.fromPaise((total!.paise / n).round()).format()} per share';
-          }(),
-        SplitMethod.adjustment => 'Equal part, then each adjustment added or taken off',
-      };
+    SplitMethod.equally =>
+      shares.toSet().length == 1
+          ? '${shares.first.format()} each'
+          : 'About ${shares.last.format()} each (paise rounded)',
+    SplitMethod.exact => 'Adds up to ${total!.format()}',
+    SplitMethod.percent => 'Adds up to 100%',
+    SplitMethod.shares => () {
+      final n = values.fold<int>(0, (a, b) => a + b);
+      return '$n ${n == 1 ? 'share' : 'shares'} · '
+          '${Money.fromPaise((total!.paise / n).round()).format()} per share';
+    }(),
+    SplitMethod.adjustment =>
+      'Equal part, then each adjustment added or taken off',
+  };
 }
 
 class _SlotRow extends StatelessWidget {
-  const _SlotRow({required this.slot, required this.method, required this.share, required this.onChanged});
+  const _SlotRow({
+    required this.slot,
+    required this.method,
+    required this.share,
+    required this.onChanged,
+  });
 
   final SplitSlot slot;
   final SplitMethod method;
@@ -212,8 +216,8 @@ class _SlotRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final (prefix, suffix, hint) = switch (method) {
       SplitMethod.exact => ('₹', null, '0'),
       SplitMethod.adjustment => ('±₹', null, '0'),
@@ -226,70 +230,87 @@ class _SlotRow extends StatelessWidget {
       SplitMethod.adjustment => RegExp(r'[0-9.\-−]'),
       _ => RegExp(r'[0-9.]'),
     };
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Space.x3, vertical: Space.x2),
-      child: Row(
-        children: [
-          PendingAvatar(name: slot.isMe ? 'Me' : slot.name, color: slot.isMe ? c.textSecondary : c.accentPending, size: 32),
-          const SizedBox(width: Space.x3),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  slot.isMe ? 'You' : slot.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.body.copyWith(fontWeight: FontWeight.w700),
-                ),
-                Text(slot.isMe ? 'Your share · not owed' : 'Share', style: t.micro),
-              ],
+    OutlineInputBorder edge(Color color, [double width = 1]) =>
+        OutlineInputBorder(
+          borderRadius: Rad.rMd,
+          borderSide: BorderSide(color: color, width: width),
+        );
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 56),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.sm),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    slot.isMe ? 'You' : slot.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.bodyStrong,
+                  ),
+                  if (slot.isMe) Text('Your share, not owed', style: t.small),
+                ],
+              ),
             ),
-          ),
-          if (method.takesValues) ...[
-            const SizedBox(width: Space.x2),
+            if (method.takesValues) ...[
+              const SizedBox(width: Sp.sm),
+              SizedBox(
+                width: 92,
+                child: TextField(
+                  key: ValueKey('split-value:${slot.key}'),
+                  controller: slot.controller,
+                  onChanged: (_) => onChanged(),
+                  keyboardType: TextInputType.numberWithOptions(
+                    decimal: method != SplitMethod.shares,
+                    signed: method == SplitMethod.adjustment,
+                  ),
+                  inputFormatters: [FilteringTextInputFormatter.allow(allowed)],
+                  textAlign: TextAlign.end,
+                  cursorColor: c.ink,
+                  style: t.bodyStrong,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: c.paper,
+                    hintText: hint,
+                    hintStyle: t.body.copyWith(color: c.inkSoft),
+                    prefixText: prefix,
+                    suffixText: suffix,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: Sp.sm + 2,
+                      vertical: Sp.md,
+                    ),
+                    border: edge(c.line),
+                    enabledBorder: edge(c.line),
+                    focusedBorder: edge(c.ink, 1.5),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(width: Sp.md),
             SizedBox(
-              width: 92,
-              child: TextField(
-                key: ValueKey('split-value:${slot.key}'),
-                controller: slot.controller,
-                onChanged: (_) => onChanged(),
-                keyboardType: TextInputType.numberWithOptions(
-                  decimal: method != SplitMethod.shares,
-                  signed: method == SplitMethod.adjustment,
-                ),
-                inputFormatters: [FilteringTextInputFormatter.allow(allowed)],
-                textAlign: TextAlign.end,
-                style: t.bodyStrong,
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: hint,
-                  prefixText: prefix,
-                  suffixText: suffix,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: Space.x2, vertical: Space.x2),
-                  border: OutlineInputBorder(borderRadius: Radii.rMd, borderSide: BorderSide(color: c.border)),
-                ),
+              width: 84,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: share == null
+                    ? Text('—', style: t.bodyStrong.copyWith(color: c.inkFaint))
+                    : FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: AmountText(
+                          share!,
+                          key: ValueKey('split-share:${slot.key}'),
+                          style: t.figureSmall.copyWith(
+                            color: slot.isMe ? c.inkSoft : c.ink,
+                          ),
+                        ),
+                      ),
               ),
             ),
           ],
-          const SizedBox(width: Space.x3),
-          SizedBox(
-            width: 84,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: share == null
-                  ? Text('—', style: t.bodyStrong.copyWith(color: c.textTertiary))
-                  : FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: AmountText(
-                        share!,
-                        key: ValueKey('split-share:${slot.key}'),
-                        style: t.amountSmall.copyWith(color: slot.isMe ? c.textSecondary : c.textPrimary),
-                      ),
-                    ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -313,44 +334,31 @@ class _Summary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     if (error != null) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(LucideIcons.triangleAlert, size: 14, color: c.warning),
-          const SizedBox(width: Space.x1_5),
-          Expanded(
-            child: Text(error!, style: t.caption.copyWith(color: c.warning, fontWeight: FontWeight.w700)),
-          ),
-        ],
+      return Semantics(
+        liveRegion: true,
+        child: Text(error!, style: t.small.copyWith(color: c.red)),
       );
     }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(others == null ? LucideIcons.info : LucideIcons.circleCheck,
-            size: 14, color: others == null ? c.textTertiary : c.positive),
-        const SizedBox(width: Space.x1_5),
-        Expanded(
-          child: Text.rich(
+    return Text.rich(
+      TextSpan(
+        children: [
+          if (line != null) TextSpan(text: line),
+          if (others != null)
             TextSpan(
-              children: [
-                if (line != null) TextSpan(text: line),
-                if (others != null)
-                  TextSpan(
-                    text: direction.isOwe
-                        ? ' · You owe ${others!.format()} to $count people'
-                        : ' · $count people owe you ${others!.format()}',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-              ],
+              text: direction.isOwe
+                  ? ' · You owe ${others!.format()} to $count people'
+                  : ' · $count people owe you ${others!.format()}',
+              style: t.small.copyWith(
+                color: c.ink,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            style: t.caption,
-          ),
-        ),
-      ],
+        ],
+      ),
+      style: t.small,
     );
   }
 }

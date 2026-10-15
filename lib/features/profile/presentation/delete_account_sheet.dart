@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../auth/application/account_deletion.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/auth_session.dart';
@@ -17,14 +17,20 @@ Future<void> startAccountDeletion(BuildContext context) async {
   final ok = await showFinnConfirm(
     context,
     title: 'Delete your account?',
-    message: 'This permanently deletes your FiNN account and everything in it: transactions, budgets, '
+    message:
+        'This permanently deletes your FiNN account and everything in it: transactions, budgets, '
         'goals, loans, subscriptions, pending items, assets and settings. Items you shared with '
         'other people are removed from their lists too. This cannot be undone.',
     confirmLabel: 'Continue',
     destructive: true,
   );
   if (!ok || !context.mounted) return;
-  await showFinnSheet<void>(context, isDismissible: false, enableDrag: false, builder: (_) => const DeleteAccountSheet());
+  await showFinnSheet<void>(
+    context,
+    isDismissible: false,
+    enableDrag: false,
+    builder: (_) => const DeleteAccountSheet(),
+  );
 }
 
 /// Code entry for account deletion. Sends the code when it opens.
@@ -61,8 +67,8 @@ class _DeleteAccountSheetState extends ConsumerState<DeleteAccountSheet> {
   }
 
   void _onCodeChanged() => setState(() {
-        if (_code.text.length < otpLength) _error = null;
-      });
+    if (_code.text.length < otpLength) _error = null;
+  });
 
   void _startCooldown() {
     _ticker?.cancel();
@@ -103,14 +109,20 @@ class _DeleteAccountSheetState extends ConsumerState<DeleteAccountSheet> {
     final navigator = Navigator.of(context);
     final messenger = context;
     try {
-      await ref.read(accountDeletionProvider).confirm(
-        code,
-        onDeleted: () {
-          // Before signing out redirects to the login screen.
-          FinnToast.success(messenger, 'Account deleted', subtitle: 'All of your data has been erased.');
-          navigator.pop();
-        },
-      );
+      await ref
+          .read(accountDeletionProvider)
+          .confirm(
+            code,
+            onDeleted: () {
+              // Before signing out redirects to the login screen.
+              FinnToast.success(
+                messenger,
+                'Account deleted',
+                subtitle: 'All of your data has been erased.',
+              );
+              navigator.pop();
+            },
+          );
     } on AuthFailure catch (e) {
       if (!mounted) return;
       setState(() {
@@ -122,8 +134,8 @@ class _DeleteAccountSheetState extends ConsumerState<DeleteAccountSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final email = ref.watch(authControllerProvider)?.email ?? '';
     final hint = ref.watch(authServiceProvider).demoHint;
     final busy = _deleting;
@@ -132,14 +144,15 @@ class _DeleteAccountSheetState extends ConsumerState<DeleteAccountSheet> {
     return FinnSheetScaffold(
       title: 'Confirm account deletion',
       onClose: busy ? () {} : null,
-      footer: FinnButton(
+      footer: LedgerButton(
         key: const ValueKey('confirm-delete-account'),
         label: 'Delete account permanently',
-        icon: LucideIcons.trash2,
-        variant: FinnButtonVariant.destructive,
+        color: c.red,
         expand: true,
         loading: busy,
-        onPressed: _sent && isWellFormedOtp(_code.text) && !busy ? _delete : null,
+        onPressed: _sent && isWellFormedOtp(_code.text) && !busy
+            ? _delete
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -147,47 +160,66 @@ class _DeleteAccountSheetState extends ConsumerState<DeleteAccountSheet> {
           Text.rich(
             TextSpan(
               children: [
-                TextSpan(text: _sent ? 'We sent a 6-digit code to ' : 'Sending a 6-digit code to '),
-                TextSpan(text: email.isEmpty ? 'your email' : email, style: TextStyle(color: c.primary, fontWeight: FontWeight.w600)),
-                const TextSpan(text: '. Enter it to delete your account and all of its data.'),
+                TextSpan(
+                  text: _sent
+                      ? 'We sent a 6-digit code to '
+                      : 'Sending a 6-digit code to ',
+                ),
+                TextSpan(
+                  text: email.isEmpty ? 'your email' : email,
+                  style: TextStyle(color: c.ink, fontWeight: FontWeight.w600),
+                ),
+                const TextSpan(
+                  text:
+                      '. Enter it to delete your account and all of its data.',
+                ),
               ],
             ),
-            style: t.body.copyWith(color: c.textSecondary),
+            style: t.body.copyWith(color: c.inkSoft),
           ),
-          const SizedBox(height: Space.x6),
+          const SizedBox(height: Sp.xl),
           OtpInput(
             controller: _code,
             enabled: _sent && !busy,
             hasError: error != null,
             onCompleted: (_) => _delete(),
           ),
-          const SizedBox(height: Space.x3),
+          const SizedBox(height: Sp.md),
           Center(
             child: _cooldown > 0
                 ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: Space.x3),
-                    child: Text('Resend code in ${_cooldown ~/ 60}:${(_cooldown % 60).toString().padLeft(2, '0')}', style: t.caption),
+                    padding: const EdgeInsets.symmetric(vertical: Sp.md),
+                    child: Text(
+                      'Resend code in ${_cooldown ~/ 60}:${(_cooldown % 60).toString().padLeft(2, '0')}',
+                      style: t.label,
+                    ),
                   )
-                : TextButton(
+                : LedgerButton(
                     key: const ValueKey('resend-delete-code'),
+                    label: _sending
+                        ? 'Sending…'
+                        : (_sent ? 'Resend code' : 'Send code'),
+                    variant: LedgerButtonVariant.quiet,
                     onPressed: busy || _sending ? null : _send,
-                    style: TextButton.styleFrom(minimumSize: const Size(Dimens.minTouch, Dimens.minTouch)),
-                    child: Text(_sending ? 'Sending…' : (_sent ? 'Resend code' : 'Send code')),
                   ),
           ),
           if (error != null) ...[
-            const SizedBox(height: Space.x3),
-            InfoBanner(tone: FinnTone.negative, icon: LucideIcons.circleAlert, message: error),
+            const SizedBox(height: Sp.md),
+            LedgerNote(
+              icon: LucideIcons.circleAlert,
+              tone: NoteTone.alert,
+              text: error,
+            ),
           ],
-          const SizedBox(height: Space.x3),
-          InfoBanner(
-            tone: FinnTone.warning,
+          const SizedBox(height: Sp.md),
+          const LedgerNote(
             icon: LucideIcons.triangleAlert,
-            message: 'This cannot be undone. You can sign up again with the same email, but you will start with an empty account.',
+            tone: NoteTone.caution,
+            text: 'This cannot be undone. You can sign up again with the same email, but you will start with an empty account.',
           ),
           if (hint != null) ...[
-            const SizedBox(height: Space.x3),
-            InfoBanner(tone: FinnTone.info, icon: LucideIcons.flaskConical, message: hint),
+            const SizedBox(height: Sp.md),
+            LedgerNote(text: hint),
           ],
         ],
       ),

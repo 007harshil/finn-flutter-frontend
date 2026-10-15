@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../design_system/design_system.dart';
+import '../../design_system/design_system.dart' show Curves2, MotionX;
+import '../../kit/components/sheets.dart' show LedgerSheet;
+import '../../kit/tokens.dart';
 
 /// A go_router page that presents its child as a modal bottom sheet, so
 /// forms keep sheet ergonomics while remaining addressable by URL.
@@ -11,7 +13,7 @@ class SheetPage<T> extends Page<T> {
 
   @override
   Route<T> createRoute(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
     return ModalBottomSheetRoute<T>(
       settings: this,
       isScrollControlled: true,
@@ -19,10 +21,9 @@ class SheetPage<T> extends Page<T> {
       showDragHandle: false,
       backgroundColor: c.surface,
       modalBarrierColor: c.scrim,
-      constraints: const BoxConstraints(maxWidth: Space.maxContentWidth),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xxxl)),
-      ),
+      elevation: 0,
+      constraints: const BoxConstraints(maxWidth: LedgerSheet.maxWidth),
+      shape: LedgerSheet.shape,
       clipBehavior: Clip.antiAlias,
       builder: (_) => child,
     );
@@ -32,18 +33,18 @@ class SheetPage<T> extends Page<T> {
 /// Subtle fade + scale transition for full-screen pages.
 class FadeScalePage<T> extends CustomTransitionPage<T> {
   FadeScalePage({required super.child, super.key, super.name})
-      : super(
-          transitionDuration: const Duration(milliseconds: 300),
-          reverseTransitionDuration: const Duration(milliseconds: 240),
-          transitionsBuilder: (context, animation, secondary, child) {
-            if (context.reduceMotion) return child;
-            final curved = CurvedAnimation(parent: animation, curve: Curves2.emphasized, reverseCurve: Curves2.exit);
-            return FadeTransition(
-              opacity: curved,
-              child: ScaleTransition(scale: Tween(begin: 0.96, end: 1.0).animate(curved), child: child),
-            );
-          },
-        );
+    : super(
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 240),
+        transitionsBuilder: (context, animation, secondary, child) {
+          if (context.reduceMotion) return child;
+          final curved = CurvedAnimation(parent: animation, curve: Curves2.emphasized, reverseCurve: Curves2.exit);
+          return FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(scale: Tween(begin: 0.96, end: 1.0).animate(curved), child: child),
+          );
+        },
+      );
 }
 
 /// Minimal copy of go_router's CustomTransitionPage contract so this file
@@ -65,10 +66,10 @@ class CustomTransitionPage<T> extends Page<T> {
 
   @override
   Route<T> createRoute(BuildContext context) => PageRouteBuilder<T>(
-        settings: this,
-        transitionDuration: transitionDuration,
-        reverseTransitionDuration: reverseTransitionDuration,
-        pageBuilder: (_, _, _) => child,
-        transitionsBuilder: transitionsBuilder,
-      );
+    settings: this,
+    transitionDuration: transitionDuration,
+    reverseTransitionDuration: reverseTransitionDuration,
+    pageBuilder: (_, _, _) => child,
+    transitionsBuilder: transitionsBuilder,
+  );
 }

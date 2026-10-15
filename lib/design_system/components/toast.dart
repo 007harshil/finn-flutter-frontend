@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
+import '../../kit/tokens.dart';
 import '../motion/motion.dart';
-import '../theme/finn_theme.dart';
-import '../tokens/tokens.dart';
-import 'tiles.dart';
+import '../tokens/tokens.dart' show Curves2, Durations2;
 import 'tone.dart';
 
-/// Top-centre overlay toasts. Only one is visible at a time.
+/// Top-centre overlay toasts in the ledger look: a quiet panel with one
+/// meaning-coloured icon. Only one is visible at a time.
 abstract final class FinnToast {
   static OverlayEntry? _current;
 
@@ -67,8 +67,7 @@ abstract final class FinnToast {
             tone: tone,
             title: title,
             subtitle: subtitle,
-            duration: duration ??
-                (tone == FinnTone.negative ? const Duration(seconds: 4) : const Duration(seconds: 3)),
+            duration: duration ?? (tone == FinnTone.negative ? const Duration(seconds: 4) : const Duration(seconds: 3)),
             onDismissed: () {
               if (entry.mounted) entry.remove();
               if (identical(_current, entry)) _current = null;
@@ -114,10 +113,16 @@ class _ToastView extends StatefulWidget {
 }
 
 class _ToastViewState extends State<_ToastView> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller =
-      AnimationController(vsync: this, duration: Durations2.slow, reverseDuration: Durations2.normal);
-  late final CurvedAnimation _curve =
-      CurvedAnimation(parent: _controller, curve: Curves2.emphasized, reverseCurve: Curves2.exit);
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: Durations2.normal,
+    reverseDuration: Durations2.fast,
+  );
+  late final CurvedAnimation _curve = CurvedAnimation(
+    parent: _controller,
+    curve: Curves2.standard,
+    reverseCurve: Curves2.exit,
+  );
   Timer? _timer;
   double _drag = 0;
   bool _closing = false;
@@ -155,43 +160,42 @@ class _ToastViewState extends State<_ToastView> with SingleTickerProviderStateMi
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final accent = widget.tone.color(c);
+    final c = context.ink;
+    final t = context.type;
+    final accent = switch (widget.tone) {
+      FinnTone.positive => c.green,
+      FinnTone.negative => c.red,
+      FinnTone.warning => c.amber,
+      FinnTone.info => c.inkSoft,
+    };
     final sub = widget.subtitle;
     final card = Container(
-      padding: const EdgeInsets.all(Space.x3),
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md + 2, Sp.lg, Sp.md + 2),
       decoration: BoxDecoration(
-        color: Color.alphaBlend(widget.tone.soft(c), c.surface),
-        borderRadius: Radii.rXxxl,
-        border: Border.all(color: accent.withValues(alpha: 0.35), width: 2),
-        boxShadow: c.isDark ? Elevation.lg : Elevation.xl,
+        color: c.surface,
+        borderRadius: Rad.rMd,
+        border: Border.all(color: c.lineStrong),
+        boxShadow: c.isDark
+            ? null
+            : [BoxShadow(color: c.ink.withValues(alpha: 0.08), offset: const Offset(0, 4), blurRadius: 16)],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconTile(
-            icon: widget.tone.icon,
-            background: accent,
-            foreground: Colors.white,
-            size: 44,
-            radius: Radii.lg + 2,
-            iconSize: 22,
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(widget.tone.icon, size: 20, color: accent),
           ),
-          const SizedBox(width: Space.x3),
+          const SizedBox(width: Sp.md),
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.title,
-                  style: t.bodyStrong.copyWith(fontWeight: FontWeight.w900),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Text(widget.title, style: t.bodyStrong, maxLines: 2, overflow: TextOverflow.ellipsis),
                 if (sub != null) ...[
-                  const SizedBox(height: Space.x0_5),
-                  Text(sub, style: t.caption, maxLines: 3, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 2),
+                  Text(sub, style: t.label, maxLines: 3, overflow: TextOverflow.ellipsis),
                 ],
               ],
             ),
@@ -207,7 +211,7 @@ class _ToastViewState extends State<_ToastView> with SingleTickerProviderStateMi
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.gutter, vertical: Space.x2),
+          padding: const EdgeInsets.symmetric(horizontal: Sp.gutter, vertical: Sp.sm),
           child: Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
@@ -215,7 +219,7 @@ class _ToastViewState extends State<_ToastView> with SingleTickerProviderStateMi
               child: AnimatedBuilder(
                 animation: _curve,
                 builder: (context, child) => Transform.translate(
-                  offset: Offset(0, -24 * (1 - _curve.value) + _drag),
+                  offset: Offset(0, -8 * (1 - _curve.value) + _drag),
                   child: Opacity(opacity: _curve.value.clamp(0.0, 1.0), child: child),
                 ),
                 child: GestureDetector(

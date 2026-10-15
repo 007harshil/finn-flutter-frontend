@@ -6,10 +6,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
-import '../../../core/money/money_format.dart';
 import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
+import '../../profile/presentation/profile_avatar.dart';
 import '../application/data_reset.dart';
 import '../domain/app_settings.dart';
 import '../domain/financial_profile.dart';
@@ -21,32 +21,17 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sections = <Widget>[
-      const _ProfileCard(),
-      const _AppearanceGroup(),
-      const _PrivacyGroup(),
-      const _MoneyGroup(),
-      const _DataGroup(),
-      const _Footer(),
-    ];
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: CustomScrollView(
-        key: const PageStorageKey('settings'),
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(0, Space.x2, 0, Space.x10),
-            sliver: SliverList.separated(
-              itemCount: sections.length,
-              separatorBuilder: (_, _) => const SizedBox(height: Space.section),
-              itemBuilder: (context, i) => ResponsiveCenter(
-                padding: const EdgeInsets.symmetric(horizontal: Space.gutter),
-                child: StaggeredEntrance(index: i, child: sections[i]),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return const LedgerPage(
+      storageKey: 'settings',
+      appBar: LedgerAppBar(title: 'Settings'),
+      slivers: [
+        PageBlock(top: Sp.xl, child: _ProfileRow()),
+        PageBlock(top: Sp.section, child: _AppearanceGroup()),
+        PageBlock(top: Sp.section, child: _PrivacyGroup()),
+        PageBlock(top: Sp.section, child: _MoneyGroup()),
+        PageBlock(top: Sp.section, child: _DataGroup()),
+        PageBlock(top: Sp.section, bottom: Sp.xl, child: _Footer()),
+      ],
     );
   }
 }
@@ -65,61 +50,31 @@ String _ordinal(int n) {
 // Profile
 // ---------------------------------------------------------------------------
 
-class _ProfileCard extends ConsumerWidget {
-  const _ProfileCard();
+class _ProfileRow extends ConsumerWidget {
+  const _ProfileRow();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
-    final t = context.text;
     final value = ref.watch(profileStreamProvider);
     if (!value.hasValue && !value.hasError) {
-      return const SkeletonPulse(child: CardSkeleton(height: 96));
+      return const LedgerSkeleton(height: 72, radius: Rad.lg);
     }
     final FinancialProfile? p = value.value;
     final name = p?.displayName.trim() ?? '';
-    final initial = name.isEmpty ? '?' : name.characters.first.toUpperCase();
-    return FinnCard(
-      onTap: () => context.push(AppRoutes.profile),
-      semanticLabel: p == null ? 'Set up your profile' : 'Profile, $name. Edit',
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: c.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
-            child: Text(initial, style: t.title.copyWith(color: c.primary)),
-          ),
-          const SizedBox(width: Space.x4),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(p == null ? 'Set up your profile' : name, style: t.title),
-                const SizedBox(height: Space.x0_5),
-                if (p == null)
-                  Text('Add your name and starting balance', style: t.caption)
-                else ...[
-                  Text('Tracking since ${DateFormats.dayMonthYear.format(p.openingDate)}', style: t.caption),
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text('Opening balance ', style: t.caption),
-                      AmountText(
-                        p.openingBalance,
-                        style: t.caption.copyWith(color: c.textPrimary, fontWeight: FontWeight.w600),
-                        decimals: DecimalDisplay.none,
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-          Icon(LucideIcons.squarePen, size: 18, color: c.textTertiary),
-        ],
-      ),
+    return LedgerPanel(
+      children: [
+        LedgerRow(
+          leading: ProfileAvatar(name: name, email: null, size: 44),
+          title: p == null ? 'Set up your profile' : name,
+          subtitle: p == null
+              ? 'Add your name and starting balance'
+              : 'Tracking since ${DateFormats.dayMonthYear.format(p.openingDate)}',
+          chevron: true,
+          semanticLabel:
+              p == null ? 'Set up your profile' : 'Profile, $name. Edit',
+          onTap: () => context.push(AppRoutes.profile),
+        ),
+      ],
     );
   }
 }
@@ -133,142 +88,147 @@ class _AppearanceGroup extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
-    final t = context.text;
+    final t = context.type;
     final theme = ref.watch(settingsProvider.select((s) => s.theme));
     final motion = ref.watch(settingsProvider.select((s) => s.motion));
     final ctrl = ref.read(settingsProvider.notifier);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionHeader(icon: LucideIcons.palette, title: 'Appearance', tileColor: c.accentAnalytics),
-        const SizedBox(height: Space.x3),
-        FinnCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Theme', style: t.label),
-              const SizedBox(height: Space.x2),
-              SegmentedTabs<ThemePreference>(
-                items: [for (final p in ThemePreference.values) SegmentItem(p, p.label)],
-                selected: theme,
-                onChanged: (v) => ctrl.update((s) => s.copyWith(theme: v)),
-              ),
-              const SizedBox(height: Space.x4),
-              Text('Animations', style: t.label),
-              const SizedBox(height: Space.x2),
-              SegmentedTabs<MotionPreference>(
-                items: [for (final p in MotionPreference.values) SegmentItem(p, p.label)],
-                selected: motion,
-                onChanged: (v) => ctrl.update((s) => s.copyWith(motion: v)),
-              ),
-              const SizedBox(height: Space.x1_5),
-              Text('Reduced keeps movement to a minimum.', style: t.caption),
-            ],
+    Widget choice(String label, Widget control) => Padding(
+      padding: const EdgeInsets.all(Sp.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(label, style: t.bodyStrong),
+          const SizedBox(height: Sp.sm),
+          control,
+        ],
+      ),
+    );
+    return LedgerSection(
+      title: 'Appearance',
+      child: LedgerPanel(
+        children: [
+          choice(
+            'Theme',
+            LedgerSegmented<ThemePreference>(
+              segments: [
+                for (final p in ThemePreference.values)
+                  LedgerSegment(p, p.label),
+              ],
+              selected: theme,
+              onChanged: (v) => ctrl.update((s) => s.copyWith(theme: v)),
+            ),
           ),
-        ),
-      ],
+          choice(
+            'Animations',
+            LedgerSegmented<MotionPreference>(
+              segments: [
+                for (final p in MotionPreference.values)
+                  LedgerSegment(p, p.label),
+              ],
+              selected: motion,
+              onChanged: (v) => ctrl.update((s) => s.copyWith(motion: v)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Privacy & feel
-// ---------------------------------------------------------------------------
 
 class _PrivacyGroup extends ConsumerWidget {
   const _PrivacyGroup();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
     final hide = ref.watch(settingsProvider.select((s) => s.hideBalances));
     final haptics = ref.watch(settingsProvider.select((s) => s.hapticsEnabled));
     final ctrl = ref.read(settingsProvider.notifier);
-    return SettingsGroup(
+    return LedgerSection(
       title: 'Privacy & feel',
-      icon: LucideIcons.shieldCheck,
-      color: c.primary,
-      children: [
-        SettingsSwitchRow(
-          key: const ValueKey('hide-balances'),
-          icon: hide ? LucideIcons.eyeOff : LucideIcons.eye,
-          title: 'Hide balances',
-          subtitle: 'Mask amounts across the app in public places',
-          value: hide,
-          onChanged: (v) => ctrl.update((s) => s.copyWith(hideBalances: v)),
-        ),
-        SettingsSwitchRow(
-          key: const ValueKey('haptics'),
-          icon: LucideIcons.vibrate,
-          title: 'Haptic feedback',
-          subtitle: 'Gentle vibrations on taps and confirmations',
-          value: haptics,
-          onChanged: (v) => ctrl.update((s) => s.copyWith(hapticsEnabled: v)),
-        ),
-      ],
+      child: LedgerPanel(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+            child: LedgerSwitchRow(
+              key: const ValueKey('hide-balances'),
+              title: 'Hide balances',
+              subtitle: 'Mask amounts across the app',
+              value: hide,
+              onChanged: (v) => ctrl.update((s) => s.copyWith(hideBalances: v)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+            child: LedgerSwitchRow(
+              key: const ValueKey('haptics'),
+              title: 'Haptic feedback',
+              subtitle: 'Gentle vibration on taps',
+              value: haptics,
+              onChanged: (v) =>
+                  ctrl.update((s) => s.copyWith(hapticsEnabled: v)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Money & alerts
-// ---------------------------------------------------------------------------
 
 class _MoneyGroup extends ConsumerWidget {
   const _MoneyGroup();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
     final paise = ref.watch(settingsProvider.select((s) => s.showPaise));
     final startDay = ref.watch(settingsProvider.select((s) => s.monthStartDay));
-    final disabled = ref.watch(settingsProvider.select((s) => s.disabledAlertTypes.length));
+    final disabled = ref.watch(
+      settingsProvider.select((s) => s.disabledAlertTypes.length),
+    );
     final ctrl = ref.read(settingsProvider.notifier);
-    return SettingsGroup(
+    return LedgerSection(
       title: 'Money & alerts',
-      icon: LucideIcons.slidersHorizontal,
-      color: c.accentBudgets,
-      children: [
-        SettingsStepperRow(
-          key: const ValueKey('month-start'),
-          icon: LucideIcons.calendarDays,
-          title: 'Budget month starts',
-          subtitle: 'Useful if your salary arrives mid-month',
-          value: startDay,
-          min: 1,
-          max: 28,
-          format: _ordinal,
-          onChanged: (v) => ctrl.update((s) => s.copyWith(monthStartDay: v)),
-        ),
-        SettingsSwitchRow(
-          key: const ValueKey('show-paise'),
-          icon: LucideIcons.coins,
-          title: 'Show paise',
-          subtitle: 'Display amounts to the paisa where it matters',
-          value: paise,
-          onChanged: (v) => ctrl.update((s) => s.copyWith(showPaise: v)),
-        ),
-        SettingsNavRow(
-          icon: LucideIcons.bell,
-          title: 'Alerts & reminders',
-          subtitle: disabled == 0 ? 'All alerts on' : '$disabled alert type${disabled == 1 ? '' : 's'} turned off',
-          onTap: () => context.push(AppRoutes.notifications),
-        ),
-        SettingsNavRow(
-          icon: LucideIcons.tags,
-          title: 'Categories',
-          subtitle: 'How income and spending are grouped',
-          onTap: () => context.push(AppRoutes.categories),
-        ),
-      ],
+      child: LedgerPanel(
+        children: [
+          SettingsStepperRow(
+            key: const ValueKey('month-start'),
+            title: 'Budget month starts',
+            subtitle: 'Useful if your salary arrives mid-month',
+            value: startDay,
+            min: 1,
+            max: 28,
+            format: _ordinal,
+            onChanged: (v) => ctrl.update((s) => s.copyWith(monthStartDay: v)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+            child: LedgerSwitchRow(
+              key: const ValueKey('show-paise'),
+              title: 'Show paise',
+              subtitle: 'Amounts to the paisa where it matters',
+              value: paise,
+              onChanged: (v) => ctrl.update((s) => s.copyWith(showPaise: v)),
+            ),
+          ),
+          LedgerRow(
+            leading: const IconWell(icon: LucideIcons.bell),
+            title: 'Alerts & reminders',
+            subtitle: disabled == 0
+                ? 'All alerts on'
+                : '$disabled alert type${disabled == 1 ? '' : 's'} turned off',
+            chevron: true,
+            onTap: () => context.push(AppRoutes.notifications),
+          ),
+          LedgerRow(
+            leading: const IconWell(icon: LucideIcons.tags),
+            title: 'Categories',
+            chevron: true,
+            onTap: () => context.push(AppRoutes.categories),
+          ),
+        ],
+      ),
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Data
-// ---------------------------------------------------------------------------
 
 class _DataGroup extends ConsumerWidget {
   const _DataGroup();
@@ -288,9 +248,13 @@ class _DataGroup extends ConsumerWidget {
       await ref.read(dataResetServiceProvider).loadSampleData();
       if (context.mounted) FinnToast.success(context, 'Sample data loaded');
     } on AppFailure catch (f) {
-      if (context.mounted) FinnToast.error(context, 'Could not load sample data', subtitle: f.message);
+      if (context.mounted) {
+        FinnToast.error(context, 'Could not load sample data', subtitle: f.message);
+      }
     } catch (_) {
-      if (context.mounted) FinnToast.error(context, 'Could not load sample data', subtitle: 'Nothing was changed.');
+      if (context.mounted) {
+        FinnToast.error(context, 'Could not load sample data', subtitle: 'Nothing was changed.');
+      }
     }
   }
 
@@ -308,47 +272,57 @@ class _DataGroup extends ConsumerWidget {
     try {
       await ref.read(dataResetServiceProvider).eraseEverything();
     } on AppFailure catch (f) {
-      if (context.mounted) FinnToast.error(context, 'Could not erase your data', subtitle: f.message);
+      if (context.mounted) {
+        FinnToast.error(context, 'Could not erase your data', subtitle: f.message);
+      }
     } catch (_) {
-      if (context.mounted) FinnToast.error(context, 'Could not erase your data', subtitle: 'Please try again.');
+      if (context.mounted) {
+        FinnToast.error(context, 'Could not erase your data', subtitle: 'Please try again.');
+      }
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
-    return SettingsGroup(
-      title: 'Your data',
-      icon: LucideIcons.database,
-      color: c.accentNetWorth,
+    final c = context.ink;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SettingsNavRow(
-          icon: LucideIcons.download,
-          title: 'Export data',
-          subtitle: 'CSV, JSON or a PDF report',
-          onTap: () => context.push(AppRoutes.export),
+        LedgerSection(
+          title: 'Your data',
+          child: LedgerPanel(
+            children: [
+              LedgerRow(
+                leading: const IconWell(icon: LucideIcons.download),
+                title: 'Export data',
+                subtitle: 'CSV, JSON or a PDF report',
+                chevron: true,
+                onTap: () => context.push(AppRoutes.export),
+              ),
+              LedgerRow(
+                leading: const IconWell(icon: LucideIcons.history),
+                title: 'Activity log',
+                subtitle: 'Changes made in this session',
+                chevron: true,
+                onTap: () => context.push(AppRoutes.activity),
+              ),
+              LedgerRow(
+                leading: const IconWell(icon: LucideIcons.rotateCcw),
+                title: 'Load sample data',
+                subtitle: 'Replace your records with examples',
+                onTap: () => _loadSample(context, ref),
+              ),
+            ],
+          ),
         ),
-        SettingsNavRow(
-          icon: LucideIcons.history,
-          title: 'Activity log',
-          subtitle: 'Changes made in this session',
-          onTap: () => context.push(AppRoutes.activity),
-        ),
-        SettingsNavRow(
-          icon: LucideIcons.rotateCcw,
-          title: 'Load sample data',
-          subtitle: 'Replace your records with example data',
-          showChevron: false,
-          onTap: () => _loadSample(context, ref),
-        ),
-        SettingsNavRow(
+        const SizedBox(height: Sp.lg),
+        LedgerButton(
+          key: const ValueKey('erase-all'),
+          label: 'Erase all data',
           icon: LucideIcons.trash2,
-          iconColor: c.negative,
-          title: 'Erase all data',
-          titleColor: c.negative,
-          subtitle: 'Start again from scratch',
-          showChevron: false,
-          onTap: () => _erase(context, ref),
+          variant: LedgerButtonVariant.quiet,
+          color: c.red,
+          onPressed: () => _erase(context, ref),
         ),
       ],
     );
@@ -360,23 +334,12 @@ class _Footer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(LucideIcons.lock, size: 12, color: c.textTertiary),
-            const SizedBox(width: Space.x1_5),
-            Flexible(
-              child: Text('Your data stays on this device', style: t.micro, textAlign: TextAlign.center),
-            ),
-          ],
-        ),
-        const SizedBox(height: Space.x1),
-        Text('FiNN · Made for Indian households', style: t.micro, textAlign: TextAlign.center),
-      ],
+    final t = context.type;
+    final c = context.ink;
+    return Text(
+      'Your data stays on this device.\nFiNN · Made for Indian households',
+      style: t.label.copyWith(color: c.inkFaint),
+      textAlign: TextAlign.center,
     );
   }
 }

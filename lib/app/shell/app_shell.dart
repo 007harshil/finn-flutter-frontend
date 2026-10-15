@@ -564,10 +564,9 @@ class _AgentNavButton extends StatelessWidget {
   }
 }
 
-/// Full-screen agent experience over the whole app (navigation included).
-/// The app stays visible underneath, blurred out of focus, so the agent
-/// never loses its context. Opening deepens the blur while the stage
-/// settles in from a slight zoom; closing plays it in reverse.
+/// Full-screen agent experience over the whole app (navigation included):
+/// an opaque paper surface that fades in on open and out on close. The app
+/// underneath is paused and receives no touches.
 class _AgentOverlay extends StatefulWidget {
   const _AgentOverlay({required this.active});
   final bool active;
@@ -579,14 +578,13 @@ class _AgentOverlay extends StatefulWidget {
 class _AgentOverlayState extends State<_AgentOverlay> with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 560),
-    reverseDuration: const Duration(milliseconds: 380),
+    duration: const Duration(milliseconds: 220),
+    reverseDuration: const Duration(milliseconds: 180),
     value: widget.active ? 1 : 0,
   );
   late final CurvedAnimation _curve = CurvedAnimation(
     parent: _c,
-    curve: Curves2.emphasized,
-    reverseCurve: Curves2.standard,
+    curve: Curves2.standard,
   );
 
   @override
@@ -618,14 +616,8 @@ class _AgentOverlayState extends State<_AgentOverlay> with SingleTickerProviderS
           fit: StackFit.expand,
           children: [
             // Absorbs every touch: the app behind is paused.
-            BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20 * v, sigmaY: 20 * v),
-              child: const ColoredBox(color: Colors.transparent),
-            ),
-            Opacity(
-              opacity: v,
-              child: Transform.scale(scale: 1.06 - 0.06 * v, child: child),
-            ),
+            const AbsorbPointer(child: SizedBox.expand()),
+            Opacity(opacity: v, child: child),
           ],
         );
       },

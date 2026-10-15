@@ -3,7 +3,7 @@ import 'package:finn/core/money/money_format.dart';
 import 'package:finn/design_system/design_system.dart';
 import 'package:finn/features/home/presentation/widgets/hero_balance_card.dart';
 import 'package:finn/features/home/presentation/widgets/home_header.dart';
-import 'package:finn/kit/kit.dart' show LedgerButton;
+import 'package:finn/kit/kit.dart' show LedgerAmountField, LedgerButton, LedgerTextField;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -84,16 +84,25 @@ Future<void> scrollAndTap(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
-/// Types [text] into the [index]-th visible [AmountField].
+/// Any amount field: kit [LedgerAmountField] or its legacy subclass.
+final amountField = find.byWidgetPredicate((w) => w is LedgerAmountField, description: 'amount field');
+
+/// Types [text] into the [index]-th visible amount field.
 Future<void> enterAmount(WidgetTester tester, String text, {int index = 0}) async {
-  final field = find.descendant(of: find.byType(AmountField).at(index), matching: find.byType(EditableText));
+  final field = find.descendant(of: amountField.at(index), matching: find.byType(EditableText));
   await tester.enterText(field, text);
   await tester.pump();
 }
 
-/// Types [text] into the [FinnTextField] labelled [label].
+/// The text field (kit [LedgerTextField] or legacy subclass) labelled [label].
+Finder textFieldLabelled(String label) => find.ancestor(
+  of: find.text(label),
+  matching: find.byWidgetPredicate((w) => w is LedgerTextField, description: 'text field'),
+);
+
+/// Types [text] into the text field labelled [label].
 Future<void> enterField(WidgetTester tester, String label, String text) async {
-  final field = find.descendant(of: find.widgetWithText(FinnTextField, label), matching: find.byType(EditableText));
+  final field = find.descendant(of: textFieldLabelled(label), matching: find.byType(EditableText));
   await scrollTo(tester, field);
   await tester.enterText(field, text);
   await tester.pump();
@@ -104,7 +113,7 @@ Future<void> enterField(WidgetTester tester, String label, String text) async {
 Future<void> confirmReview(WidgetTester tester) async {
   // The submitting form shows a spinner underneath, so the tree never
   // "settles" while the review is open: pump frames instead.
-  final confirm = find.widgetWithText(FinnButton, 'Confirm');
+  final confirm = buttonWithText('Confirm');
   for (var i = 0; i < 20 && confirm.evaluate().isEmpty; i++) {
     await tester.pump(const Duration(milliseconds: 100));
   }

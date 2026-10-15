@@ -5,7 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../core/time/dates.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../../shared/presentation/category_icons.dart';
 import '../../categories/domain/category.dart';
 import '../application/export_controller.dart';
@@ -91,47 +91,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         .value;
     final run = ref.watch(exportControllerProvider);
     final total = counts == null ? null : _modules.fold<int>(0, (sum, m) => sum + (counts[m] ?? 0));
-
-    final sections = <Widget>[
-      _FormatSection(selected: _format, onChanged: (f) => setState(() => _format = f)),
-      _PeriodSection(
-        preset: _preset,
-        range: range,
-        today: today,
-        onPreset: (p) => setState(() {
-          _preset = p;
-          if (p == ExportRangePreset.custom) {
-            _customStart ??= range.start;
-            _customEnd ??= range.end;
-          }
-        }),
-        onStart: (d) => setState(() => _customStart = d),
-        onEnd: (d) => setState(() => _customEnd = d),
-      ),
-      _ModulesSection(
-        modules: _modules,
-        counts: counts,
-        onChanged: (m) => setState(() => _modules = m),
-      ),
-      if (includeTx)
-        _CategorySection(
-          selected: _categoryIds,
-          onChanged: (ids) => setState(() => _categoryIds = ids),
-        ),
-      if (run.phase == ExportPhase.failure && run.errorMessage != null)
-        InfoBanner(tone: FinnTone.negative, title: 'Export did not finish', message: run.errorMessage!)
-      else if (run.phase == ExportPhase.success)
-        InfoBanner(
-          tone: FinnTone.positive,
-          title: run.artifacts.length == 1 ? '1 file created' : '${run.artifacts.length} files created',
-          message: run.artifacts.map((a) => a.fileName).join('\n'),
-        ),
-      const InfoBanner(
-        tone: FinnTone.warning,
-        icon: LucideIcons.lock,
-        message: 'Exports contain your personal financial details. Share them only with people and apps you trust.',
-      ),
-    ];
+    final t = context.type;
 
     final busy = run.isBusy;
     final label = switch (run.phase) {
@@ -141,51 +101,88 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
           ? 'Export ${_format.label}'
           : 'Export ${_format.label} · $total record${total == 1 ? '' : 's'}',
     };
-    return Scaffold(
-      appBar: AppBar(title: const Text('Export data')),
-      body: Column(
-        children: [
-          Expanded(
-            child: CustomScrollView(
-              key: const PageStorageKey('export'),
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(0, Space.x2, 0, Space.x6),
-                  sliver: SliverList.separated(
-                    itemCount: sections.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: Space.x6),
-                    itemBuilder: (context, i) => ResponsiveCenter(
-                      padding: const EdgeInsets.symmetric(horizontal: Space.gutter),
-                      child: StaggeredEntrance(index: i, child: sections[i]),
-                    ),
-                  ),
+    return LedgerPage(
+      storageKey: 'export',
+      appBar: const LedgerAppBar(title: 'Export data'),
+      slivers: [
+        PageBlock(
+          top: Sp.xl,
+          child: _FormatSection(selected: _format, onChanged: (f) => setState(() => _format = f)),
+        ),
+        PageBlock(
+          top: Sp.section,
+          child: _PeriodSection(
+            preset: _preset,
+            range: range,
+            today: today,
+            onPreset: (p) => setState(() {
+              _preset = p;
+              if (p == ExportRangePreset.custom) {
+                _customStart ??= range.start;
+                _customEnd ??= range.end;
+              }
+            }),
+            onStart: (d) => setState(() => _customStart = d),
+            onEnd: (d) => setState(() => _customEnd = d),
+          ),
+        ),
+        PageBlock(
+          top: Sp.section,
+          child: _ModulesSection(
+            modules: _modules,
+            counts: counts,
+            onChanged: (m) => setState(() => _modules = m),
+          ),
+        ),
+        if (includeTx)
+          PageBlock(
+            top: Sp.section,
+            child: _CategorySection(
+              selected: _categoryIds,
+              onChanged: (ids) => setState(() => _categoryIds = ids),
+            ),
+          ),
+        PageBlock(
+          top: Sp.section,
+          bottom: Sp.xl,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (run.phase == ExportPhase.failure && run.errorMessage != null) ...[
+                Text('Export did not finish', style: t.bodyStrong),
+                const SizedBox(height: Sp.sm),
+                LedgerNote(tone: NoteTone.alert, icon: LucideIcons.circleAlert, text: run.errorMessage!),
+                const SizedBox(height: Sp.lg),
+              ] else if (run.phase == ExportPhase.success) ...[
+                Text(
+                  run.artifacts.length == 1 ? '1 file created' : '${run.artifacts.length} files created',
+                  style: t.bodyStrong,
                 ),
+                const SizedBox(height: Sp.sm),
+                LedgerNote(
+                  icon: LucideIcons.circleCheck,
+                  text: run.artifacts.map((a) => a.fileName).join('\n'),
+                ),
+                const SizedBox(height: Sp.lg),
               ],
-            ),
-          ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: context.colors.surface,
-              border: Border(top: BorderSide(color: context.colors.border)),
-            ),
-            child: SafeArea(
-              top: false,
-              child: ResponsiveCenter(
-                padding: const EdgeInsets.fromLTRB(Space.gutter, Space.x3, Space.gutter, Space.x3),
-                child: FinnButton(
-                  key: _buttonKey,
-                  label: label,
-                  icon: LucideIcons.share2,
-                  expand: true,
-                  size: FinnButtonSize.lg,
-                  loading: busy,
-                  onPressed: busy || _modules.isEmpty ? null : () => _export(range),
-                ),
+              const LedgerNote(
+                tone: NoteTone.caution,
+                icon: LucideIcons.lock,
+                text: 'Exports contain your personal financial details. Share them only with people and apps you trust.',
               ),
-            ),
+              const SizedBox(height: Sp.lg),
+              LedgerButton(
+                key: _buttonKey,
+                label: label,
+                icon: LucideIcons.share2,
+                expand: true,
+                loading: busy,
+                onPressed: busy || _modules.isEmpty ? null : () => _export(range),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -207,54 +204,21 @@ class _FormatSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionHeader(icon: LucideIcons.fileText, title: 'Format', tileColor: c.primary),
-        const SizedBox(height: Space.x3),
-        for (final f in ExportFormat.values) ...[
-          Semantics(
-            selected: f == selected,
-            inMutuallyExclusiveGroup: true,
-            child: FinnCard(
+    return LedgerSection(
+      title: 'Format',
+      child: LedgerPanel(
+        children: [
+          for (final f in ExportFormat.values)
+            LedgerOptionRow(
               key: ValueKey('format-${f.name}'),
+              leading: IconWell(icon: _icon(f)),
+              title: f.label,
+              subtitle: f.description,
+              selected: f == selected,
               onTap: () => onChanged(f),
-              padding: const EdgeInsets.all(Space.x3 + 2),
-              border: BorderSide(color: f == selected ? c.primary : c.border, width: f == selected ? 2 : 1),
-              child: Row(
-                children: [
-                  IconTile(
-                    icon: _icon(f),
-                    background: f == selected ? c.primary : c.surfaceMuted,
-                    foreground: f == selected ? c.onPrimary : c.textSecondary,
-                    size: 36,
-                    radius: Radii.md,
-                    iconSize: 18,
-                  ),
-                  const SizedBox(width: Space.x3),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(f.label, style: t.bodyStrong),
-                        Text(f.description, style: t.caption),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    f == selected ? LucideIcons.circleCheck : LucideIcons.circle,
-                    size: 20,
-                    color: f == selected ? c.primary : c.textTertiary,
-                  ),
-                ],
-              ),
             ),
-          ),
-          const SizedBox(height: Space.x2),
         ],
-      ],
+      ),
     );
   }
 }
@@ -282,57 +246,54 @@ class _PeriodSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final fmt = DateFormats.dayMonthYear;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionHeader(icon: LucideIcons.calendarRange, title: 'Period', tileColor: c.accentTransactions),
-        const SizedBox(height: Space.x3),
-        FilterChipBar<ExportRangePreset>(
-          padding: EdgeInsets.zero,
-          multiSelect: false,
-          items: [for (final p in ExportRangePreset.values) FilterChipItem(p, p.label)],
-          selected: {preset},
-          onChanged: (s) {
-            if (s.isNotEmpty) onPreset(s.first);
-          },
-        ),
-        if (preset == ExportRangePreset.custom) ...[
-          const SizedBox(height: Space.x4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: DateField(
-                  label: 'From',
-                  value: range.start,
-                  firstDate: DateTime(today.year - 30),
-                  lastDate: today,
-                  onChanged: onStart,
+    return LedgerSection(
+      title: 'Period',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LedgerChoiceChips<ExportRangePreset>(
+            options: [for (final p in ExportRangePreset.values) LedgerOption(p, p.label)],
+            selected: preset,
+            onChanged: onPreset,
+          ),
+          if (preset == ExportRangePreset.custom) ...[
+            const SizedBox(height: Sp.lg),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: LedgerDateField(
+                    label: 'From',
+                    value: range.start,
+                    firstDate: DateTime(today.year - 30),
+                    lastDate: today,
+                    onChanged: onStart,
+                  ),
                 ),
-              ),
-              const SizedBox(width: Space.x3),
-              Expanded(
-                child: DateField(
-                  label: 'To',
-                  value: range.end,
-                  firstDate: range.start,
-                  lastDate: today,
-                  onChanged: onEnd,
+                const SizedBox(width: Sp.md),
+                Expanded(
+                  child: LedgerDateField(
+                    label: 'To',
+                    value: range.end,
+                    firstDate: range.start,
+                    lastDate: today,
+                    onChanged: onEnd,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
+          ],
+          const SizedBox(height: Sp.md),
+          Text(
+            '${fmt.format(range.start)} – ${fmt.format(range.end)}. Applies to dated records; '
+            'loans, budgets and assets are always included in full.',
+            style: t.label.copyWith(color: c.inkSoft),
           ),
         ],
-        const SizedBox(height: Space.x3),
-        Text(
-          '${fmt.format(range.start)} – ${fmt.format(range.end)}. Applies to dated records such as transactions '
-          'and payments; loans, budgets and assets are always included in full.',
-          style: t.caption,
-        ),
-      ],
+      ),
     );
   }
 }
@@ -350,96 +311,43 @@ class _ModulesSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final all = modules.length == ExportModule.values.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionHeader(
-          icon: LucideIcons.listChecks,
+        LedgerSection(
           title: 'What to include',
-          tileColor: c.accentNetWorth,
-          trailing: TextButton(
-            onPressed: () => onChanged(all ? <ExportModule>{} : ExportModule.values.toSet()),
-            child: Text(all ? 'Clear all' : 'Select all'),
-          ),
-        ),
-        const SizedBox(height: Space.x3),
-        FinnCard(
-          padding: const EdgeInsets.symmetric(vertical: Space.x1),
-          child: Column(
+          actionLabel: all ? 'Clear all' : 'Select all',
+          onAction: () => onChanged(all ? <ExportModule>{} : ExportModule.values.toSet()),
+          child: LedgerPanel(
             children: [
-              for (var i = 0; i < ExportModule.values.length; i++) ...[
-                if (i > 0) const FinnDivider(indent: Space.x4),
-                _ModuleRow(
-                  key: ValueKey('module-${ExportModule.values[i].name}'),
-                  module: ExportModule.values[i],
-                  count: counts?[ExportModule.values[i]],
-                  selected: modules.contains(ExportModule.values[i]),
-                  onChanged: (on) {
-                    final m = ExportModule.values[i];
-                    onChanged(on ? {...modules, m} : ({...modules}..remove(m)));
-                  },
+              for (final m in ExportModule.values)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+                  child: LedgerSwitchRow(
+                    key: ValueKey('module-${m.name}'),
+                    title: m.label,
+                    subtitle: _moduleSubtitle(m, counts?[m]),
+                    value: modules.contains(m),
+                    onChanged: (on) => onChanged(on ? {...modules, m} : ({...modules}..remove(m))),
+                  ),
                 ),
-              ],
             ],
           ),
         ),
         if (modules.isEmpty) ...[
-          const SizedBox(height: Space.x2),
-          Text('Choose at least one thing to export.', style: t.caption.copyWith(color: c.negative)),
+          const SizedBox(height: Sp.sm),
+          Text('Choose at least one thing to export.', style: t.label.copyWith(color: c.red)),
         ],
       ],
     );
   }
-}
 
-class _ModuleRow extends StatelessWidget {
-  const _ModuleRow({super.key, required this.module, required this.count, required this.selected, required this.onChanged});
-
-  final ExportModule module;
-  final int? count;
-  final bool selected;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final n = count;
-    return MergeSemantics(
-      child: InkWell(
-        onTap: () => onChanged(!selected),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 56),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(Space.x2, Space.x1, Space.x4, Space.x1),
-            child: Row(
-              children: [
-                Checkbox(value: selected, onChanged: (v) => onChanged(v ?? false)),
-                const SizedBox(width: Space.x1),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(module.label, style: t.bodyStrong),
-                      Text(module.description, style: t.caption),
-                    ],
-                  ),
-                ),
-                if (n != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: Space.x2, vertical: Space.x0_5),
-                    decoration: BoxDecoration(color: c.surfaceMuted, borderRadius: Radii.rSm),
-                    child: Text(n == 1 ? '1 record' : '$n records', style: t.micro),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+  static String _moduleSubtitle(ExportModule m, int? n) {
+    if (n == null) return m.description;
+    return '${m.description} · ${n == 1 ? '1 record' : '$n records'}';
   }
 }
 
@@ -455,47 +363,50 @@ class _CategorySection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     final categories = ref.watch(categoriesStreamProvider).value ?? const <TransactionCategory>[];
     final active = categories.where((x) => !x.isArchived).toList();
     if (active.isEmpty) return const SizedBox.shrink();
     final all = selected == null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionHeader(icon: LucideIcons.tags, title: 'Transaction categories', tileColor: c.accentBudgets),
-        const SizedBox(height: Space.x3),
-        SegmentedTabs<bool>(
-          items: const [SegmentItem(true, 'All categories'), SegmentItem(false, 'Choose')],
-          selected: all,
-          onChanged: (v) => onChanged(v ? null : <String>{}),
-        ),
-        if (!all) ...[
-          const SizedBox(height: Space.x3),
-          Wrap(
-            spacing: Space.x2,
-            runSpacing: Space.x2,
-            children: [
-              for (final cat in active)
-                FilterChip(
-                  key: ValueKey('cat-${cat.id}'),
-                  avatar: Icon(CategoryIcons.of(cat.iconKey), size: 16),
-                  label: Text(cat.name),
-                  selected: selected!.contains(cat.id),
-                  onSelected: (on) => onChanged(on ? {...selected!, cat.id} : ({...selected!}..remove(cat.id))),
-                ),
-            ],
+    return LedgerSection(
+      title: 'Transaction categories',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LedgerSegmented<bool>(
+            segments: const [LedgerSegment(true, 'All categories'), LedgerSegment(false, 'Choose')],
+            selected: all,
+            onChanged: (v) => onChanged(v ? null : <String>{}),
           ),
-          const SizedBox(height: Space.x2),
-          Text(
-            selected!.isEmpty
-                ? 'Pick one or more categories. No transactions are exported until you do.'
-                : '${selected!.length} selected. Only transactions in these categories are exported.',
-            style: t.caption,
-          ),
+          if (!all) ...[
+            const SizedBox(height: Sp.md),
+            Wrap(
+              spacing: Sp.sm,
+              runSpacing: Sp.sm,
+              children: [
+                for (final cat in active)
+                  LedgerChip(
+                    key: ValueKey('cat-${cat.id}'),
+                    icon: CategoryIcons.of(cat.iconKey),
+                    label: cat.name,
+                    selected: selected!.contains(cat.id),
+                    onTap: () => onChanged(
+                      selected!.contains(cat.id) ? ({...selected!}..remove(cat.id)) : {...selected!, cat.id},
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: Sp.sm),
+            Text(
+              selected!.isEmpty
+                  ? 'Pick one or more. No transactions are exported until you do.'
+                  : '${selected!.length} selected. Only transactions in these categories are exported.',
+              style: t.label.copyWith(color: c.inkSoft),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

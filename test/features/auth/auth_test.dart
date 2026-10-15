@@ -8,6 +8,7 @@ import 'package:finn/features/auth/presentation/login_screen.dart';
 import 'package:finn/features/auth/presentation/verify_otp_screen.dart';
 import 'package:finn/features/profile/presentation/profile_avatar.dart';
 import 'package:finn/features/profile/presentation/profile_screen.dart';
+import 'package:finn/kit/kit.dart' show LedgerButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -185,7 +186,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(signOut);
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FinnButton, 'Sign out'));
+      await tester.tap(find.widgetWithText(LedgerButton, 'Sign out'));
       await tester.pumpAndSettle();
 
       expect(container.read(authControllerProvider), isNull);
@@ -200,7 +201,7 @@ void main() {
       await tester.tap(delete);
       await tester.pumpAndSettle();
       expect(find.text('Delete your account?'), findsOneWidget);
-      await tester.tap(find.widgetWithText(FinnButton, 'Continue'));
+      await tester.tap(find.widgetWithText(LedgerButton, 'Continue'));
       await tester.pumpAndSettle();
       expect(find.text('Confirm account deletion'), findsOneWidget);
     }
@@ -251,7 +252,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(delete);
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FinnButton, 'Cancel'));
+      await tester.tap(find.widgetWithText(LedgerButton, 'Cancel'));
       await tester.pumpAndSettle();
 
       expect(find.text('Confirm account deletion'), findsNothing);

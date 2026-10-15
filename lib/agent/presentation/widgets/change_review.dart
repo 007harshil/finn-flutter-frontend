@@ -2,176 +2,139 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../actions/action.dart';
-import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart';
 import '../../execution/proposals.dart';
 import 'action_visuals.dart';
 
-/// One headline number of a review ("2 Move money").
-class ImpactTile extends StatelessWidget {
-  const ImpactTile({super.key, required this.value, required this.label, required this.icon, required this.color});
+/// What one proposed change does, built from the app's own preview (never
+/// the model's words), as rows for a [LedgerPanel]: a head with module,
+/// summary and the amount as a figure, then one [LedgerFact] per detail and
+/// before → after effect, and any warnings.
+///
+/// [tag] sits at the end of the head's first line (e.g. "Try 2"),
+/// [trailing] at the end of the summary (e.g. a saved mark).
+List<Widget> changeDetailRows(BuildContext context, ProposedAction proposal, {Widget? tag, Widget? trailing}) {
+  const arrow = ' → ';
+  final preview = proposal.preview;
+  final warnings = [...preview.warnings, ...proposal.notes];
 
-  final String value;
-  final String label;
-  final IconData icon;
-  final Color color;
+  PreviewLine? amount;
+  final details = <PreviewLine>[];
+  for (final l in preview.lines) {
+    if (amount == null && l.label == 'Amount') {
+      amount = l;
+    } else {
+      details.add(l);
+    }
+  }
+
+  return [
+    _ChangeHead(proposal: proposal, amount: amount?.value, tag: tag, trailing: trailing),
+    for (final l in details)
+      if (l.value.contains(arrow))
+        _EffectFact(label: l.label, before: l.value.split(arrow).first, after: l.value.split(arrow).last)
+      else
+        LedgerFact(
+          label: l.label,
+          value: Text(
+            l.value,
+            textAlign: TextAlign.end,
+            style: l.emphasis ? context.type.bodyStrong : context.type.body,
+          ),
+        ),
+    if (warnings.isNotEmpty)
+      Padding(
+        padding: const EdgeInsets.all(Sp.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < warnings.length; i++) ...[
+              if (i > 0) const SizedBox(height: Sp.sm),
+              LedgerNote(text: warnings[i], icon: LucideIcons.triangleAlert, tone: NoteTone.caution),
+            ],
+          ],
+        ),
+      ),
+  ];
+}
+
+class _ChangeHead extends StatelessWidget {
+  const _ChangeHead({required this.proposal, required this.amount, this.tag, this.trailing});
+
+  final ProposedAction proposal;
+  final String? amount;
+  final Widget? tag;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Space.x2_5, vertical: Space.x2),
-      decoration: BoxDecoration(
-        color: c.surface.withValues(alpha: c.isDark ? 0.6 : 0.85),
-        borderRadius: BorderRadius.circular(Radii.lg),
-        border: Border.all(color: c.border),
-      ),
-      child: Row(
+    final c = context.ink;
+    final t = context.type;
+    final visual = actionVisualFor(proposal.descriptor.id);
+    final d = proposal.descriptor;
+    final a = amount;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: Space.x1_5),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            children: [
+              Icon(visual.icon, size: 16, color: c.inkSoft),
+              const SizedBox(width: Sp.sm),
+              Expanded(child: Text('${visual.module} · ${visual.verb}', style: t.label)),
+              ?tag,
+            ],
+          ),
+          const SizedBox(height: Sp.sm),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: Text(proposal.preview.summary, style: t.bodyStrong)),
+              if (trailing != null) ...[const SizedBox(width: Sp.sm), trailing!],
+            ],
+          ),
+          if (a != null) ...[const SizedBox(height: Sp.sm), Text(a, style: t.figureL)],
+          if (d.movesMoney || !d.reversible) ...[
+            const SizedBox(height: Sp.sm),
+            Wrap(
+              spacing: Sp.lg,
+              runSpacing: Sp.xs,
               children: [
-                Text(value, style: t.bodyStrong),
-                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.micro.copyWith(color: c.textSecondary)),
+                if (d.movesMoney) _Flag(icon: LucideIcons.arrowLeftRight, label: 'Moves money', color: c.inkSoft),
+                if (!d.reversible) _Flag(icon: LucideIcons.lock, label: 'Cannot be undone', color: c.amber),
               ],
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 }
 
-/// What one proposed change does, built from the app's own preview (never
-/// the model's words): module and kind, the headline amount, the preview's
-/// details, before → after effects, risk pills and warnings. [trailing] sits
-/// at the end of the title row (e.g. a status mark).
-class ChangeDetails extends StatelessWidget {
-  const ChangeDetails({super.key, required this.proposal, this.accent, this.trailing});
+class _Flag extends StatelessWidget {
+  const _Flag({required this.icon, required this.label, required this.color});
 
-  final ProposedAction proposal;
-
-  /// Overrides the module colour of the eyebrow (regenerated changes).
-  final Color? accent;
-  final Widget? trailing;
-
-  static const _arrow = ' → ';
+  final IconData icon;
+  final String label;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    final preview = proposal.preview;
-    final visual = actionVisualFor(proposal.descriptor.id, c);
-    final warnings = [...preview.warnings, ...proposal.notes];
-
-    PreviewLine? amount;
-    final details = <PreviewLine>[];
-    final effects = <PreviewLine>[];
-    for (final l in preview.lines) {
-      if (amount == null && l.label == 'Amount') {
-        amount = l;
-      } else if (l.value.contains(_arrow)) {
-        effects.add(l);
-      } else {
-        details.add(l);
-      }
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ActionIconBadge(visual: visual),
-            const SizedBox(width: Space.x3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${visual.module.toUpperCase()} · ${visual.verb.toUpperCase()}',
-                      style: t.eyebrow.copyWith(color: accent ?? visual.color)),
-                  const SizedBox(height: 2),
-                  Text(preview.summary, style: t.bodyStrong),
-                ],
-              ),
-            ),
-            ?trailing,
-          ],
-        ),
-        if (amount != null) ...[
-          const SizedBox(height: Space.x2),
-          Text(amount.value, style: t.amountMedium),
-        ],
-        if (details.isNotEmpty) ...[
-          const SizedBox(height: Space.x2),
-          Wrap(
-            spacing: Space.x1_5,
-            runSpacing: Space.x1_5,
-            children: [for (final l in details) _DetailChip(line: l)],
-          ),
-        ],
-        for (final e in effects) ...[
-          const SizedBox(height: Space.x2),
-          _EffectRow(label: e.label, before: e.value.split(_arrow).first, after: e.value.split(_arrow).last),
-        ],
-        if (proposal.descriptor.movesMoney || !proposal.descriptor.reversible) ...[
-          const SizedBox(height: Space.x2),
-          Wrap(
-            spacing: Space.x1_5,
-            runSpacing: Space.x1_5,
-            children: [
-              if (proposal.descriptor.movesMoney)
-                StatusPill(label: 'Moves money', color: c.attention, icon: LucideIcons.arrowLeftRight),
-              if (!proposal.descriptor.reversible)
-                StatusPill(label: 'Cannot be undone', color: c.negative, icon: LucideIcons.lock),
-            ],
-          ),
-        ],
-        for (final w in warnings) ...[
-          const SizedBox(height: Space.x2),
-          InfoBanner(message: w, tone: FinnTone.warning),
-        ],
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: Sp.xs + 2),
+        Text(label, style: context.type.small.copyWith(color: color)),
       ],
     );
   }
 }
 
-class _DetailChip extends StatelessWidget {
-  const _DetailChip({required this.line});
-  final PreviewLine line;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Space.x2, vertical: Space.x1),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(Radii.md),
-        border: Border.all(color: c.border),
-      ),
-      child: Text.rich(
-        TextSpan(children: [
-          TextSpan(text: '${line.label}  ', style: t.micro.copyWith(color: c.textSecondary)),
-          TextSpan(
-            text: line.value,
-            style: t.caption.copyWith(color: c.textPrimary, fontWeight: line.emphasis ? FontWeight.w800 : FontWeight.w600),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-/// "Available to spend  ₹10,000 → ₹9,550" as a before/after strip.
-class _EffectRow extends StatelessWidget {
-  const _EffectRow({required this.label, required this.before, required this.after});
+/// "Available to spend  ₹10,000 → ₹9,550" as one fact row.
+class _EffectFact extends StatelessWidget {
+  const _EffectFact({required this.label, required this.before, required this.after});
 
   final String label;
   final String before;
@@ -179,36 +142,24 @@ class _EffectRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final t = context.text;
+    final c = context.ink;
+    final t = context.type;
     return Semantics(
       label: '$label changes from $before to $after',
       excludeSemantics: true,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: Space.x3, vertical: Space.x2),
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: BorderRadius.circular(Radii.lg),
-          border: Border.all(color: c.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      child: LedgerFact(
+        label: label,
+        value: Wrap(
+          alignment: WrapAlignment.end,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: Sp.xs + 2,
           children: [
-            Text(label, style: t.micro.copyWith(color: c.textSecondary)),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                Flexible(
-                  child: Text(before,
-                      style: t.caption.copyWith(color: c.textTertiary, decoration: TextDecoration.lineThrough)),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: Space.x2),
-                  child: Icon(LucideIcons.arrowRight, size: 14, color: c.textSecondary),
-                ),
-                Flexible(child: Text(after, style: t.bodyStrong)),
-              ],
+            Text(
+              before,
+              style: t.figureSmall.copyWith(decoration: TextDecoration.lineThrough, decorationColor: c.inkSoft),
             ),
+            Icon(LucideIcons.arrowRight, size: 14, color: c.inkSoft),
+            Text(after, style: t.figure),
           ],
         ),
       ),
