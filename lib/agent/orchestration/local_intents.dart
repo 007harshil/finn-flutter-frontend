@@ -1,3 +1,4 @@
+import '../plan/agent_guard.dart';
 import '../plan/agent_plan.dart';
 import '../plan/resolvers.dart';
 import 'agent_memory.dart';
@@ -13,6 +14,12 @@ sealed class LocalIntent {
 final class HistoryIntent extends LocalIntent {
   const HistoryIntent(this.period);
   final String? period;
+}
+
+/// A request outside FiNN's scope (code, app internals, secrets, attempts
+/// to override the agent's rules): refused without a model call.
+final class OutOfScopeIntent extends LocalIntent {
+  const OutOfScopeIntent();
 }
 
 /// "What's my balance?"
@@ -50,6 +57,7 @@ abstract final class LocalIntents {
   }
 
   static LocalIntent? match(String text, AgentMemory memory) {
+    if (AgentGuard.isOutOfScope(text)) return const OutOfScopeIntent();
     final t = text.trim().toLowerCase();
     final pending = memory.pending;
     if (pending != null) {

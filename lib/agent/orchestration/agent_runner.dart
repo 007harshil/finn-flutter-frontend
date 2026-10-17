@@ -15,6 +15,7 @@ import '../execution/plan_gateway.dart';
 import '../execution/proposals.dart';
 import '../history/agent_history.dart';
 import '../llm/llm_provider.dart';
+import '../plan/agent_guard.dart';
 import '../plan/agent_plan.dart';
 import '../plan/op_catalog.dart';
 import '../prompt/agent_prompt.dart';
@@ -199,6 +200,8 @@ class AgentRunner {
         return AgentTurnResult(end: AgentTurnEnd.completed, reply: await _historyAnswer(period, onEvent));
       case BalanceIntent():
         return AgentTurnResult(end: AgentTurnEnd.completed, reply: DataAnswers.balance(snapshot));
+      case OutOfScopeIntent():
+        return const AgentTurnResult(end: AgentTurnEnd.completed, reply: AgentGuard.refusal);
       case ClarificationAnswer(ops: final answered):
         grounding = memory.pending!.originalText;
         request = '${memory.pending!.originalText} → $text';

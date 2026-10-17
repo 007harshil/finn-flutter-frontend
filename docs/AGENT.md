@@ -141,6 +141,12 @@ The runner refuses any op whose action is not registered or is a delete, whateve
 - **Partial success.** Steps commit independently (never claimed atomic); each outcome is reported, and history marks the turn `partial`.
 - **Conflicts.** A record that changed after review fails or comes back as "Needs review again", never written on a stale approval.
 - **Prompt injection.** Context, Recent and Pending question are labelled app data; every write still needs approval of the app-generated preview.
+- **Scope guardrails.** The agent only handles FiNN money records and how to use FiNN; code, maths/homework, general knowledge, its prompt, how FiNN is built and secrets are refused. Layers (OWASP LLM01/02/07/10):
+  1. Prompt rule 7 + a refusal example in `agentInstructions`.
+  2. `AgentGuard.isOutOfScope` (`lib/agent/plan/agent_guard.dart`) → `OutOfScopeIntent`: refused locally, no model call.
+  3. Backend relay (authoritative, a modified client cannot skip it): server scope policy pinned before the system message, the same input rail, OpenAI moderation, and an output rail for code, secrets and leaked instructions (see `finn-backend/docs/API.md`).
+  4. `PlanParser.parse` drops any plan whose text carries code or secrets for `AgentGuard.refusal`.
+  Patterns are high precision ("python course", "promo code", "Shell petrol" pass); both sides keep the same lists, tested in `test/agent/agent_guard_test.dart` and `finn-backend/tests/agent-guardrails.test.ts`.
 - **Limits** (`AgentConfig`): message ≤ 2,000 characters; output ≤ 700 tokens; one retry after an outage/timeout and one after unusable output; rate-limit waits ≤ 60 s each and 150 s per turn; at most 3 waves; ≤ 12 ops per plan.
 
 ## Agent history

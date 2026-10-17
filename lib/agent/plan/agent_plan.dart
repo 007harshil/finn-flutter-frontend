@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import 'agent_guard.dart';
+
 /// The model's structured reply: every operation it found in the message,
 /// plus an optional clarification question or a plain reply.
 ///
@@ -116,7 +118,25 @@ abstract final class PlanParser {
 
     final plan = AgentPlan(ops: ops, ask: text_(decoded['ask']), reply: text_(decoded['reply']));
     if (plan.isEmpty) throw const PlanFormatException('empty plan');
+    // Output guardrail: a plan carrying code or secrets anywhere is dropped
+    // for a refusal (nothing from it is shown or saved).
+    final texts = [?plan.ask, ?plan.reply, for (final op in ops) ..._strings(op.args)];
+    if (texts.any(AgentGuard.isUnsafeOutput)) return const AgentPlan(reply: AgentGuard.refusal);
     return plan;
+  }
+
+  static Iterable<String> _strings(Object? value) sync* {
+    if (value is String) {
+      yield value;
+    } else if (value is Map) {
+      for (final v in value.values) {
+        yield* _strings(v);
+      }
+    } else if (value is List) {
+      for (final v in value) {
+        yield* _strings(v);
+      }
+    }
   }
 
   /// Op refs mentioned as `"@o<n>"` string values in [args] (top level).
