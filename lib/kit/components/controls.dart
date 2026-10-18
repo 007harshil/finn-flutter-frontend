@@ -19,7 +19,11 @@ enum LedgerButtonVariant {
 }
 
 /// The one button of the kit.
-class LedgerButton extends StatelessWidget {
+///
+/// If [onPressed] returns a Future the button stays disabled (dimmed) until
+/// it completes, so a slow call can't be fired twice. The spinner follows
+/// [loading] only: handlers that open a sheet complete when it closes.
+class LedgerButton extends StatefulWidget {
   const LedgerButton({
     super.key,
     required this.label,
@@ -46,10 +50,35 @@ class LedgerButton extends StatelessWidget {
   final Color? color;
 
   @override
+  State<LedgerButton> createState() => _LedgerButtonState();
+}
+
+class _LedgerButtonState extends State<LedgerButton> {
+  bool _busy = false;
+
+  void _press() {
+    HapticFeedback.selectionClick();
+    // Dynamic call: handlers are typed VoidCallback but may be `async`.
+    final Object? result = (widget.onPressed as dynamic)();
+    if (result is! Future) return;
+    setState(() => _busy = true);
+    result.whenComplete(() {
+      if (mounted) setState(() => _busy = false);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = context.ink;
     final t = context.type;
-    final enabled = onPressed != null && !loading;
+    final label = widget.label;
+    final icon = widget.icon;
+    final variant = widget.variant;
+    final small = widget.small;
+    final expand = widget.expand;
+    final color = widget.color;
+    final loading = widget.loading;
+    final enabled = widget.onPressed != null && !loading && !_busy;
     final (Color bg, Color fg, BorderSide side) = switch (variant) {
       LedgerButtonVariant.primary => (color ?? c.ink, c.onInk, BorderSide.none),
       LedgerButtonVariant.secondary => (
@@ -85,18 +114,13 @@ class LedgerButton extends StatelessWidget {
       button: true,
       enabled: enabled,
       child: Opacity(
-        opacity: enabled || loading ? 1 : 0.4,
+        opacity: enabled ? 1 : (loading || _busy ? 0.6 : 0.4),
         child: Material(
           color: bg,
           shape: RoundedRectangleBorder(borderRadius: Rad.rMd, side: side),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: enabled
-                ? () {
-                    HapticFeedback.selectionClick();
-                    onPressed!();
-                  }
-                : null,
+            onTap: enabled ? _press : null,
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: height, minWidth: small ? 0 : 48),
               child: Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: content),

@@ -3,9 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../design_system/design_system.dart';
+import '../../../kit/kit.dart' show LedgerContext;
 
-/// The FiNN agent mark: a fin cresting a wave inside a gradient orb, with a
-/// small spark for "assistant". Deliberately not a generic sparkle/robot.
+/// The FiNN agent mark: a fin cresting a wave on an ink disc, with a small
+/// spark for "assistant". Flat ink and paper like the rest of the ledger kit,
+/// deliberately not a gradient, sparkle or robot.
 ///
 /// [phase] (0..1) drives the wave so callers can animate it; the static mark
 /// uses 0.
@@ -18,10 +20,10 @@ class FinnAgentMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
     final mark = CustomPaint(
       size: Size.square(size),
-      painter: _MarkPainter(colors: [c.agentStart, c.agentMid, c.agentEnd], phase: phase),
+      painter: _MarkPainter(disc: c.ink, glyph: c.onInk, phase: phase),
     );
     if (semanticLabel == null) return ExcludeSemantics(child: mark);
     return Semantics(label: semanticLabel, image: true, child: mark);
@@ -29,41 +31,19 @@ class FinnAgentMark extends StatelessWidget {
 }
 
 class _MarkPainter extends CustomPainter {
-  const _MarkPainter({required this.colors, required this.phase});
+  const _MarkPainter({required this.disc, required this.glyph, required this.phase});
 
-  final List<Color> colors;
+  final Color disc;
+  final Color glyph;
   final double phase;
 
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.shortestSide;
-    final rect = Offset.zero & Size.square(s);
-    final center = rect.center;
-
-    canvas.drawCircle(
-      center,
-      s / 2,
-      Paint()
-        ..shader = LinearGradient(
-          colors: colors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ).createShader(rect),
-    );
-    // Soft top highlight gives the orb depth.
-    canvas.drawCircle(
-      center,
-      s / 2,
-      Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(-0.35, -0.55),
-          radius: 0.75,
-          colors: [Colors.white.withValues(alpha: 0.32), Colors.white.withValues(alpha: 0)],
-        ).createShader(rect),
-    );
+    canvas.drawCircle(Offset(s / 2, s / 2), s / 2, Paint()..color = disc);
 
     Offset p(double x, double y) => Offset(x * s, y * s);
-    final white = Paint()..color = Colors.white;
+    final white = Paint()..color = glyph;
 
     // Dorsal fin: convex leading edge, concave trailing edge.
     final fin = Path()
@@ -84,7 +64,7 @@ class _MarkPainter extends CustomPainter {
     canvas.drawPath(
       wave,
       Paint()
-        ..color = Colors.white
+        ..color = glyph
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeWidth = math.max(1.4, s * 0.06),
@@ -100,24 +80,16 @@ class _MarkPainter extends CustomPainter {
       ..quadraticBezierTo(sc.dx, sc.dy, sc.dx - r, sc.dy)
       ..quadraticBezierTo(sc.dx, sc.dy, sc.dx, sc.dy - r)
       ..close();
-    canvas.drawPath(spark, white..color = Colors.white.withValues(alpha: 0.92));
+    canvas.drawPath(spark, white..color = glyph.withValues(alpha: 0.92));
   }
 
   @override
-  bool shouldRepaint(_MarkPainter old) => old.phase != phase || !_sameColors(old.colors, colors);
-
-  static bool _sameColors(List<Color> a, List<Color> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
+  bool shouldRepaint(_MarkPainter old) => old.phase != phase || old.disc != disc || old.glyph != glyph;
 }
 
 /// The animated agent orb used as the centre button of the navigation bar.
 ///
-/// A rotating gradient ring, a pulse halo and a flowing wave make it read as
+/// A rotating green ring, a pulse halo and a flowing wave make it read as
 /// "alive" and catch the eye. Idle, it plays an attention burst
 /// ([idleLoops] loops) when it appears and again whenever [attentionKey]
 /// changes (e.g. on tab switches), then rests, so it never drains the
@@ -195,9 +167,9 @@ class _AgentOrbState extends State<AgentOrb> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final c = context.ink;
     final size = widget.size;
-    final ringColors = [c.agentStart, c.agentMid, c.agentEnd, c.agentStart];
+    final ringColors = [c.green.withValues(alpha: 0), c.green, c.green.withValues(alpha: 0)];
     return RepaintBoundary(
       child: AnimatedBuilder(
         animation: _loop,
@@ -208,7 +180,7 @@ class _AgentOrbState extends State<AgentOrb> with SingleTickerProviderStateMixin
           // Halo pulses 3x per loop idle, 6x while active or listening.
           final pulses = widget.listening ? 8 : (widget.active ? 6 : 3);
           final pulse = (t * pulses) % 1;
-          final glow = widget.active || widget.listening ? 0.55 : 0.35;
+          final glow = widget.active || widget.listening ? 0.6 : 0.4;
           return SizedBox.square(
             dimension: size,
             child: Stack(
@@ -225,28 +197,13 @@ class _AgentOrbState extends State<AgentOrb> with SingleTickerProviderStateMixin
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: c.agentMid.withValues(alpha: (1 - pulse) * glow),
+                          color: c.green.withValues(alpha: (1 - pulse) * glow),
                           width: 2,
                         ),
                       ),
                     ),
                   ),
-                // Soft glow under the orb.
-                Container(
-                  width: size,
-                  height: size,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: c.agentMid.withValues(alpha: glow * (0.8 + 0.2 * math.sin(t * 2 * math.pi * 3))),
-                        blurRadius: widget.active ? 22 : 14,
-                        spreadRadius: widget.active ? 2 : 0,
-                      ),
-                    ],
-                  ),
-                ),
-                // Rotating gradient ring.
+                // Rotating green arc.
                 Transform.rotate(
                   angle: spin * 2 * math.pi,
                   child: Container(
@@ -254,7 +211,7 @@ class _AgentOrbState extends State<AgentOrb> with SingleTickerProviderStateMixin
                     height: size,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: SweepGradient(colors: ringColors),
+                      gradient: SweepGradient(colors: ringColors, stops: const [0, 0.75, 1]),
                     ),
                   ),
                 ),

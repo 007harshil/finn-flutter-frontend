@@ -78,7 +78,10 @@ class _RemoteSessionScopeState extends ConsumerState<RemoteSessionScope> with Wi
     });
     ref.listenManual<AuthSession?>(authControllerProvider, (prev, next) {
       if (prev == null && next != null) unawaited(_start());
-      if (prev != null && next == null) unawaited(_engine.close(clearPersisted: true));
+      if (prev != null && next == null) {
+        ref.read(sessionReadyProvider.notifier).set(true);
+        unawaited(_engine.close(clearPersisted: true));
+      }
     });
     ref.listenManual<AppSettings>(settingsProvider, (prev, next) => _onSettingsChanged(next));
     if (ref.read(authControllerProvider) != null) {
@@ -117,8 +120,12 @@ class _RemoteSessionScopeState extends ConsumerState<RemoteSessionScope> with Wi
   Future<void> _start() async {
     if (_starting) return;
     final userId = _backend.auth.userId;
-    if (userId == null) return;
+    if (userId == null) {
+      ref.read(sessionReadyProvider.notifier).set(true);
+      return;
+    }
     _starting = true;
+    ref.read(sessionReadyProvider.notifier).set(false);
     try {
       await _engine.open(userId);
       _serverPrefs = _engine.value(SyncValues.preferences);
@@ -130,6 +137,7 @@ class _RemoteSessionScopeState extends ConsumerState<RemoteSessionScope> with Wi
       await _reconcileOnboarding();
     } finally {
       _starting = false;
+      if (mounted) ref.read(sessionReadyProvider.notifier).set(true);
     }
   }
 

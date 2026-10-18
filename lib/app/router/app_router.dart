@@ -53,6 +53,7 @@ import '../../features/transactions/domain/transaction.dart';
 import '../../features/transactions/presentation/transaction_detail_screen.dart';
 import '../../features/transactions/presentation/transaction_form_sheet.dart';
 import '../../features/transactions/presentation/transactions_screen.dart';
+import '../../kit/tokens.dart' show LedgerContext;
 import '../di/core_providers.dart';
 import '../shell/app_shell.dart';
 import 'routes.dart';
@@ -60,9 +61,26 @@ import 'sheet_page.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
+const _startingPath = '/starting';
+
+/// False from sign-in until the first sync has decided whether setup is
+/// needed. The router holds a splash meanwhile, so a stale local
+/// `onboardingComplete` never flashes Home before switching to onboarding.
+final sessionReadyProvider = NotifierProvider<SessionReady, bool>(SessionReady.new);
+
+class SessionReady extends Notifier<bool> {
+  @override
+  bool build() => true;
+
+  void set(bool ready) => state = ready;
+}
+
 /// Builds the app router. Redirects to sign-in until signed in, then to
 /// onboarding until it is completed.
 final routerProvider = Provider<GoRouter>((ref) {
+  final ready = ValueNotifier<bool>(ref.read(sessionReadyProvider));
+  ref.listen(sessionReadyProvider, (_, v) => ready.value = v);
+  ref.onDispose(ready.dispose);
   final onboarded = ValueNotifier<bool>(ref.read(settingsProvider).onboardingComplete);
   ref.listen(settingsProvider.select((s) => s.onboardingComplete), (_, v) => onboarded.value = v);
   ref.onDispose(onboarded.dispose);
@@ -88,11 +106,13 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: AppRoutes.home,
-    refreshListenable: Listenable.merge([onboarded, signedIn]),
+    refreshListenable: Listenable.merge([onboarded, signedIn, ready]),
     redirect: (context, state) {
       final atAuth = state.matchedLocation == AppRoutes.login || state.matchedLocation == AppRoutes.verifyOtpPath;
+      final atStarting = state.matchedLocation == _startingPath;
       if (!signedIn.value) return atAuth ? null : AppRoutes.login;
-      if (atAuth) return onboarded.value ? AppRoutes.home : AppRoutes.onboarding;
+      if (!ready.value) return atStarting ? null : _startingPath;
+      if (atStarting || atAuth) return onboarded.value ? AppRoutes.home : AppRoutes.onboarding;
       final atOnboarding = state.matchedLocation == AppRoutes.onboarding;
       if (!onboarded.value && !atOnboarding) return AppRoutes.onboarding;
       if (onboarded.value && atOnboarding) return AppRoutes.home;
@@ -111,6 +131,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, s) => VerifyOtpScreen(email: s.uri.queryParameters['email']!),
           ),
         ],
+      ),
+      GoRoute(
+        path: _startingPath,
+        builder: (context, _) => Scaffold(
+          backgroundColor: context.ink.paper,
+          body: const Center(child: CircularProgressIndicator()),
+        ),
       ),
       GoRoute(path: AppRoutes.onboarding, builder: (_, _) => const OnboardingScreen()),
       GoRoute(

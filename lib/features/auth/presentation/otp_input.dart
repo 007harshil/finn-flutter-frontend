@@ -109,7 +109,19 @@ class _OtpInputState extends State<OtpInput> {
                   ],
                   showCursor: false,
                   style: const TextStyle(color: Colors.transparent, fontSize: 1),
+                  // The app theme sets enabled/focused borders and a fill that
+                  // beat `collapsed`'s border, drawing a stray line over the
+                  // boxes. Clear every state explicitly.
                   decoration: const InputDecoration.collapsed(hintText: null).copyWith(
+                    filled: false,
+                    fillColor: Colors.transparent,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    focusedErrorBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
                     semanticCounterText: '',
                     labelText: 'Verification code',
                     floatingLabelBehavior: FloatingLabelBehavior.never,
