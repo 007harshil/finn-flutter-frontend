@@ -38,6 +38,8 @@ class AuthScaffold extends StatelessWidget {
                         else
                           const SizedBox(width: Sp.md),
                         const Spacer(),
+                        Image.asset('assets/branding/finn_logo.png', width: 28, height: 28, semanticLabel: 'FiNN logo'),
+                        const SizedBox(width: Sp.xs),
                         Text('FiNN', style: t.heading.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.4)),
                       ],
                     ),
