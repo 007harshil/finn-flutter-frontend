@@ -632,6 +632,7 @@ class _Builder {
         amount: Money.rupees(rupees),
         date: date,
         note: note,
+        accountId: cashAccountId,
         createdAt: date,
       ));
     }
@@ -670,6 +671,7 @@ class _Builder {
         amount: Money.rupees(m == 0 ? 50000 : 15000),
         date: d,
         note: m == 0 ? 'Initial buffer' : 'Monthly top-up',
+        accountId: cashAccountId,
         createdAt: d,
       ));
     }

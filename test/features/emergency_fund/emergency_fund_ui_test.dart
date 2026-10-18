@@ -139,6 +139,32 @@ void main() {
       expect(after, before + const Money.rupees(5000));
     });
 
+    testWidgets('adding offers an account picker with what is free to spend; cards are not listed', (tester) async {
+      _tallView(tester);
+      final env = await TestEnv.create();
+      await env.pumpWidget(tester, const EmergencyMovementSheet());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Set aside on'), findsWidgets);
+      await tester.tap(find.byType(LedgerPickerField<String>));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Free to spend'), findsWidgets);
+      expect(find.text('SBI'), findsWidgets);
+      expect(find.text('HDFC Millennia'), findsNothing, reason: 'a credit card cannot hold savings');
+      await tester.tap(find.text('SBI').last);
+      await tester.pumpAndSettle();
+
+      await _enterAmount(tester, 0, '1000');
+      await tester.tap(find.text('Add money'));
+      await _settle(tester);
+      await tester.tap(find.text('Confirm'));
+      await _settle(tester);
+
+      final moves = (await env.snapshot()).savingsMovements.where((m) => m.amount == const Money.rupees(1000));
+      expect(moves.single.accountId, isNotNull);
+      expect((await env.snapshot()).account(moves.single.accountId!)!.name, 'SBI');
+    });
+
     testWidgets('withdrawing is disabled when nothing is saved', (tester) async {
       _tallView(tester);
       final env = await TestEnv.create(scenario: DataScenario.empty);

@@ -117,6 +117,7 @@ class SavingsMovement {
     required this.date,
     required this.createdAt,
     this.note,
+    this.accountId,
   });
 
   final String id;
@@ -131,6 +132,9 @@ class SavingsMovement {
   final DateTime date;
   final DateTime createdAt;
   final String? note;
+
+  /// Account the money is set aside on; null = on no account (old data).
+  final String? accountId;
 
   static const emergencyFundBucketId = 'emergency_fund';
 

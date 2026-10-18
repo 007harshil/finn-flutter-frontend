@@ -176,6 +176,7 @@ abstract final class SavingsMovementDto {
         'kind': m.kind.name,
         'amountPaise': J.money(m.amount),
         'date': J.date(m.date),
+        'accountId': m.accountId,
         'note': m.note,
         'createdAt': J.instant(m.createdAt),
       };
@@ -187,6 +188,9 @@ abstract final class SavingsMovementDto {
         kind: J.enumByName(SavingsMovementKind.values, j['kind'], SavingsMovementKind.contribution),
         amount: J.toMoney(j['amountPaise']),
         date: J.toDate(j['date']),
+        // Old device data has no accountId key: it sits on the Cash account.
+        // An explicit null means "on no account".
+        accountId: j.containsKey('accountId') ? j['accountId'] as String? : cashAccountId,
         note: j['note'] as String?,
         createdAt: J.toInstant(j['createdAt']),
       );

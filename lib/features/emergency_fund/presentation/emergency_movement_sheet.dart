@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/di/data_providers.dart';
+import '../../../app/di/core_providers.dart';
 import '../../../core/money/money_format.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../goals/presentation/savings_widgets.dart';
+import '../../goals/domain/goal.dart';
+import '../../savings/application/set_aside.dart';
 import '../application/emergency_actions.dart';
 
 /// Add money to (or withdraw from) the emergency fund. An internal
@@ -33,6 +36,9 @@ class EmergencyMovementSheet extends ConsumerWidget {
     return SavingsMovementForm(
       withdraw: withdraw,
       potName: 'emergency fund',
+      held: withdraw
+          ? holdingsOf(s.movements, SavingsBucketType.emergencyFund, SavingsMovement.emergencyFundBucketId, ref.watch(todayProvider))
+          : null,
       saved: s.saved,
       target: s.target,
       disabledReason: withdraw && !s.saved.isPositive
@@ -54,6 +60,7 @@ class EmergencyMovementSheet extends ConsumerWidget {
           input: EmergencyFundMovementInput(
             amount: draft.amount,
             date: draft.date,
+            accountId: draft.accountId,
             note: draft.note,
           ),
           idempotencyKey: key,

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../core/money/money_format.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
+import '../../savings/application/set_aside.dart';
 import '../application/goal_actions.dart';
 import '../domain/goal.dart';
 import 'savings_widgets.dart';
@@ -47,6 +49,9 @@ class GoalMovementSheet extends ConsumerWidget {
     return SavingsMovementForm(
       withdraw: withdraw,
       potName: g.goal.name,
+      held: withdraw
+          ? holdingsOf(g.movements, SavingsBucketType.goal, goalId, ref.watch(todayProvider))
+          : null,
       saved: g.saved,
       target: g.goal.target,
       disabledReason: g.goal.status == GoalStatus.archived
@@ -59,6 +64,7 @@ class GoalMovementSheet extends ConsumerWidget {
           goalId: goalId,
           amount: draft.amount,
           date: draft.date,
+          accountId: draft.accountId,
           note: draft.note,
         );
         final completes =

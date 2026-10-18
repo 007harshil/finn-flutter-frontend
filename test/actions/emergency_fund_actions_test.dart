@@ -94,7 +94,7 @@ void main() {
 
     test('limits: available cash, saved amount, dates, note length', () async {
       final tooMuch = await h.reject(const EmergencyFundMovementAction.contribute(), move(100001));
-      expect(tooMuch.fieldErrors['amount'], 'Only ₹1,00,000 is available to set aside.');
+      expect(tooMuch.fieldErrors['amount'], 'Only ₹1,00,000 in Cash is free to set aside.');
       final overdraw = await h.reject(const EmergencyFundMovementAction.withdraw(), move(1));
       expect(overdraw.fieldErrors['amount'], 'Only ₹0 is in your emergency fund.');
       expect((await h.reject(const EmergencyFundMovementAction.contribute(), move(1, date: DateTime(2026, 10, 11))))
@@ -111,7 +111,7 @@ void main() {
         TransactionInput(type: TransactionType.expense, amount: const Money.rupees(100000), categoryId: SeedCategoryIds.rent, date: DateTime(2026, 10, 1)),
       );
       final f = await h.reject(const EmergencyFundMovementAction.contribute(), move(1));
-      expect(f.fieldErrors['amount'], 'There is no available money to set aside right now.');
+      expect(f.fieldErrors['amount'], 'There is no free money in Cash to set aside.');
     });
   });
 }

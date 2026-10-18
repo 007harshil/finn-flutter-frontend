@@ -1,6 +1,7 @@
 import 'package:finn/core/money/money.dart';
 import 'package:finn/features/accounts/domain/money_account.dart';
 import 'package:finn/features/accounts/domain/transfer.dart';
+import 'package:finn/features/goals/domain/goal.dart';
 import 'package:finn/features/net_worth/domain/net_worth.dart';
 import 'package:finn/finance/ledger.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -140,5 +141,67 @@ void main() {
     );
     expect(b.cash, rs(4000));
     expect(b.accounts.single.account.id, cashAccountId);
+  });
+
+  group('set aside per account', () {
+    BalanceSnapshot snap(List<SavingsMovement> movements, {DateTime? asOf}) => const LedgerCalculator().balance(
+          profile: null,
+          accounts: [
+            acct('sbi', MoneyAccountKind.bank, 10000),
+            acct('hdfc', MoneyAccountKind.bank, 4000, order: 1),
+            acct('visa', MoneyAccountKind.creditCard, 0, order: 2),
+          ],
+          transactions: const [],
+          movements: movements,
+          asOf: asOf ?? fxToday,
+        );
+
+    test('earmarked and available per account; the balance never changes', () {
+      final b = snap([
+        goalMove(3000, d(2026, 10, 5), accountId: 'sbi'),
+        efMove(1000, d(2026, 10, 5), accountId: 'sbi'),
+        goalMove(500, d(2026, 10, 6), accountId: 'sbi', withdraw: true),
+      ]);
+      final sbi = b.accounts.firstWhere((a) => a.account.id == 'sbi');
+      final hdfc = b.accounts.firstWhere((a) => a.account.id == 'hdfc');
+      expect(sbi.balance, rs(10000));
+      expect(sbi.earmarked, rs(3500));
+      expect(sbi.available, rs(6500));
+      expect(hdfc.earmarked, Money.zero);
+      expect(hdfc.available, rs(4000));
+      expect(b.cash, rs(14000));
+      expect(b.earmarked, rs(3500));
+      expect(b.available, rs(10500));
+      expect(b.earmarkedUnassigned, Money.zero);
+    });
+
+    test('movements on no account count overall only; future movements are ignored', () {
+      final b = snap([
+        efMove(700, d(2026, 10, 5)),
+        efMove(900, d(2026, 10, 20), accountId: 'sbi'),
+      ]);
+      expect(b.earmarkedUnassigned, rs(700));
+      expect(b.earmarked, rs(700));
+      expect(b.accounts.every((a) => a.earmarked == Money.zero), isTrue);
+      expect(b.available, rs(13300));
+    });
+
+    test('credit cards hold nothing: available is the amount owed', () {
+      final b = snap([goalMove(100, d(2026, 10, 5), accountId: 'visa')]);
+      final visa = b.accounts.firstWhere((a) => a.account.id == 'visa');
+      expect(visa.earmarked, Money.zero);
+      expect(visa.available, visa.balance);
+    });
+
+    test('over-reserved: spending can push available below zero', () {
+      final b = const LedgerCalculator().balance(
+        profile: null,
+        accounts: [acct('sbi', MoneyAccountKind.bank, 1000)],
+        transactions: [tx(900, d(2026, 10, 6), accountId: 'sbi')],
+        movements: [efMove(500, d(2026, 10, 5), accountId: 'sbi')],
+        asOf: fxToday,
+      );
+      expect(b.accounts.single.available, rs(-400));
+    });
   });
 }

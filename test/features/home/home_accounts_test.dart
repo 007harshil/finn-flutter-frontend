@@ -24,4 +24,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Cash'), findsOneWidget);
   });
+
+  testWidgets('an account with money set aside shows a quiet available / set aside line', (tester) async {
+    final env = await TestEnv.create();
+    await env.pumpWidget(tester, const HomeAccountsSection());
+    await tester.pumpAndSettle();
+    // The demo data sets savings aside on the Cash account.
+    expect(find.textContaining('· set aside'), findsWidgets);
+    expect(find.textContaining(RegExp('Available|Over-reserved')), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
 }

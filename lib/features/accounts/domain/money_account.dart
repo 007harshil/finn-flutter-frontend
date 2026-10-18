@@ -127,13 +127,21 @@ class MoneyAccount {
 /// An account with its computed balance (amount owed for credit cards).
 @immutable
 class AccountBalance {
-  const AccountBalance({required this.account, required this.balance});
+  const AccountBalance({required this.account, required this.balance, this.earmarked = Money.zero});
 
   final MoneyAccount account;
 
   /// Asset accounts: money in it (may be negative = overdrawn).
   /// Credit cards: amount owed.
   final Money balance;
+
+  /// Savings set aside on this account (goals + emergency fund). Always zero
+  /// for credit cards, which cannot hold savings.
+  final Money earmarked;
+
+  /// Asset accounts: [balance] minus [earmarked] (may be negative =
+  /// over-reserved). Credit cards: the balance owed, unchanged.
+  Money get available => isLiability ? balance : balance - earmarked;
 
   bool get isLiability => account.isLiability;
 
@@ -146,8 +154,8 @@ class AccountBalance {
 
   @override
   bool operator ==(Object other) =>
-      other is AccountBalance && other.account == account && other.balance == balance;
+      other is AccountBalance && other.account == account && other.balance == balance && other.earmarked == earmarked;
 
   @override
-  int get hashCode => Object.hash(account, balance);
+  int get hashCode => Object.hash(account, balance, earmarked);
 }

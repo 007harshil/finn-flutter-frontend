@@ -7,6 +7,8 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
+import '../../savings/application/set_aside.dart';
+import '../../savings/presentation/set_aside_account_field.dart';
 
 /// Shared presentation pieces for earmarked savings (goals and the
 /// emergency fund).
@@ -32,10 +34,14 @@ class SavingsMovementDraft {
   const SavingsMovementDraft({
     required this.amount,
     required this.date,
+    this.accountId,
     this.note,
   });
   final Money amount;
   final DateTime date;
+
+  /// Account set aside on / released from.
+  final String? accountId;
   final String? note;
 }
 
@@ -57,10 +63,14 @@ class SavingsMovementForm extends ConsumerStatefulWidget {
     required this.saved,
     required this.target,
     required this.onSubmit,
+    this.held,
     this.disabledReason,
   });
 
   final bool withdraw;
+
+  /// What the pot holds on each account (needed when withdrawing).
+  final Map<String?, Money>? held;
 
   /// e.g. "Japan trip" or "emergency fund".
   final String potName;
@@ -82,6 +92,7 @@ class _SavingsMovementFormState extends ConsumerState<SavingsMovementForm> {
   final _note = TextEditingController();
   late DateTime _date = ref.read(todayProvider);
   Money? _value;
+  String? _accountId;
   Map<String, String> _errors = const {};
   bool _submitting = false;
 
@@ -99,6 +110,15 @@ class _SavingsMovementFormState extends ConsumerState<SavingsMovementForm> {
       _value = m;
       _errors = {..._errors}..remove('amount');
     });
+  }
+
+  /// Preselected account: the default one when adding, the one holding the
+  /// most when releasing.
+  String? _defaultAccount() {
+    final balances = ref.read(accountBalancesProvider).value;
+    if (widget.withdraw) return largestHolding(widget.held ?? const {});
+    if (balances == null) return null;
+    return defaultSetAsideAccount(balances, ref.read(defaultAccountProvider).value?.id);
   }
 
   Future<void> _submit() async {
@@ -119,6 +139,7 @@ class _SavingsMovementFormState extends ConsumerState<SavingsMovementForm> {
       SavingsMovementDraft(
         amount: amount,
         date: _date,
+        accountId: _accountId ?? _defaultAccount(),
         note: note.isEmpty ? null : note,
       ),
       _key,
@@ -154,9 +175,22 @@ class _SavingsMovementFormState extends ConsumerState<SavingsMovementForm> {
     final availAfter = available == null
         ? null
         : (w.withdraw ? available + amount : available - amount);
+    final balances = ref.watch(accountBalancesProvider).value;
+    final defaultId = ref.watch(defaultAccountProvider).value?.id;
+    final accountId =
+        _accountId ??
+        (w.withdraw
+            ? largestHolding(w.held ?? const {})
+            : (balances == null ? null : defaultSetAsideAccount(balances, defaultId)));
+    final onAccount = balances
+        ?.where((b) => b.account.id == accountId)
+        .firstOrNull;
+    final held = accountId == null ? Money.zero : (w.held?[accountId] ?? Money.zero);
+    final free = onAccount?.available;
     final overAvailable =
-        !w.withdraw && available != null && amount > available;
+        !w.withdraw && free != null && amount > free;
     final overSaved = w.withdraw && amount > w.saved;
+    final overHeld = w.withdraw && !overSaved && onAccount != null && amount > held;
     return FinnSheetScaffold(
       title: w.withdraw
           ? 'Withdraw from ${w.potName}'
@@ -183,9 +217,13 @@ class _SavingsMovementFormState extends ConsumerState<SavingsMovementForm> {
             errorText:
                 _errors['amount'] ??
                 (overAvailable
-                    ? 'More than the ${savingsMoney(context, available)} available.'
+                    ? notEnoughOn(onAccount!.account, free)
                     : overSaved
                     ? 'Only ${savingsMoney(context, w.saved)} is saved here.'
+                    : overHeld
+                    ? (held.isPositive
+                          ? 'Only ${savingsMoney(context, held)} is set aside on ${onAccount.account.name}.'
+                          : 'Nothing is set aside on ${onAccount.account.name}.')
                     : null),
             onChanged: (m) => setState(() {
               _value = m;
@@ -209,8 +247,28 @@ class _SavingsMovementFormState extends ConsumerState<SavingsMovementForm> {
             ],
           ),
           const SizedBox(height: LedgerForm.gap),
+          SetAsideAccountField(
+            value: accountId,
+            held: w.withdraw ? (w.held ?? const {}) : null,
+            enabled: !disabled,
+            errorText: _errors['accountId'],
+            onChanged: (id) => setState(() {
+              _accountId = id;
+              _errors = {..._errors}
+                ..remove('accountId')
+                ..remove('amount');
+            }),
+          ),
+          const SizedBox(height: LedgerForm.gap),
           LedgerPanel(
             children: [
+              if (onAccount != null)
+                LedgerFact(
+                  label: w.withdraw ? 'Held in ${onAccount.account.name}' : 'Free in ${onAccount.account.name}',
+                  text: w.withdraw
+                      ? '${savingsMoney(context, held)}  →  ${savingsMoney(context, held - amount)}'
+                      : '${savingsMoney(context, free!)}  →  ${savingsMoney(context, free - amount)}',
+                ),
               LedgerFact(
                 label: 'Available',
                 text: available == null

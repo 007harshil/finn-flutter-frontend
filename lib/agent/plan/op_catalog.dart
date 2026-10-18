@@ -762,7 +762,7 @@ OpOutcome _goalMove(PlanOp op, OpContext c, String actionId) {
   final ref = _ref(op.args['goal']);
   if (ref != null) {
     if (amount == null) return const OpQuestion('How much?', field: 'amount');
-    return OpAction(actionId, {'goalId': '@$ref', 'amount': Out.money(amount), 'date': Out.date(_date(op, c))},
+    return OpAction(actionId, {'goalId': '@$ref', 'amount': Out.money(amount), ..._onAccount(op, c), 'date': Out.date(_date(op, c))},
         refs: {'goalId': ref});
   }
   final found = _named<SavingsGoal>(
@@ -781,13 +781,20 @@ OpOutcome _goalMove(PlanOp op, OpContext c, String actionId) {
       field: 'amount',
     );
   }
-  return OpAction(actionId, {'goalId': goal.id, 'amount': Out.money(amount), 'date': Out.date(_date(op, c))});
+  return OpAction(actionId, {'goalId': goal.id, 'amount': Out.money(amount), ..._onAccount(op, c), 'date': Out.date(_date(op, c))});
+}
+
+/// `accountId` when the user named an account for a set-aside or release;
+/// otherwise nothing (default account / the accounts holding the most).
+Map<String, Object?> _onAccount(PlanOp op, OpContext c) {
+  final id = AgentAccount.resolve(c.snapshot, op.args['account'], c.userText);
+  return id == null ? const {} : {'accountId': id};
 }
 
 OpOutcome _fund(PlanOp op, OpContext c, String actionId) {
   final amount = _money(op, 'amount');
   if (amount == null) return const OpQuestion('How much?', field: 'amount');
-  return OpAction(actionId, {'amount': Out.money(amount), 'date': Out.date(_date(op, c))});
+  return OpAction(actionId, {'amount': Out.money(amount), ..._onAccount(op, c), 'date': Out.date(_date(op, c))});
 }
 
 // ---------------------------------------------------------------------------

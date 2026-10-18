@@ -62,6 +62,41 @@ class AccountAmount extends StatelessWidget {
   }
 }
 
+/// "Available ₹X · set aside ₹Y" (quiet second line under an account that has
+/// savings set aside on it). Over-reserved accounts show the shortfall in the
+/// out colour.
+class SetAsideLine extends StatelessWidget {
+  const SetAsideLine(this.balance, {super.key});
+
+  final AccountBalance balance;
+
+  /// Whether [b] has anything set aside to report.
+  static bool shows(AccountBalance b) => !b.isLiability && b.earmarked.isPositive;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ink;
+    final style = context.type.label;
+    final hidden = AmountVisibility.hiddenOf(context);
+    String money(Money m) => hidden ? MoneyFormatter.masked : MoneyFormatter.format(m, decimals: DecimalDisplay.none);
+    final over = balance.available.isNegative;
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: over ? 'Over-reserved ${money(-balance.available)}' : 'Available ${money(balance.available)}',
+            style: over ? style.copyWith(color: c.red) : null,
+          ),
+          TextSpan(text: ' · set aside ${money(balance.earmarked)}'),
+        ],
+      ),
+      style: style,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+}
+
 /// Spoken description of an account line for screen readers.
 String accountSemantics(AccountBalance b, {bool hidden = false}) {
   final a = b.account;
@@ -70,7 +105,14 @@ String accountSemantics(AccountBalance b, {bool hidden = false}) {
       : b.isLiability
       ? '${MoneyFormatter.spoken(b.balance)} owed'
       : MoneyFormatter.spoken(b.balance);
-  return '${a.name}, ${a.subtitle}${a.isDefault ? ', default' : ''}, $amount';
+  final reserved = SetAsideLine.shows(b)
+      ? hidden
+            ? ', some money set aside'
+            : b.available.isNegative
+            ? ', over-reserved by ${MoneyFormatter.spoken(-b.available)}, ${MoneyFormatter.spoken(b.earmarked)} set aside'
+            : ', ${MoneyFormatter.spoken(b.available)} available, ${MoneyFormatter.spoken(b.earmarked)} set aside'
+      : '';
+  return '${a.name}, ${a.subtitle}${a.isDefault ? ', default' : ''}, $amount$reserved';
 }
 
 /// One account in a panel: icon, name, kind and last 4, balance. Credit
@@ -93,6 +135,7 @@ class AccountRow extends StatelessWidget {
       title: a.name,
       subtitle: [accountSubtitle(a), ?limitLeftText(balance, short: true), if (a.isDefault) 'Default'].join(' · '),
       subtitleLines: 2,
+      below: SetAsideLine.shows(balance) ? SetAsideLine(balance) : null,
       trailing: AccountAmount(balance),
       trailingSub: balance.isLiability
           ? Text('owed', style: t.small.copyWith(color: c.inkSoft))

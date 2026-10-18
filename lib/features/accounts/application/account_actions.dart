@@ -544,7 +544,7 @@ class DeleteAccountAction extends FinancialAction<AccountIdInput, MoneyAccount> 
         module: 'accounts',
         title: 'Delete an account',
         description: 'Removes an account that nothing refers to. Accounts with transactions, transfers, '
-            'subscriptions or settlements must be archived instead.',
+            'subscriptions, settlements or set-aside savings must be archived instead.',
         risk: ActionRisk.consequential,
         reversible: false,
         fields: [ActionFieldSpec('id', FieldKind.id, 'Account id')],
@@ -560,9 +560,9 @@ class DeleteAccountAction extends FinancialAction<AccountIdInput, MoneyAccount> 
     if (s.accounts.length <= 1) {
       return const Result.err(AppFailure.validation('You need at least one account.'));
     }
-    if (_isReferenced(s, a.id)) {
+    if (_isReferenced(s, a.id) || s.savingsMovements.any((m) => m.accountId == a.id)) {
       return Result.err(AppFailure.validation(
-          '${a.name} is used by existing transactions, transfers or subscriptions. Archive it instead.'));
+          '${a.name} is used by existing transactions, transfers, subscriptions or set-aside savings. Archive it instead.'));
     }
     return Result.ok(preview(
       input,

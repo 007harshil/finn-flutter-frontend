@@ -5,6 +5,7 @@ import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../finance/finance_snapshot.dart';
 import '../../goals/domain/goal.dart';
+import '../../savings/application/set_aside.dart';
 import '../domain/emergency_fund.dart';
 
 const int minEmergencyMonths = 1;
@@ -106,23 +107,34 @@ class ConfigureEmergencyFundAction extends FinancialAction<ConfigureEmergencyFun
 }
 
 class EmergencyFundMovementInput extends ActionInput {
-  const EmergencyFundMovementInput({required this.amount, required this.date, this.note});
+  const EmergencyFundMovementInput({required this.amount, required this.date, this.accountId, this.note});
   final Money amount;
+
+  /// Account set aside on / released from; null = default account when
+  /// adding, the accounts holding the most when releasing.
+  final String? accountId;
   final DateTime date;
   final String? note;
 
   factory EmergencyFundMovementInput.fromJson(Map<String, Object?> j) => EmergencyFundMovementInput(
         amount: In.money(j, 'amount'),
+        accountId: In.strOpt(j, 'accountId'),
         date: In.date(j, 'date'),
         note: In.strOpt(j, 'note'),
       );
 
   @override
-  Map<String, Object?> toJson() => {'amount': Out.money(amount), 'date': Out.date(date), 'note': note};
+  Map<String, Object?> toJson() => {'amount': Out.money(amount), 'accountId': accountId, 'date': Out.date(date), 'note': note};
 }
 
 const _movementFields = [
   ActionFieldSpec('amount', FieldKind.money, 'Amount in rupees'),
+  ActionFieldSpec(
+    'accountId',
+    FieldKind.id,
+    'Account the money is set aside on (contribution: default account when omitted) or released from (withdrawal: the accounts holding the most when omitted)',
+    required: false,
+  ),
   ActionFieldSpec('date', FieldKind.date, 'Date (not in the future)'),
   ActionFieldSpec('note', FieldKind.string, 'Note', required: false),
 ];
@@ -142,7 +154,8 @@ class EmergencyFundMovementAction extends FinancialAction<EmergencyFundMovementI
           id: 'emergencyFund.contribute',
           module: 'emergencyFund',
           title: 'Add to the emergency fund',
-          description: 'Earmarks available cash for emergencies. Not an expense; net worth is unchanged.',
+          description:
+              'Sets money aside for emergencies on an account. Not an expense: the account balance and net worth are unchanged, but the money can no longer be spent.',
           risk: ActionRisk.consequential,
           fields: _movementFields,
         )
@@ -150,7 +163,7 @@ class EmergencyFundMovementAction extends FinancialAction<EmergencyFundMovementI
           id: 'emergencyFund.withdraw',
           module: 'emergencyFund',
           title: 'Withdraw from the emergency fund',
-          description: 'Releases earmarked emergency money back to available cash. Not income.',
+          description: 'Releases emergency money back to spendable. Not income.',
           risk: ActionRisk.consequential,
           fields: _movementFields,
         );
@@ -165,15 +178,19 @@ class EmergencyFundMovementAction extends FinancialAction<EmergencyFundMovementI
     final e = <String, String>{};
     if (!input.amount.isPositive) e['amount'] = 'Enter an amount greater than zero.';
     if (input.date.dateOnly.isAfter(s.today)) e['date'] = 'The date cannot be in the future.';
-    if (_isContribution && input.amount > available) {
-      e['amount'] = available.isPositive
-          ? 'Only ${available.format()} is available to set aside.'
-          : 'There is no available money to set aside right now.';
-    }
-    if (!_isContribution && input.amount > saved) {
-      e['amount'] = 'Only ${saved.format()} is in your emergency fund.';
-    }
     if ((input.note?.length ?? 0) > 200) e['note'] = 'Keep the note under 200 characters.';
+    final planned = planAccounts(
+      s: s,
+      isContribution: _isContribution,
+      amount: input.amount,
+      accountId: input.accountId,
+      saved: saved,
+      type: SavingsBucketType.emergencyFund,
+      bucketId: SavingsMovement.emergencyFundBucketId,
+      savedMessage: 'Only ${saved.format()} is in your emergency fund.',
+      errors: e,
+    );
+    if (planned.failure != null) return Result.err(planned.failure!);
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
     final savedAfter = _isContribution ? saved + input.amount : saved - input.amount;
     final availAfter = _isContribution ? available - input.amount : available + input.amount;
@@ -186,8 +203,9 @@ class EmergencyFundMovementAction extends FinancialAction<EmergencyFundMovementI
           : 'Release ${input.amount.format()} from your emergency fund',
       lines: [
         PreviewLine('Amount', input.amount.format(), emphasis: true),
+        for (final l in planned.plan.lines) PreviewLine(l.$1, l.$2),
         PreviewLine('Emergency fund', '${saved.format()} → ${savedAfter.format()}'),
-        PreviewLine('Available to spend', '${available.format()} → ${availAfter.format()}'),
+        PreviewLine('Available to spend (total)', '${available.format()} → ${availAfter.format()}'),
         PreviewLine('Date', DateFormats.dayMonthYear.format(input.date)),
         const PreviewLine('Net worth', 'Unchanged'),
       ],
@@ -202,17 +220,33 @@ class EmergencyFundMovementAction extends FinancialAction<EmergencyFundMovementI
   @override
   Future<Result<SavingsMovement>> execute(
       EmergencyFundMovementInput input, FinanceSnapshot s, ActionEnvironment env) async {
-    final m = SavingsMovement(
-      id: env.ids.next('sv'),
-      bucketType: SavingsBucketType.emergencyFund,
-      bucketId: SavingsMovement.emergencyFundBucketId,
-      kind: kind,
+    final planned = planAccounts(
+      s: s,
+      isContribution: _isContribution,
       amount: input.amount,
-      date: input.date.dateOnly,
-      note: input.note,
-      createdAt: env.clock.now(),
+      accountId: input.accountId,
+      saved: s.emergency.saved,
+      type: SavingsBucketType.emergencyFund,
+      bucketId: SavingsMovement.emergencyFundBucketId,
+      savedMessage: '',
+      errors: {},
     );
-    await env.repos.savingsMovements.save(m);
-    return Result.ok(m);
+    SavingsMovement? first;
+    for (final r in planned.plan.releases) {
+      final m = SavingsMovement(
+        id: env.ids.next('sv'),
+        bucketType: SavingsBucketType.emergencyFund,
+        bucketId: SavingsMovement.emergencyFundBucketId,
+        kind: kind,
+        amount: r.amount,
+        accountId: r.accountId,
+        date: input.date.dateOnly,
+        note: input.note,
+        createdAt: env.clock.now(),
+      );
+      await env.repos.savingsMovements.save(m);
+      first ??= m;
+    }
+    return Result.ok(first!);
   }
 }

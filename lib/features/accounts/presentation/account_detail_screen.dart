@@ -290,6 +290,23 @@ class _BodyState extends ConsumerState<_Body> {
     Widget fact(String label, String text) =>
         LedgerFact(label: label, text: text);
     return [
+      if (SetAsideLine.shows(b)) ...[
+        LedgerFact(
+          label: 'Total',
+          value: AmountText(b.balance, style: t.figureSmall.copyWith(color: ink)),
+        ),
+        LedgerFact(
+          label: 'Set aside',
+          value: AmountText(b.earmarked, style: t.figureSmall.copyWith(color: ink)),
+        ),
+        LedgerFact(
+          label: 'Available to spend',
+          value: AmountText(
+            b.available,
+            style: t.figureSmall.copyWith(color: b.available.isNegative ? context.ink.red : ink),
+          ),
+        ),
+      ],
       fact('Kind', a.kind.label),
       if (a.institution != null) fact('Institution', a.institution!),
       if (a.last4 != null) fact('Card', '····${a.last4}'),

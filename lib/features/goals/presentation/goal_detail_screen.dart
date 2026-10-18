@@ -15,6 +15,7 @@ import '../../../core/time/dates.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/async_view.dart';
+import '../../savings/presentation/held_on_section.dart';
 import '../application/goal_actions.dart';
 import '../application/goal_view.dart';
 import '../domain/goal.dart';
@@ -139,6 +140,7 @@ class _GoalBody extends ConsumerWidget {
             top: Sp.section,
             child: LedgerSection(title: 'Monthly plan', child: _PlanSection(progress: g, today: today)),
           ),
+        HeldOnSection(type: SavingsBucketType.goal, bucketId: g.goal.id, movements: g.movements),
         PageColumn(top: Sp.section, child: _History(movements: g.movements)),
       ],
     );

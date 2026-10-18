@@ -31,6 +31,7 @@ class BalanceSnapshot {
     required this.earmarkedEmergency,
     this.accounts = const [],
     this.creditOwed = Money.zero,
+    this.earmarkedUnassigned = Money.zero,
   });
 
   static const empty = BalanceSnapshot(
@@ -59,6 +60,9 @@ class BalanceSnapshot {
   /// Total owed on credit cards (a liability, never part of [cash]).
   final Money creditOwed;
 
+  /// Savings set aside on no account (old data); part of [earmarked] only.
+  final Money earmarkedUnassigned;
+
   /// Total money in asset accounts.
   Money get cash => openingBalance + totalInflow - totalOutflow;
   Money get earmarked => earmarkedGoals + earmarkedEmergency;
@@ -76,6 +80,7 @@ class BalanceSnapshot {
       other.earmarkedGoals == earmarkedGoals &&
       other.earmarkedEmergency == earmarkedEmergency &&
       other.creditOwed == creditOwed &&
+      other.earmarkedUnassigned == earmarkedUnassigned &&
       listEquals(other.accounts, accounts);
 
   @override
@@ -162,6 +167,24 @@ class LedgerCalculator {
       if (toAsset) inflow += tr.amount.paise;
     }
 
+    var goals = 0;
+    var emergency = 0;
+    var unassigned = 0;
+    final heldBy = <String, int>{};
+    for (final m in movements) {
+      if (m.date.isAfter(to)) continue;
+      final onAccount = m.accountId;
+      if (onAccount == null) {
+        unassigned += m.signedAmount.paise;
+      } else {
+        heldBy[onAccount] = (heldBy[onAccount] ?? 0) + m.signedAmount.paise;
+      }
+      if (m.bucketType == SavingsBucketType.goal) {
+        goals += m.signedAmount.paise;
+      } else {
+        emergency += m.signedAmount.paise;
+      }
+    }
     var opening = 0;
     var owed = 0;
     final balances = <AccountBalance>[];
@@ -173,20 +196,14 @@ class LedgerCalculator {
         balances.add(AccountBalance(account: a, balance: Money.fromPaise(o)));
       } else {
         opening += a.opening.paise;
-        balances.add(AccountBalance(account: a, balance: Money.fromPaise(a.opening.paise + f)));
+        balances.add(AccountBalance(
+          account: a,
+          balance: Money.fromPaise(a.opening.paise + f),
+          earmarked: Money.fromPaise(heldBy[a.id] ?? 0),
+        ));
       }
     }
 
-    var goals = 0;
-    var emergency = 0;
-    for (final m in movements) {
-      if (m.date.isAfter(to)) continue;
-      if (m.bucketType == SavingsBucketType.goal) {
-        goals += m.signedAmount.paise;
-      } else {
-        emergency += m.signedAmount.paise;
-      }
-    }
     return BalanceSnapshot(
       openingBalance: Money.fromPaise(opening),
       totalInflow: Money.fromPaise(inflow),
@@ -195,6 +212,7 @@ class LedgerCalculator {
       earmarkedEmergency: Money.fromPaise(emergency),
       accounts: List.unmodifiable(balances),
       creditOwed: Money.fromPaise(owed),
+      earmarkedUnassigned: Money.fromPaise(unassigned),
     );
   }
 

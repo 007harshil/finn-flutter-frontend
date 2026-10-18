@@ -8,6 +8,9 @@ import '../../../core/money/money_format.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/category_icons.dart';
+import '../../accounts/domain/money_account.dart';
+import '../../savings/application/set_aside.dart';
+import '../../savings/presentation/set_aside_account_field.dart';
 import '../application/goal_actions.dart';
 import '../domain/goal.dart';
 import 'savings_widgets.dart' show savingsMoney;
@@ -35,6 +38,7 @@ class _GoalFormSheetState extends ConsumerState<GoalFormSheet> {
   /// colour goals, so there is no picker for it.
   int _colorIndex = 5;
   Money? _startingValue;
+  String? _accountId;
   Map<String, String> _errors = const {};
   bool _submitting = false;
   bool _loaded = false;
@@ -70,17 +74,25 @@ class _GoalFormSheetState extends ConsumerState<GoalFormSheet> {
     if (_errors.containsKey(field)) setState(() => _errors = {..._errors}..remove(field));
   }
 
+  /// The account the starting amount is set aside on (default unless picked).
+  AccountBalance? _accountRow(List<AccountBalance>? balances) {
+    if (balances == null) return null;
+    final id =
+        _accountId ?? defaultSetAsideAccount(balances, ref.read(defaultAccountProvider).value?.id);
+    return balances.where((b) => b.account.id == id).firstOrNull;
+  }
+
   Future<void> _submit() async {
     final target = LedgerAmountField.parse(_target.text);
     final monthly = _monthly.text.trim().isEmpty ? null : LedgerAmountField.parse(_monthly.text);
     final starting = _starting.text.trim().isEmpty ? null : LedgerAmountField.parse(_starting.text);
-    final available = ref.read(balanceProvider).value?.available;
+    final onAccount = _accountRow(ref.read(accountBalancesProvider).value);
     final local = <String, String>{
       if (_name.text.trim().isEmpty) 'name': 'Give your goal a name.',
       if (target == null || !target.isPositive) 'target': 'Enter a target greater than zero.',
       if (_monthly.text.trim().isNotEmpty && monthly == null) 'plannedMonthlyContribution': 'Enter a valid amount.',
-      if (!_isEdit && starting != null && available != null && starting > available)
-        'initialAllocation': 'Only ${available.format()} is available to set aside.',
+      if (!_isEdit && starting != null && onAccount != null && starting > onAccount.available)
+        'initialAllocation': notEnoughOn(onAccount.account, onAccount.available),
     };
     if (local.isNotEmpty) {
       setState(() => _errors = local);
@@ -103,6 +115,7 @@ class _GoalFormSheetState extends ConsumerState<GoalFormSheet> {
       targetDate: _targetDate,
       plannedMonthlyContribution: monthly != null && monthly.isPositive ? monthly : null,
       initialAllocation: _isEdit || starting == null || !starting.isPositive ? null : starting,
+      accountId: _isEdit || starting == null || !starting.isPositive ? null : onAccount?.account.id,
       note: _existing?.note,
     );
     final existing = _existing;
@@ -158,8 +171,8 @@ class _GoalFormSheetState extends ConsumerState<GoalFormSheet> {
 
   Widget _form(BuildContext context) {
     final today = ref.watch(todayProvider);
-    final available = ref.watch(balanceProvider.select((b) => b.value?.available));
-    final startingTooHigh = _startingValue != null && available != null && _startingValue! > available;
+    final onAccount = _accountRow(ref.watch(accountBalancesProvider).value);
+    final startingTooHigh = _startingValue != null && onAccount != null && _startingValue! > onAccount.available;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -220,17 +233,30 @@ class _GoalFormSheetState extends ConsumerState<GoalFormSheet> {
           LedgerAmountField(
             controller: _starting,
             label: 'Set aside now (optional)',
-            helper: available == null
-                ? 'Moves money from your balance into this goal.'
-                : 'Available: ${savingsMoney(context, available)}',
+            helper: onAccount == null
+                ? 'Sets money aside for this goal.'
+                : 'Free to spend in ${onAccount.account.name}: ${savingsMoney(context, onAccount.available)}',
             errorText:
                 _errors['initialAllocation'] ??
-                (startingTooHigh ? 'More than the ${savingsMoney(context, available)} you have available.' : null),
+                (startingTooHigh ? notEnoughOn(onAccount.account, onAccount.available) : null),
             onChanged: (m) => setState(() {
               _startingValue = m;
               _errors = {..._errors}..remove('initialAllocation');
             }),
           ),
+          if (_startingValue != null && _startingValue!.isPositive) ...[
+            const SizedBox(height: LedgerForm.gap),
+            SetAsideAccountField(
+              value: onAccount?.account.id,
+              errorText: _errors['accountId'],
+              onChanged: (id) => setState(() {
+                _accountId = id;
+                _errors = {..._errors}
+                  ..remove('accountId')
+                  ..remove('initialAllocation');
+              }),
+            ),
+          ],
         ],
       ],
     );

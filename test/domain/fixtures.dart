@@ -61,7 +61,7 @@ Transaction tx(
       updatedAt: fxStamp,
     );
 
-SavingsMovement goalMove(int rupees, DateTime date, {String goalId = 'g1', bool withdraw = false, String? note}) =>
+SavingsMovement goalMove(int rupees, DateTime date, {String goalId = 'g1', bool withdraw = false, String? note, String? accountId}) =>
     SavingsMovement(
       id: _id('sv'),
       bucketType: SavingsBucketType.goal,
@@ -70,16 +70,18 @@ SavingsMovement goalMove(int rupees, DateTime date, {String goalId = 'g1', bool 
       amount: rs(rupees),
       date: date,
       note: note,
+      accountId: accountId,
       createdAt: fxStamp,
     );
 
-SavingsMovement efMove(int rupees, DateTime date, {bool withdraw = false}) => SavingsMovement(
+SavingsMovement efMove(int rupees, DateTime date, {bool withdraw = false, String? accountId}) => SavingsMovement(
       id: _id('sv'),
       bucketType: SavingsBucketType.emergencyFund,
       bucketId: SavingsMovement.emergencyFundBucketId,
       kind: withdraw ? SavingsMovementKind.withdrawal : SavingsMovementKind.contribution,
       amount: rs(rupees),
       date: date,
+      accountId: accountId,
       createdAt: fxStamp,
     );
 

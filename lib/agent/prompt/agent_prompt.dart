@@ -42,9 +42,9 @@ sub_status {name, status} status = active|paused|cancelled.
 sub_skip {name}
 subscription {name, amount, category, every, next} a new recurring subscription; every = weekly|monthly|quarterly|yearly; next = next due date.
 goal {name, target, by?, monthly?} a new savings goal; by = target date.
-goal_add {goal, amount, date?} earmark money for a goal; goal = goal name as the user said it.
-goal_take {goal, amount, date?}
-fund_add {amount, date?} / fund_take {amount, date?} emergency fund.
+goal_add {goal, amount, account?, date?} set money aside for a goal; goal = goal name as the user said it; account = only when the user named one.
+goal_take {goal, amount, account?, date?}
+fund_add {amount, account?, date?} / fund_take {amount, account?, date?} emergency fund.
 account {name, kind, balance?, last4?, limit?} a new cash, bank, card or credit-card account; kind = cash|bank|debit|credit|promo|card; balance = money in it now (credit card: amount owed); limit = credit limit.
 transfer {from, to, amount, date?, channel?, note?} money moved between the user's OWN accounts (ATM withdrawal, credit-card bill payment); from/to = account names as said. Not an expense or income.
 q {metric, category?, person?, text?, period?, from?, to?} a question about the user's own records. metric = spent|earned|balance|owed|budget|goal|subscriptions|loans. period = today|yesterday|week|month|last_month|year|all (default month).

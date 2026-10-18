@@ -4,6 +4,7 @@ import '../../../core/money/money_format.dart';
 import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../savings/application/set_aside.dart';
 import '../domain/goal.dart';
 
 class GoalInput extends ActionInput {
@@ -15,6 +16,7 @@ class GoalInput extends ActionInput {
     this.targetDate,
     this.plannedMonthlyContribution,
     this.initialAllocation,
+    this.accountId,
     this.note,
   });
 
@@ -27,6 +29,9 @@ class GoalInput extends ActionInput {
 
   /// Optional amount to earmark immediately from available cash (create only).
   final Money? initialAllocation;
+
+  /// Account the starting amount is set aside on (default account when null).
+  final String? accountId;
   final String? note;
 
   factory GoalInput.fromJson(Map<String, Object?> j) => GoalInput(
@@ -37,6 +42,7 @@ class GoalInput extends ActionInput {
     targetDate: In.dateOpt(j, 'targetDate'),
     plannedMonthlyContribution: In.moneyOpt(j, 'plannedMonthlyContribution'),
     initialAllocation: In.moneyOpt(j, 'initialAllocation'),
+    accountId: In.strOpt(j, 'accountId'),
     note: In.strOpt(j, 'note'),
   );
 
@@ -49,6 +55,7 @@ class GoalInput extends ActionInput {
     'targetDate': Out.dateOpt(targetDate),
     'plannedMonthlyContribution': Out.moneyOpt(plannedMonthlyContribution),
     'initialAllocation': Out.moneyOpt(initialAllocation),
+    'accountId': accountId,
     'note': note,
   };
 }
@@ -70,8 +77,13 @@ Map<String, String> _validateGoal(GoalInput i, FinanceSnapshot s, {String? excep
     e['plannedMonthlyContribution'] = 'Enter a positive amount.';
   }
   final init = i.initialAllocation;
-  if (init != null && init.isPositive && init > s.balance.available) {
-    e['initialAllocation'] = 'Only ${s.balance.available.format()} is available to set aside.';
+  if (init != null && init.isPositive) {
+    final here = resolveSetAside(s, i.accountId);
+    if (here.failure != null) {
+      e.addAll(here.failure!.fieldErrors);
+    } else if (init > here.target!.available) {
+      e['initialAllocation'] = notEnoughOn(here.target!.account, here.target!.available);
+    }
   }
   return e;
 }
@@ -92,7 +104,13 @@ class CreateGoalAction extends FinancialAction<GoalInput, SavingsGoal> {
       ActionFieldSpec('target', FieldKind.money, 'Target amount'),
       ActionFieldSpec('targetDate', FieldKind.date, 'Target date', required: false),
       ActionFieldSpec('plannedMonthlyContribution', FieldKind.money, 'Planned monthly amount', required: false),
-      ActionFieldSpec('initialAllocation', FieldKind.money, 'Amount to earmark now', required: false),
+      ActionFieldSpec('initialAllocation', FieldKind.money, 'Amount to set aside now', required: false),
+      ActionFieldSpec(
+        'accountId',
+        FieldKind.id,
+        'Account the starting amount is set aside on (default account when omitted)',
+        required: false,
+      ),
     ],
   );
 
@@ -104,6 +122,7 @@ class CreateGoalAction extends FinancialAction<GoalInput, SavingsGoal> {
     final e = _validateGoal(input, s);
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
     final init = input.initialAllocation ?? Money.zero;
+    final here = init.isPositive ? resolveSetAside(s, input.accountId).target : null;
     return Result.ok(
       preview(
         input,
@@ -112,10 +131,16 @@ class CreateGoalAction extends FinancialAction<GoalInput, SavingsGoal> {
         lines: [
           PreviewLine('Target', input.target.format(), emphasis: true),
           if (input.targetDate != null) PreviewLine('By', DateFormats.monthYear.format(input.targetDate!)),
-          if (init.isPositive) PreviewLine('Earmarked now', init.format()),
+          if (init.isPositive) PreviewLine('Set aside now', init.format()),
+          if (init.isPositive) PreviewLine('Set aside on', here!.account.name),
           if (init.isPositive)
             PreviewLine(
-              'Available to spend',
+              'Free to spend in ${here!.account.name}',
+              '${here.available.format()} → ${(here.available - init).format()}',
+            ),
+          if (init.isPositive)
+            PreviewLine(
+              'Available to spend (total)',
               '${s.balance.available.format()} → ${(s.balance.available - init).format()}',
             ),
         ],
@@ -142,6 +167,7 @@ class CreateGoalAction extends FinancialAction<GoalInput, SavingsGoal> {
     await env.repos.goals.save(goal);
     final init = input.initialAllocation;
     if (init != null && init.isPositive) {
+      final here = resolveSetAside(s, input.accountId).target!;
       await env.repos.savingsMovements.save(
         SavingsMovement(
           id: env.ids.next('sv'),
@@ -149,6 +175,7 @@ class CreateGoalAction extends FinancialAction<GoalInput, SavingsGoal> {
           bucketId: goal.id,
           kind: SavingsMovementKind.contribution,
           amount: init,
+          accountId: here.account.id,
           date: s.today,
           note: 'Starting amount',
           createdAt: now,
@@ -236,15 +263,20 @@ class UpdateGoalAction extends FinancialAction<UpdateGoalInput, SavingsGoal> {
 }
 
 class GoalMovementInput extends ActionInput {
-  const GoalMovementInput({required this.goalId, required this.amount, required this.date, this.note});
+  const GoalMovementInput({required this.goalId, required this.amount, required this.date, this.accountId, this.note});
   final String goalId;
   final Money amount;
+
+  /// Account set aside on / released from; null = default account when
+  /// adding, the accounts holding the most when releasing.
+  final String? accountId;
   final DateTime date;
   final String? note;
 
   factory GoalMovementInput.fromJson(Map<String, Object?> j) => GoalMovementInput(
     goalId: In.str(j, 'goalId'),
     amount: In.money(j, 'amount'),
+    accountId: In.strOpt(j, 'accountId'),
     date: In.date(j, 'date'),
     note: In.strOpt(j, 'note'),
   );
@@ -253,6 +285,7 @@ class GoalMovementInput extends ActionInput {
   Map<String, Object?> toJson() => {
     'goalId': goalId,
     'amount': Out.money(amount),
+    'accountId': accountId,
     'date': Out.date(date),
     'note': note,
   };
@@ -261,6 +294,12 @@ class GoalMovementInput extends ActionInput {
 const _movementFields = [
   ActionFieldSpec('goalId', FieldKind.id, 'Goal id'),
   ActionFieldSpec('amount', FieldKind.money, 'Amount in rupees'),
+  ActionFieldSpec(
+    'accountId',
+    FieldKind.id,
+    'Account the money is set aside on (contribution: default account when omitted) or released from (withdrawal: the accounts holding the most when omitted)',
+    required: false,
+  ),
   ActionFieldSpec('date', FieldKind.date, 'Date'),
   ActionFieldSpec('note', FieldKind.string, 'Note', required: false),
 ];
@@ -279,7 +318,8 @@ class GoalMovementAction extends FinancialAction<GoalMovementInput, SavingsMovem
           id: 'goals.contribute',
           module: 'goals',
           title: 'Add money to a goal',
-          description: 'Earmarks available cash for a goal. Not an expense; net worth is unchanged.',
+          description:
+              'Sets money aside for a goal on an account. Not an expense: the account balance and net worth are unchanged, but the money can no longer be spent.',
           risk: ActionRisk.consequential,
           fields: _movementFields,
         )
@@ -287,7 +327,7 @@ class GoalMovementAction extends FinancialAction<GoalMovementInput, SavingsMovem
           id: 'goals.withdraw',
           module: 'goals',
           title: 'Withdraw from a goal',
-          description: 'Releases earmarked money back to available cash. Not income.',
+          description: 'Releases money set aside for a goal back to spendable. Not income.',
           risk: ActionRisk.consequential,
           fields: _movementFields,
         );
@@ -303,10 +343,18 @@ class GoalMovementAction extends FinancialAction<GoalMovementInput, SavingsMovem
     final e = <String, String>{};
     if (!input.amount.isPositive) e['amount'] = 'Enter an amount greater than zero.';
     if (input.date.dateOnly.isAfter(s.today)) e['date'] = 'The date cannot be in the future.';
-    if (_isContribution && input.amount > s.balance.available) {
-      e['amount'] = 'Only ${s.balance.available.format()} is available to set aside.';
-    }
-    if (!_isContribution && input.amount > g.saved) e['amount'] = 'Only ${g.saved.format()} is saved in this goal.';
+    final planned = planAccounts(
+      s: s,
+      isContribution: _isContribution,
+      amount: input.amount,
+      accountId: input.accountId,
+      saved: g.saved,
+      type: SavingsBucketType.goal,
+      bucketId: input.goalId,
+      savedMessage: 'Only ${g.saved.format()} is saved in this goal.',
+      errors: e,
+    );
+    if (planned.failure != null) return Result.err(planned.failure!);
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
     final savedAfter = _isContribution ? g.saved + input.amount : g.saved - input.amount;
     final availAfter = _isContribution ? s.balance.available - input.amount : s.balance.available + input.amount;
@@ -319,8 +367,9 @@ class GoalMovementAction extends FinancialAction<GoalMovementInput, SavingsMovem
             : 'Release ${input.amount.format()} from ${g.goal.name}',
         lines: [
           PreviewLine('Amount', input.amount.format(), emphasis: true),
+          for (final l in planned.plan.lines) PreviewLine(l.$1, l.$2),
           PreviewLine('Saved in goal', '${g.saved.format()} → ${savedAfter.format()}'),
-          PreviewLine('Available to spend', '${s.balance.available.format()} → ${availAfter.format()}'),
+          PreviewLine('Available to spend (total)', '${s.balance.available.format()} → ${availAfter.format()}'),
           const PreviewLine('Net worth', 'Unchanged'),
         ],
         warnings: [if (_isContribution && savedAfter >= g.goal.target && !g.isAchieved) 'This completes your goal!'],
@@ -331,18 +380,35 @@ class GoalMovementAction extends FinancialAction<GoalMovementInput, SavingsMovem
 
   @override
   Future<Result<SavingsMovement>> execute(GoalMovementInput input, FinanceSnapshot s, ActionEnvironment env) async {
-    final m = SavingsMovement(
-      id: env.ids.next('sv'),
-      bucketType: SavingsBucketType.goal,
-      bucketId: input.goalId,
-      kind: kind,
+    final g = s.goal(input.goalId)!;
+    final planned = planAccounts(
+      s: s,
+      isContribution: _isContribution,
       amount: input.amount,
-      date: input.date.dateOnly,
-      note: input.note,
-      createdAt: env.clock.now(),
+      accountId: input.accountId,
+      saved: g.saved,
+      type: SavingsBucketType.goal,
+      bucketId: input.goalId,
+      savedMessage: '',
+      errors: {},
     );
-    await env.repos.savingsMovements.save(m);
-    return Result.ok(m);
+    SavingsMovement? first;
+    for (final r in planned.plan.releases) {
+      final m = SavingsMovement(
+        id: env.ids.next('sv'),
+        bucketType: SavingsBucketType.goal,
+        bucketId: input.goalId,
+        kind: kind,
+        amount: r.amount,
+        accountId: r.accountId,
+        date: input.date.dateOnly,
+        note: input.note,
+        createdAt: env.clock.now(),
+      );
+      await env.repos.savingsMovements.save(m);
+      first ??= m;
+    }
+    return Result.ok(first!);
   }
 }
 

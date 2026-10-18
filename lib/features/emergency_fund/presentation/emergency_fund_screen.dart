@@ -12,6 +12,7 @@ import '../../../kit/kit.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../../goals/domain/goal.dart';
 import '../../goals/presentation/savings_widgets.dart';
+import '../../savings/presentation/held_on_section.dart';
 import '../domain/emergency_fund.dart';
 
 /// Emergency fund: what is set aside, how many months of essentials it
@@ -64,6 +65,11 @@ class _Body extends StatelessWidget {
       children: [
         PageColumn(top: Sp.xl, child: _Hero(status: s, configured: configured)),
         if (configured) PageColumn(top: Sp.section, child: _PlanSection(status: s)),
+        HeldOnSection(
+          type: SavingsBucketType.emergencyFund,
+          bucketId: SavingsMovement.emergencyFundBucketId,
+          movements: s.movements,
+        ),
         PageColumn(top: Sp.section, child: _History(movements: s.movements)),
         if (configured)
           const PageColumn(
