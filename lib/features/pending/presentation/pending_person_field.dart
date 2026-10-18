@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,7 +13,8 @@ import '../domain/pending_payment.dart';
 import 'pending_ui.dart';
 
 /// Who the item is with. Only friends can be linked: the field offers them
-/// as chips while empty and filters them by name as the user types. Picking
+/// as chips while empty and filters them by name or username (debounced) as
+/// the user types. There is no global search. Picking
 /// a friend shares the item with them — it then shows in their account too
 /// (double entry). Any other name keeps the item private.
 class PendingPersonField extends ConsumerStatefulWidget {
@@ -45,7 +48,16 @@ class PendingPersonField extends ConsumerStatefulWidget {
 }
 
 class _PendingPersonFieldState extends ConsumerState<PendingPersonField> {
+  static const _debounce = Duration(milliseconds: 300);
+
   String _query = '';
+  Timer? _timer;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -58,9 +70,29 @@ class _PendingPersonFieldState extends ConsumerState<PendingPersonField> {
     }
   }
 
-  void _changed(String text) => setState(() => _query = text.trim());
+  /// Typing is debounced; clearing the field resets the list at once.
+  void _changed(String text) {
+    _timer?.cancel();
+    final value = text.trim();
+    if (value.isEmpty) {
+      setState(() => _query = '');
+      return;
+    }
+    _timer = Timer(_debounce, () {
+      if (mounted) setState(() => _query = value);
+    });
+  }
+
+  /// Friends only, by name or username (with or without the leading `@`).
+  static bool _matches(FinnUser u, String q) {
+    final needle = q.toLowerCase().replaceFirst(RegExp(r'^@+'), '');
+    if (needle.isEmpty) return true;
+    final handle = u.handle.toLowerCase().replaceFirst(RegExp(r'^@+'), '');
+    return u.name.toLowerCase().contains(needle) || handle.contains(needle);
+  }
 
   void _pick(FinnUser u) {
+    _timer?.cancel();
     HapticFeedback.selectionClick();
     widget.controller.text = u.name;
     setState(() => _query = '');
@@ -95,10 +127,9 @@ class _PendingPersonFieldState extends ConsumerState<PendingPersonField> {
       );
     }
     final friends = _friends();
-    final q = _query.toLowerCase();
     final matches = [
       for (final u in friends)
-        if (u.name.toLowerCase().contains(q)) u,
+        if (_matches(u, _query)) u,
     ];
     return MotionAnimatedSize(
       child: Column(

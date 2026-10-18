@@ -94,8 +94,14 @@ final routerProvider = Provider<GoRouter>((ref) {
     pageBuilder: (context, state) => SheetPage<Object?>(key: state.pageKey, child: build(state)),
   );
 
-  GoRoute page(String path, Widget Function(GoRouterState s) build, {List<RouteBase> routes = const []}) => GoRoute(
+  GoRoute page(
+    String path,
+    Widget Function(GoRouterState s) build, {
+    List<RouteBase> routes = const [],
+    bool root = false,
+  }) => GoRoute(
     path: path,
+    parentNavigatorKey: root ? rootNavigatorKey : null,
     pageBuilder: (context, state) => FadeScalePage<Object?>(key: state.pageKey, child: build(state)),
     routes: routes,
   );
@@ -237,7 +243,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (_, _) => const MoreScreen(),
                 routes: [
                   page('account', (_) => const ProfileScreen()),
-                  page('friends', (_) => const FriendsScreen()),
+                  // Root navigator: also opened from the pending sheet, which lives there.
+                  page('friends', (_) => const FriendsScreen(), root: true),
                   page(
                     'loans',
                     (_) => const LoansScreen(),
