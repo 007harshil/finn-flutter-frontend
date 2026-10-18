@@ -1,13 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Required in release builds to reach the FiNN API (debug/profile manifests add it only for tooling). -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    <!-- Voice requests to the FiNN agent (speech is transcribed by the FiNN API). -->
+    <!-- Voice requests to the FiNN agent (speech is transcribed by the FiNN API).
+         Asked at runtime only when the user starts voice input. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Voice is optional: keep FiNN installable on devices without a microphone. -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
+    <!-- Finance data lives on the FiNN API; the device only keeps a cache and the
+         sign-in session, so backups are off (a restored session token would let a
+         copied backup act as the user). Users get their data back by signing in. -->
     <application
         android:label="FiNN"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"

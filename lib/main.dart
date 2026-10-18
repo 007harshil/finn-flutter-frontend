@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,6 +19,9 @@ const _latencyMs = int.fromEnvironment('FINN_LATENCY_MS', defaultValue: 250);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Diagnostics can include amounts, names and API errors: keep them out of
+  // logcat in store builds.
+  if (kReleaseMode) debugPrint = (String? message, {int? wrapWidth}) {};
   final prefs = await SharedPreferences.getInstance();
 
   // Connected mode by default (https://finn-backend.vercel.app); override with

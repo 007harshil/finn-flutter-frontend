@@ -1,4 +1,4 @@
-package com.example.finn
+package app.finn.money
 
 import io.flutter.embedding.android.FlutterActivity
 

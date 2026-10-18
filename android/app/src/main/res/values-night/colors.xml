@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- LedgerColors.dark.paper (lib/kit/tokens.dart). -->
+    <color name="splash_background">#111213</color>
+</resources>

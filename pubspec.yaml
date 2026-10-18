@@ -38,7 +38,10 @@ dependencies:
   go_router: ^18.0.2
   intl: ^0.20.3
   fl_chart: ^1.2.0
-  lucide_icons_flutter: ^3.1.24
+  # Vendored, trimmed copy (base font only): upstream ships ~2.9 MB of weight
+  # fonts that icon tree-shaking cannot remove. See third_party/lucide_icons_flutter.
+  lucide_icons_flutter:
+    path: third_party/lucide_icons_flutter
   path_provider: ^2.1.6
   share_plus: ^13.3.1
   shared_preferences: ^2.5.6

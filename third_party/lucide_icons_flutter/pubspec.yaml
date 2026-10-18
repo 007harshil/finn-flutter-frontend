@@ -1,0 +1,18 @@
+name: lucide_icons_flutter
+description: Trimmed vendored copy of lucide_icons_flutter 3.1.24 (base Lucide font only).
+version: 3.1.24+finn
+publish_to: none
+
+environment:
+  sdk: ^3.0.0
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  fonts:
+    - family: Lucide
+      fonts:
+        - asset: assets/lucide.ttf
