@@ -74,7 +74,17 @@ const _pendingFields = [
       required: false),
 ];
 
-Map<String, String> _validatePending(PendingInput i, FinanceSnapshot s, UserDirectory users, {Money minimum = Money.zero}) {
+/// Message when a link points at someone who is not a friend (same text as
+/// the server).
+const notFriendMessage = 'You can share only with friends. Send them a friend request first.';
+
+Map<String, String> _validatePending(
+  PendingInput i,
+  FinanceSnapshot s,
+  UserDirectory users, {
+  Money minimum = Money.zero,
+  String? existingLinkUserId,
+}) {
   final e = <String, String>{};
   final link = i.linkedUserId;
   if (link != null) {
@@ -82,6 +92,8 @@ Map<String, String> _validatePending(PendingInput i, FinanceSnapshot s, UserDire
       e['linkedUserId'] = 'You cannot share an item with yourself.';
     } else if (users.known(link) == null) {
       e['linkedUserId'] = 'That FiNN user could not be found. Search again.';
+    } else if (link != existingLinkUserId && !users.isFriend(link)) {
+      e['linkedUserId'] = notFriendMessage;
     }
   }
   if (i.counterparty.trim().isEmpty) e['counterparty'] = "Enter the person's name.";
@@ -125,7 +137,7 @@ class CreatePendingAction extends FinancialAction<PendingInput, PendingPayment> 
         PreviewLine('Amount', input.amount.format(), emphasis: true),
         PreviewLine('Reason', input.kind.label),
         if (input.linkedUserId != null)
-          PreviewLine('Shared with', '${env.repos.users.known(input.linkedUserId!)!.handle} · also in their FiNN'),
+          PreviewLine('Shared with', '${env.repos.users.known(input.linkedUserId!)!.contactLabel} · also in their FiNN'),
         const PreviewLine('Cash balance', 'Unchanged until settled'),
       ],
     ));
@@ -405,6 +417,8 @@ Map<String, String> validateSplit(SplitPendingInput i, FinanceSnapshot s, UserDi
         e['people.$n.linkedUserId'] = 'You are already in the split. Use "Include me" instead.';
       } else if (users.known(link) == null) {
         e['people.$n.linkedUserId'] = 'That FiNN user could not be found. Search again.';
+      } else if (!users.isFriend(link)) {
+        e['people.$n.linkedUserId'] = notFriendMessage;
       }
     }
     if (name.isEmpty && link == null) {
@@ -484,7 +498,7 @@ class UpdatePendingAction extends FinancialAction<UpdatePendingInput, PendingPay
     if (link != null && input.data.linkedUserId != null && input.data.linkedUserId != link.userId) {
       return const Result.err(AppFailure(FailureCode.notPermitted, 'The person on a shared item cannot change.'));
     }
-    final e = _validatePending(input.data, s, env.repos.users, minimum: v.settled);
+    final e = _validatePending(input.data, s, env.repos.users, minimum: v.settled, existingLinkUserId: link?.userId);
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
     return Result.ok(preview(
       input,

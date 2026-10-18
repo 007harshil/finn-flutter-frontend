@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/money/money.dart';
@@ -22,7 +24,9 @@ import '../../features/timeline/domain/timeline.dart';
 import '../../features/transactions/domain/transaction.dart';
 import '../../finance/finance_snapshot.dart';
 import '../../finance/ledger.dart';
+import '../../domain/friend_directory.dart';
 import '../../domain/repositories.dart';
+import '../../features/friends/domain/friends.dart';
 import 'core_providers.dart';
 
 // ---------------------------------------------------------------------------
@@ -206,6 +210,18 @@ final pendingViewProvider =
 
 /// People on FiNN (search + the signed-in user).
 final userDirectoryProvider = Provider<UserDirectory>((ref) => ref.watch(financeRepositoriesProvider).users);
+
+/// Friends, requests and FiNN ID lookup.
+final friendDirectoryProvider = Provider<FriendDirectory>((ref) => ref.watch(financeRepositoriesProvider).friends);
+
+/// Friends and requests; emits the current state first, then every change.
+final friendStateProvider = StreamProvider<FriendState>((ref) async* {
+  final directory = ref.watch(friendDirectoryProvider);
+  yield directory.current;
+  // Pick up requests that arrived while the app was closed.
+  unawaited(directory.refresh().catchError((Object _) {}));
+  yield* directory.watch();
+});
 
 /// Every mirrored (counterparty-side) entry of shared pending items.
 final sharedLedgerStreamProvider =

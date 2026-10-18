@@ -53,7 +53,7 @@ class ActionHarness {
       loanPayments: store.loanPayments, subscriptions: store.subscriptions, pending: store.pending,
       settlements: store.settlements, assets: store.assets, moneyAccounts: store.moneyAccounts, transfers: store.transfers, profile: store.profile,
       emergencyPlan: store.emergencyPlan, alertInbox: store.alertInbox,
-        users: store.users, sharedLedger: store.sharedLedger,
+        users: store.users, friends: store.friends, sharedLedger: store.sharedLedger,
     );
     final ids = SequentialIdGenerator();
     final env = ActionEnvironment(

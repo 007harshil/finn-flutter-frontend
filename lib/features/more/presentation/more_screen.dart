@@ -64,6 +64,7 @@ class MoreMenu extends StatelessWidget {
               _Item(icon: LucideIcons.wallet, title: 'Accounts', route: AppRoutes.accounts, open: open),
               _Item(icon: LucideIcons.landmark, title: 'Loans & EMIs', route: AppRoutes.loans, open: open),
               _Item(icon: LucideIcons.handCoins, title: 'Pending payments', route: AppRoutes.pending, open: open),
+              _FriendsItem(open: open),
               _SubscriptionsItem(open: open),
             ],
           ),
@@ -179,6 +180,26 @@ class _SubscriptionsItem extends ConsumerWidget {
       route: AppRoutes.subscriptions,
       open: open,
       subtitle: summary,
+    );
+  }
+}
+
+class _FriendsItem extends ConsumerWidget {
+  const _FriendsItem({required this.open});
+  final MoreOpen open;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final requests = ref.watch(friendStateProvider).value?.incoming.length ?? 0;
+    final t = context.type;
+    return _Item(
+      icon: LucideIcons.users,
+      title: 'Friends',
+      route: AppRoutes.friends,
+      open: open,
+      subtitle: 'Your FiNN ID and requests',
+      semanticLabel: requests == 0 ? null : 'Friends. $requests new ${requests == 1 ? 'request' : 'requests'}',
+      trailing: requests == 0 ? null : Text('$requests new', style: t.labelStrong),
     );
   }
 }

@@ -61,19 +61,23 @@ abstract interface class EmergencyPlanRepository implements ValueRepository<Emer
 
 abstract interface class AlertInboxRepository implements ValueRepository<AlertInboxState> {}
 
-/// People who use FiNN. Searching never reveals more than name, handle and
-/// a phone hint.
+/// People who use FiNN. Only friends can be listed; strangers are found by
+/// exact FiNN ID through [FriendDirectory].
 abstract interface class UserDirectory {
   /// The signed-in user.
   FinnUser get me;
 
-  /// Users whose name or handle matches [query]. Callers debounce typing;
-  /// queries shorter than two characters return nothing.
+  /// Friends whose name or handle matches [query]. An empty query returns
+  /// every friend.
   Future<List<FinnUser>> search(String query);
 
-  /// A user already known on this device (searched before or linked to an
-  /// item). Synchronous so actions can validate without a round trip.
+  /// A user already known on this device (a friend, or linked to an item).
+  /// Synchronous so actions can validate without a round trip.
   FinnUser? known(String id);
+
+  /// Whether [id] is an accepted friend. The remote directory answers true
+  /// until friends have loaded; the server enforces it.
+  bool isFriend(String id);
 }
 
 /// The other side of every shared pending item (double entry): one

@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import '../../core/persistence/entity_collection.dart' show JsonMap;
 import '../../core/result/result.dart';
 import '../../domain/finance_repositories.dart';
+import '../../domain/friend_directory.dart';
 import '../../domain/repositories.dart';
 import '../../features/alerts/domain/alert.dart';
+import '../../features/friends/domain/friends.dart';
 import '../../features/budgets/domain/budget.dart';
 import '../../features/categories/domain/category.dart';
 import '../../features/emergency_fund/domain/emergency_fund.dart';
@@ -21,6 +23,7 @@ import '../../features/subscriptions/domain/subscription.dart';
 import '../../features/transactions/domain/transaction.dart';
 import '../dto/dtos.dart';
 import 'api_client.dart';
+import 'remote_friend_directory.dart';
 import 'sync_engine.dart';
 
 /// Thrown by direct repository writes: when connected, every change goes
@@ -282,12 +285,13 @@ class RemoteSharedLedgerRepository implements SharedLedgerRepository {
   Future<void> delete(String id) async {}
 }
 
-/// FiNN users: `me` from sync, search via `GET /users/search`.
+/// FiNN users: `me` from sync; search lists friends (`GET /users/search`).
 class RemoteUserDirectory implements UserDirectory {
-  RemoteUserDirectory(this.engine, this.api);
+  RemoteUserDirectory(this.engine, this.api, [this.friends]);
 
   final SyncEngine engine;
   final ApiClient api;
+  final FriendDirectory? friends;
   final Map<String, FinnUser> _seen = {};
 
   @override
@@ -295,13 +299,16 @@ class RemoteUserDirectory implements UserDirectory {
     final json = engine.value(SyncValues.me);
     if (json != null && json['id'] is String) return _userFrom(json);
     final name = engine.value(SyncValues.profile)?['displayName'] as String?;
-    return FinnUser(id: engine.userId ?? 'me', name: (name == null || name.trim().isEmpty) ? 'You' : name, handle: '');
+    return FinnUser(
+      id: engine.userId ?? 'me',
+      name: (name == null || name.trim().isEmpty) ? 'You' : name,
+      handle: '',
+    );
   }
 
   @override
   Future<List<FinnUser>> search(String query) async {
-    final q = query.trim();
-    if (q.length < 2) return const [];
+    final q = query.trim(); // empty returns every friend
     final data = await api.get('/users/search', query: {'q': q});
     final items = data is Map ? data['items'] : null;
     if (items is! List) return const [];
@@ -320,13 +327,27 @@ class RemoteUserDirectory implements UserDirectory {
     if (id == me.id) return me;
     final seen = _seen[id];
     if (seen != null) return seen;
+    for (final fr in friends?.current.friends ?? const <Friend>[]) {
+      if (fr.user.id == id) return fr.user;
+    }
     for (final json in engine.records(SyncCollections.pending)) {
       final link = json['link'];
       if (link is Map && link['userId'] == id) {
-        return FinnUser(id: id, name: json['counterparty'] as String? ?? '', handle: link['handle'] as String? ?? '');
+        return FinnUser(
+          id: id,
+          name: json['counterparty'] as String? ?? '',
+          handle: link['handle'] as String? ?? '',
+        );
       }
     }
     return null;
+  }
+
+  @override
+  bool isFriend(String id) {
+    final state = friends?.current;
+    // Not loaded yet: let the server decide.
+    return state == null || !state.loaded || state.isFriend(id);
   }
 
   static FinnUser _userFrom(JsonMap j) => FinnUser(
@@ -334,27 +355,32 @@ class RemoteUserDirectory implements UserDirectory {
     name: (j['name'] as String?) ?? '',
     handle: (j['handle'] as String?) ?? '',
     phoneHint: j['phoneHint'] as String?,
+    finnId: j['finnId'] as String?,
   );
 }
 
 /// Builds the repository bundle over [engine].
-FinanceRepositories buildRemoteRepositories(SyncEngine engine, ApiClient api) => FinanceRepositories(
-  transactions: RemoteTransactionRepository(engine),
-  categories: RemoteCategoryRepository(engine),
-  budgets: RemoteBudgetRepository(engine),
-  goals: RemoteGoalRepository(engine),
-  savingsMovements: RemoteSavingsMovementRepository(engine),
-  loans: RemoteLoanRepository(engine),
-  loanPayments: RemoteLoanPaymentRepository(engine),
-  subscriptions: RemoteSubscriptionRepository(engine),
-  pending: RemotePendingRepository(engine),
-  settlements: RemoteSettlementRepository(engine),
-  assets: RemoteAssetRepository(engine),
-  moneyAccounts: RemoteMoneyAccountRepository(engine),
-  transfers: RemoteTransferRepository(engine),
-  profile: RemoteProfileRepository(engine, api),
-  emergencyPlan: RemoteEmergencyPlanRepository(engine),
-  alertInbox: RemoteAlertInboxRepository(engine, api),
-  users: RemoteUserDirectory(engine, api),
-  sharedLedger: RemoteSharedLedgerRepository(),
-);
+FinanceRepositories buildRemoteRepositories(SyncEngine engine, ApiClient api) {
+  final friends = RemoteFriendDirectory(engine, api);
+  return FinanceRepositories(
+    transactions: RemoteTransactionRepository(engine),
+    categories: RemoteCategoryRepository(engine),
+    budgets: RemoteBudgetRepository(engine),
+    goals: RemoteGoalRepository(engine),
+    savingsMovements: RemoteSavingsMovementRepository(engine),
+    loans: RemoteLoanRepository(engine),
+    loanPayments: RemoteLoanPaymentRepository(engine),
+    subscriptions: RemoteSubscriptionRepository(engine),
+    pending: RemotePendingRepository(engine),
+    settlements: RemoteSettlementRepository(engine),
+    assets: RemoteAssetRepository(engine),
+    moneyAccounts: RemoteMoneyAccountRepository(engine),
+    transfers: RemoteTransferRepository(engine),
+    profile: RemoteProfileRepository(engine, api),
+    emergencyPlan: RemoteEmergencyPlanRepository(engine),
+    alertInbox: RemoteAlertInboxRepository(engine, api),
+    users: RemoteUserDirectory(engine, api, friends),
+    friends: friends,
+    sharedLedger: RemoteSharedLedgerRepository(),
+  );
+}

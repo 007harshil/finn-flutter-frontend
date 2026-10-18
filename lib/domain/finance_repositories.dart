@@ -1,5 +1,6 @@
 import '../core/time/clock.dart';
 import '../finance/finance_snapshot.dart';
+import 'friend_directory.dart';
 import 'repositories.dart';
 
 /// Bundle of every repository, injected into application services and
@@ -23,6 +24,7 @@ class FinanceRepositories {
     required this.emergencyPlan,
     required this.alertInbox,
     required this.users,
+    required this.friends,
     required this.sharedLedger,
   });
 
@@ -45,6 +47,9 @@ class FinanceRepositories {
 
   /// People on FiNN, for sharing pending items.
   final UserDirectory users;
+
+  /// Friends, friend requests and FiNN ID lookup.
+  final FriendDirectory friends;
 
   /// The counterparty side of shared pending items.
   final SharedLedgerRepository sharedLedger;

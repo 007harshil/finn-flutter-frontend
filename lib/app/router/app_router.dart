@@ -31,6 +31,7 @@ import '../../features/loans/presentation/loan_detail_screen.dart';
 import '../../features/loans/presentation/loan_form_sheet.dart';
 import '../../features/loans/presentation/loan_payment_sheet.dart';
 import '../../features/loans/presentation/loans_screen.dart';
+import '../../features/friends/presentation/friends_screen.dart';
 import '../../features/more/presentation/more_screen.dart';
 import '../../features/net_worth/presentation/asset_form_sheet.dart';
 import '../../features/net_worth/presentation/net_worth_screen.dart';
@@ -209,6 +210,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (_, _) => const MoreScreen(),
                 routes: [
                   page('account', (_) => const ProfileScreen()),
+                  page('friends', (_) => const FriendsScreen()),
                   page(
                     'loans',
                     (_) => const LoansScreen(),

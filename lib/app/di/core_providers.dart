@@ -70,6 +70,7 @@ final financeRepositoriesProvider = Provider<FinanceRepositories>((ref) {
     emergencyPlan: store.emergencyPlan,
     alertInbox: store.alertInbox,
     users: store.users,
+    friends: store.friends,
     sharedLedger: store.sharedLedger,
   );
 });

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -10,6 +11,7 @@ import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../kit/kit.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../friends/domain/finn_id.dart';
 import '../../auth/domain/auth_session.dart';
 import '../../settings/domain/financial_profile.dart';
 import 'delete_account_sheet.dart';
@@ -180,13 +182,14 @@ class _FinancialSection extends StatelessWidget {
 // Account
 // ---------------------------------------------------------------------------
 
-class _AccountSection extends StatelessWidget {
+class _AccountSection extends ConsumerWidget {
   const _AccountSection({required this.session});
 
   final AuthSession? session;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final finnId = ref.watch(friendStateProvider).value?.me?.finnId;
     final c = context.ink;
     final t = context.type;
     final since = session == null
@@ -203,6 +206,34 @@ class _AccountSection extends StatelessWidget {
               'Email code',
               style: t.body.copyWith(color: c.inkSoft),
             ),
+          ),
+          if (finnId != null)
+            LedgerRow(
+              key: const ValueKey('profile-finn-id'),
+              leading: const IconWell(icon: LucideIcons.hash),
+              title: 'FiNN ID',
+              subtitle: 'Friends add you with this',
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(FinnId.format(finnId), style: t.figureSmall),
+                  LedgerIconButton(
+                    icon: LucideIcons.copy,
+                    tooltip: 'Copy FiNN ID',
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: FinnId.format(finnId)));
+                      if (context.mounted) FinnToast.success(context, 'FiNN ID copied');
+                    },
+                  ),
+                ],
+              ),
+            ),
+          LedgerRow(
+            leading: const IconWell(icon: LucideIcons.users),
+            title: 'Friends',
+            subtitle: 'Add friends and share pending items',
+            chevron: true,
+            onTap: () => context.push(AppRoutes.friends),
           ),
           LedgerRow(
             leading: const IconWell(icon: LucideIcons.settings),

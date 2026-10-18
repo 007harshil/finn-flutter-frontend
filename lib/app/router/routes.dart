@@ -59,6 +59,7 @@ abstract final class AppRoutes {
   // More branch
   static const more = '/more';
   static const account = '/more/account';
+  static const friends = '/more/friends';
   static const loans = '/more/loans';
   static const newLoan = '/more/loans/new';
   static String loan(String id) => '/more/loans/$id';

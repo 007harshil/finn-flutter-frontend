@@ -2,6 +2,7 @@ import '../../core/money/money.dart';
 import '../../core/persistence/entity_collection.dart';
 import '../../core/time/dates.dart';
 import '../../core/persistence/persistence_driver.dart';
+import '../../domain/friend_directory.dart';
 import '../../domain/repositories.dart';
 import '../../features/accounts/domain/money_account.dart';
 import '../../features/accounts/domain/transfer.dart';
@@ -18,6 +19,7 @@ import '../../features/subscriptions/domain/subscription.dart';
 import '../../features/transactions/domain/transaction.dart';
 import '../dto/dtos.dart';
 import '../mock/finn_users.dart';
+import 'local_friend_directory.dart';
 import '../mock/seed_data.dart';
 
 class LocalTransactionRepository extends EntityCollection<Transaction> implements TransactionRepository {
@@ -91,11 +93,13 @@ class LocalSharedLedgerRepository extends EntityCollection<MirrorEntry> implemen
       : super(storageKey: 'shared_ledger', idOf: (e) => e.key, encode: MirrorEntryDto.toJson, decode: MirrorEntryDto.fromJson, driver: d, behavior: b);
 }
 
-/// In-memory directory over [mockFinnUsers]. "Me" follows the profile name.
+/// Directory over [mockFinnUsers]. "Me" follows the profile name; search
+/// lists friends only.
 class LocalUserDirectory implements UserDirectory {
-  LocalUserDirectory(this._profile);
+  LocalUserDirectory(this._profile, this._friends);
 
   final LocalProfileRepository _profile;
+  final FriendDirectory _friends;
 
   @override
   FinnUser get me => mockMe(_profile.current?.displayName);
@@ -103,15 +107,18 @@ class LocalUserDirectory implements UserDirectory {
   @override
   Future<List<FinnUser>> search(String query) async {
     final q = query.trim().toLowerCase().replaceFirst('@', '');
-    if (q.length < 2) return const [];
-    return mockFinnUsers
-        .where((u) => u.name.toLowerCase().contains(q) || u.handle.toLowerCase().contains(q))
-        .toList();
+    return [
+      for (final f in _friends.current.friends)
+        if (q.isEmpty || f.user.name.toLowerCase().contains(q) || f.user.handle.toLowerCase().contains(q)) f.user,
+    ];
   }
 
   @override
   FinnUser? known(String id) =>
       id == mockMyUserId ? me : mockFinnUsers.where((u) => u.id == id).firstOrNull;
+
+  @override
+  bool isFriend(String id) => _friends.current.isFriend(id);
 }
 
 class _LocalValueRepository<T> implements ValueRepository<T> {
@@ -180,7 +187,8 @@ class LocalDataStore {
     emergencyPlan = LocalEmergencyPlanRepository(driver, this.behavior);
     alertInbox = LocalAlertInboxRepository(driver);
     sharedLedger = LocalSharedLedgerRepository(driver, this.behavior);
-    users = LocalUserDirectory(profile);
+    friends = LocalFriendDirectory(profile);
+    users = LocalUserDirectory(profile, friends);
   }
 
   final PersistenceDriver driver;
@@ -204,6 +212,7 @@ class LocalDataStore {
   late final LocalAlertInboxRepository alertInbox;
   late final LocalSharedLedgerRepository sharedLedger;
   late final LocalUserDirectory users;
+  late final LocalFriendDirectory friends;
 
   List<EntityCollection<Object?>> get _collections => [
         transactions, categories, budgets, goals, savingsMovements, loans,

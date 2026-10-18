@@ -1,11 +1,12 @@
 import 'package:flutter/foundation.dart';
 
+import '../../friends/domain/finn_id.dart';
 import 'pending_payment.dart';
 
 /// Another person who uses FiNN, found through the user directory.
 @immutable
 class FinnUser {
-  const FinnUser({required this.id, required this.name, required this.handle, this.phoneHint});
+  const FinnUser({required this.id, required this.name, required this.handle, this.phoneHint, this.finnId});
 
   final String id;
   final String name;
@@ -16,6 +17,17 @@ class FinnUser {
   /// Last digits of the registered phone ("•• 4821") to tell people with
   /// the same name apart. Never the full number.
   final String? phoneHint;
+
+  /// Stored FiNN ID without a dash (`K7Q2M9XD`); see [FinnId].
+  final String? finnId;
+
+  /// Handle, or the FiNN ID when the server does not send handles (friends
+  /// are listed by name and FiNN ID only).
+  String get contactLabel {
+    if (handle.isNotEmpty) return handle;
+    final id = finnId;
+    return id == null ? name : FinnId.format(id);
+  }
 
   @override
   bool operator ==(Object other) => other is FinnUser && other.id == id;

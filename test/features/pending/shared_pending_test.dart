@@ -110,6 +110,66 @@ void main() {
       expect((outcome as ActionCompleted<PendingPayment>).value.link, isNull);
     });
 
+    test('linking someone who is not a friend is rejected', () async {
+      PendingInput input(String user) => PendingInput(
+        counterparty: 'x',
+        direction: PendingDirection.iOwe,
+        kind: PendingKind.other,
+        amount: const Money.rupees(200),
+        purpose: 'x',
+        createdDate: testNow,
+        linkedUserId: user,
+      );
+      final outcome = await _run(container, const CreatePendingAction(), input('u_rahul'), key: 'nf');
+      expect(
+        (outcome as ActionRejected).failure.fieldErrors['linkedUserId'],
+        'You can share only with friends. Send them a friend request first.',
+      );
+      // After accepting the request they can be linked.
+      final request = env.store.friends.current.incoming.single;
+      await env.store.friends.accept(request.id);
+      final ok = await _run(container, const CreatePendingAction(), input('u_rahul'), key: 'nf2');
+      expect(ok, isA<ActionCompleted<PendingPayment>>());
+    });
+
+    test('an item keeps its link after the friendship ends', () async {
+      final created = await _run(
+        container,
+        const CreatePendingAction(),
+        PendingInput(
+          counterparty: 'x',
+          direction: PendingDirection.iOwe,
+          kind: PendingKind.other,
+          amount: const Money.rupees(200),
+          purpose: 'Chai',
+          createdDate: testNow,
+          linkedUserId: 'u_ramesh',
+        ),
+        key: 'keep',
+      );
+      final p = (created as ActionCompleted<PendingPayment>).value;
+      await env.store.friends.removeFriend('u_ramesh');
+      final edit = await _run(
+        container,
+        const UpdatePendingAction(),
+        UpdatePendingInput(
+          id: p.id,
+          expectedVersion: p.version,
+          data: PendingInput(
+            counterparty: p.counterparty,
+            direction: p.direction,
+            kind: p.kind,
+            amount: const Money.rupees(250),
+            purpose: p.purpose,
+            createdDate: p.createdDate,
+            linkedUserId: 'u_ramesh',
+          ),
+        ),
+        key: 'keep-edit',
+      );
+      expect(edit, isA<ActionCompleted<PendingPayment>>());
+    });
+
     test('unknown or self links are rejected', () async {
       final outcome = await _run(
         container,
@@ -208,13 +268,13 @@ void main() {
         container,
         const CreatePendingAction(),
         PendingInput(
-          counterparty: 'Karan',
+          counterparty: 'Priya',
           direction: PendingDirection.owedToMe,
           kind: PendingKind.sharedExpense,
           amount: const Money.rupees(600),
           purpose: 'Movie',
           createdDate: testNow,
-          linkedUserId: 'u_karan',
+          linkedUserId: 'u_priya',
         ),
         key: 'mk',
       );
@@ -250,56 +310,62 @@ void main() {
   });
 
   group('screens', () {
-    testWidgets(
-      'typing a name searches FiNN users after a pause and links the pick',
-      (tester) async {
-        tester.view.physicalSize =
-            const Size(400, 900) * tester.view.devicePixelRatio;
-        addTearDown(tester.view.resetPhysicalSize);
-        await env.pumpWidget(tester, const PendingFormSheet());
-        await tester.pumpAndSettle();
+    Finder personField() => find
+        .descendant(
+          of: find.byKey(const ValueKey('pending-person:0')),
+          matching: find.byType(TextField),
+        )
+        .first;
 
-        await tester.enterText(
-          find
-              .descendant(
-                of: find.byKey(const ValueKey('pending-person:0')),
-                matching: find.byType(TextField),
-              )
-              .first,
-          'rame',
-        );
-        await tester.pump(const Duration(milliseconds: 100));
-        expect(
-          find.byKey(const ValueKey('finn-user:u_ramesh')),
-          findsNothing,
-          reason: 'debounced',
-        );
-        expect(find.textContaining('Searching FiNN'), findsOneWidget);
+    testWidgets('the person picker offers only friends, and filters them by name', (tester) async {
+      tester.view.physicalSize = const Size(400, 900) * tester.view.devicePixelRatio;
+      addTearDown(tester.view.resetPhysicalSize);
+      await env.pumpWidget(tester, const PendingFormSheet());
+      await tester.pumpAndSettle();
 
-        await tester.pump(const Duration(milliseconds: 400));
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(const ValueKey('finn-user:u_ramesh')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(const ValueKey('finn-user:u_ramesh_iyer')),
-          findsOneWidget,
-        );
+      // Empty field: both friends, nobody else.
+      expect(find.byKey(const ValueKey('finn-user:u_ramesh')), findsOneWidget);
+      expect(find.byKey(const ValueKey('finn-user:u_priya')), findsOneWidget);
+      expect(find.byKey(const ValueKey('finn-user:u_rahul')), findsNothing);
+      expect(find.byKey(const ValueKey('finn-user:u_ramesh_iyer')), findsNothing);
 
-        await tester.tap(find.byKey(const ValueKey('finn-user:u_ramesh')));
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(const ValueKey('pending-linked-user')),
-          findsOneWidget,
-        );
-        expect(
-          find.textContaining('also shows in Ramesh’s FiNN'),
-          findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
-      },
-    );
+      // Typing filters friends; a non-friend with a matching name is not offered.
+      await tester.enterText(personField(), 'rame');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('finn-user:u_ramesh')), findsOneWidget);
+      expect(find.byKey(const ValueKey('finn-user:u_ramesh_iyer')), findsNothing);
+      expect(find.byKey(const ValueKey('finn-user:u_priya')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('finn-user:u_ramesh')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('pending-linked-user')), findsOneWidget);
+      expect(find.textContaining('also shows in Ramesh’s FiNN'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a name that is not a friend stays private and is not offered', (tester) async {
+      tester.view.physicalSize = const Size(400, 900) * tester.view.devicePixelRatio;
+      addTearDown(tester.view.resetPhysicalSize);
+      await env.pumpWidget(tester, const PendingFormSheet());
+      await tester.pumpAndSettle();
+      await tester.enterText(personField(), 'Rahul');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('finn-user:u_rahul')), findsNothing);
+      expect(find.textContaining('No friend matches'), findsOneWidget);
+    });
+
+    testWidgets('without friends the picker explains how to add some', (tester) async {
+      tester.view.physicalSize = const Size(400, 900) * tester.view.devicePixelRatio;
+      addTearDown(tester.view.resetPhysicalSize);
+      for (final f in List.of(env.store.friends.current.friends)) {
+        await env.store.friends.removeFriend(f.user.id);
+      }
+      await env.pumpWidget(tester, const PendingFormSheet());
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('pending-no-friends')), findsOneWidget);
+      expect(find.textContaining('Only friends can be linked'), findsOneWidget);
+      expect(find.byKey(const ValueKey('pending-open-friends')), findsOneWidget);
+    });
 
     testWidgets(
       'detail of a shared item shows the other side and that both match',
