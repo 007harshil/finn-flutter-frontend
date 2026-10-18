@@ -13,7 +13,7 @@ import '../helpers/test_app.dart';
 import 'agent_fakes.dart';
 
 void main() {
-  Map<String, Object?> lunch() => {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch'};
+  Map<String, Object?> lunch() => {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch', 'account': 'Cash'};
 
   group('AgentController', () {
     test('is unavailable without a provider (local mode)', () async {
@@ -35,8 +35,8 @@ void main() {
       final controller = container.read(agentControllerProvider.notifier);
       final before = (await env.snapshot()).transactions.length;
 
-      final turn = controller.send('Spent 450 on lunch');
-      await controller.send('Spent 450 on lunch'); // duplicate tap
+      final turn = controller.send('Spent 450 on lunch in cash');
+      await controller.send('Spent 450 on lunch in cash'); // duplicate tap
       await pumpEventQueue();
       final waiting = container.read(agentControllerProvider);
       expect(waiting.status, AgentStatus.awaitingApproval);
@@ -66,7 +66,7 @@ void main() {
       final controller = container.read(agentControllerProvider.notifier);
       final before = (await env.snapshot()).transactions.length;
 
-      final turn = controller.send('Spent 450 on lunch');
+      final turn = controller.send('Spent 450 on lunch in cash');
       await pumpEventQueue();
       controller.stop();
       await turn;
@@ -118,7 +118,7 @@ void main() {
       await tester.pump();
       expect(find.text('Tell FiNN what happened'), findsOneWidget);
 
-      await tester.enterText(find.byType(TextField), 'Spent 450 on lunch');
+      await tester.enterText(find.byType(TextField), 'Spent 450 on lunch in cash');
       await tester.tap(find.byTooltip('Send'));
       await tester.pump();
       await tester.pump();
@@ -148,11 +148,11 @@ void main() {
       final provider = ScriptedProvider([
         plan([lunch()]),
         plan([
-          {'op': 'expense', 'amount': 450, 'category': 'Groceries', 'note': 'lunch'},
+          {'op': 'expense', 'amount': 450, 'category': 'Groceries', 'note': 'lunch', 'account': 'Cash'},
         ]),
       ]);
       await pumpAgent(tester, env, provider);
-      await tester.enterText(find.byType(TextField), 'Spent 450 on lunch');
+      await tester.enterText(find.byType(TextField), 'Spent 450 on lunch in cash');
       await tester.tap(find.byTooltip('Send'));
       await tester.pump();
       await tester.pump();
@@ -191,13 +191,13 @@ void main() {
       final provider = ScriptedProvider([
         plan([
           lunch(),
-          {'op': 'expense', 'amount': 60, 'category': 'Food & Dining', 'note': 'chai'},
-          {'op': 'expense', 'amount': 120, 'category': 'Transport', 'note': 'auto'},
+          {'op': 'expense', 'amount': 60, 'category': 'Food & Dining', 'note': 'chai', 'account': 'Cash'},
+          {'op': 'expense', 'amount': 120, 'category': 'Transport', 'note': 'auto', 'account': 'Cash'},
         ]),
       ]);
       final container = await pumpAgent(tester, env, provider);
       final before = (await env.snapshot()).transactions.length;
-      await tester.enterText(find.byType(TextField), 'lunch 450, chai 60 and auto 120');
+      await tester.enterText(find.byType(TextField), 'lunch 450, chai 60 and auto 120 in cash');
       await tester.tap(find.byTooltip('Send'));
       await tester.pump();
       await tester.pump();
@@ -236,7 +236,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.enterText(find.byType(TextField), 'Spent 450 on lunch');
+      await tester.enterText(find.byType(TextField), 'Spent 450 on lunch in cash');
       await tester.tap(find.byTooltip('Send'));
       for (var i = 0; i < 20; i++) {
         await tester.pump(const Duration(milliseconds: 16));
@@ -269,7 +269,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.enterText(find.byType(TextField), 'Spent 450 on lunch');
+      await tester.enterText(find.byType(TextField), 'Spent 450 on lunch in cash');
       await tester.tap(find.byTooltip('Send'));
       await tester.pump();
       await tester.pump();
@@ -280,10 +280,10 @@ void main() {
       await tester.tap(find.byTooltip('History'));
       await tester.pumpAndSettle();
       expect(find.text('Agent history'), findsOneWidget);
-      expect(find.text('"Spent 450 on lunch"'), findsOneWidget);
+      expect(find.text('"Spent 450 on lunch in cash"'), findsOneWidget);
       expect(find.textContaining('1 change saved'), findsOneWidget);
 
-      await tester.tap(find.text('"Spent 450 on lunch"'));
+      await tester.tap(find.text('"Spent 450 on lunch in cash"'));
       await tester.pumpAndSettle();
       expect(find.text('Saved'), findsWidgets);
 

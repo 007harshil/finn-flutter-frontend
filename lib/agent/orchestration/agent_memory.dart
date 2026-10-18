@@ -18,10 +18,13 @@ class RecentOp {
 /// One choice offered in a clarification question ("which Rahul item?").
 @immutable
 class ClarifyOption {
-  const ClarifyOption({required this.label, required this.value, this.amount});
+  const ClarifyOption({required this.label, required this.value, this.amount, this.aliases = const []});
 
   /// Shown to the user, e.g. "Concert tickets (₹2,000)".
   final String label;
+
+  /// Other words that pick this option (an account's bank, kind, last four).
+  final List<String> aliases;
 
   /// Filled into the op when chosen (e.g. the pending item's id).
   final String value;
@@ -38,6 +41,7 @@ class PendingClarification {
     required this.originalText,
     required this.ops,
     this.opRef,
+    this.alsoRefs = const [],
     this.field,
     this.options = const [],
   });
@@ -51,6 +55,10 @@ class PendingClarification {
   /// The op the question is about and the field the answer fills, when the
   /// question is about one field of one op.
   final String? opRef;
+
+  /// Other ops the same answer completes (several ops asked the same
+  /// question, e.g. which account two expenses were paid from).
+  final List<String> alsoRefs;
   final String? field;
   final List<ClarifyOption> options;
 }

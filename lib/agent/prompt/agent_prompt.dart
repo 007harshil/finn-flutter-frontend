@@ -18,7 +18,7 @@ const agentInstructions = r'''You convert a FiNN user's message into one JSON pl
 
 Reply with JSON only: {"ops":[...],"ask":"...","reply":"..."}. Omit "ask"/"reply" when unused, and omit any optional field the user did not give. Never invent people, shops, accounts, channels, dates or amounts.
 - ops: every operation in the message, in order, each exactly once. Each op is {"op":TYPE, ...fields}; give each op "id":"o1","o2"... only when a later op refers to it.
-- ask: one short question when an essential detail (amount, person, which record, what kind of operation) is missing or unclear. Still include the ops that are clear; for an op missing only its amount, include it without "amount".
+- ask: one short question when an essential detail (amount, person, which record, what kind of operation) is missing or unclear. Still include the ops that are clear; for an op missing only its amount, include it without "amount". Never ask which account: omit "account" and the app asks.
 - reply: one short sentence only when no op fits (greeting, how to use FiNN, unsupported request). No investment, tax or legal advice. You cannot delete records or edit the profile.
 
 Fields: amount = rupees as a number ("2k"=2000, "1.5L"=150000, "1 crore"=10000000). date = days from today as an integer (0 today, -1 yesterday, -2 day before yesterday) or "yyyy-mm-dd"; omit when not said (means today). Completed money movements are never in the future. category = an exact name from the context lists. account = the name of one of the user's accounts as said ("SBI", "Axis", "cash", "HDFC card"); omit when not said. channel = how it was paid, only when said (UPI, IMPS, NEFT, cheque, ATM, tap). note = what it was for, a few words. person = the name as the user said it.

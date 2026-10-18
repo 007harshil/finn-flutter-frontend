@@ -96,7 +96,7 @@ abstract final class LocalIntents {
         if (byAmount.length == 1) {
           value = byAmount.single.value;
         } else {
-          final m = matchByName(t, p.options, (o) => [o.label]);
+          final m = matchByName(t, p.options, (o) => [o.label, ...o.aliases]);
           if (m is Matched<ClarifyOption>) value = m.value.value;
         }
       }
@@ -107,7 +107,7 @@ abstract final class LocalIntents {
     if (value == null) return null;
     return ClarificationAnswer([
       for (final o in p.ops)
-        if (o.ref == op.ref) o.copyWith(args: {...o.args, p.field!: value}) else o,
+        if (o.ref == op.ref || p.alsoRefs.contains(o.ref)) o.copyWith(args: {...o.args, p.field!: value}) else o,
     ]);
   }
 }

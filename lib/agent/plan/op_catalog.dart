@@ -1,6 +1,7 @@
 import '../../actions/action.dart' show Out;
 import '../../core/money/money.dart';
 import '../../core/money/money_format.dart';
+import '../../core/result/result.dart' show AppFailure, FailureCode;
 import '../../core/time/frequency.dart';
 import '../../features/accounts/domain/money_account.dart';
 import '../../features/categories/domain/category.dart';
@@ -230,6 +231,12 @@ OpOutcome _transaction(PlanOp op, OpContext c, TransactionType type) {
   final category = _categoryFor(op.args['category'], c.snapshot, type);
   if (category == null) return const OpRejected('There is no category to file this under.');
   final party = _str(op.args['party'], max: 60);
+  final account = _moneyAccount(
+    op,
+    c,
+    type == TransactionType.income ? 'Which account did the money go to' : 'Which account did you pay from',
+  );
+  if (account is OpQuestion) return account;
   return OpAction(
     'transactions.create',
     {
@@ -237,7 +244,7 @@ OpOutcome _transaction(PlanOp op, OpContext c, TransactionType type) {
       'amount': Out.money(amount),
       'categoryId': category.id,
       'date': Out.date(_date(op, c)),
-      'accountId': AgentAccount.resolve(c.snapshot, op.args['account'], c.userText),
+      'accountId': account,
       'channel': AgentChannel.resolve(op.args['channel'], c.userText),
       'counterparty': party != null && grounded(party, c.userText, extra: c.groundingText) ? party : null,
       'note': _str(op.args['note']),
@@ -345,6 +352,81 @@ Object _accountFor(PlanOp op, OpContext c, String field, String question) {
     field: field,
     options: [for (final a in pool.take(6)) ClarifyOption(label: a.name, value: a.id)],
   );
+}
+
+String _orList(List<String> items) =>
+    items.length <= 1 ? items.join() : '${items.take(items.length - 1).join(', ')} or ${items.last}';
+
+/// Accounts a money movement can use; savings ([holdsMoney]) cannot sit on
+/// a credit card.
+List<MoneyAccount> _fittingAccounts(OpContext c, {bool holdsMoney = false}) =>
+    [for (final a in c.snapshot.activeAccounts) if (!holdsMoney || !a.isLiability) a];
+
+OpQuestion _askAccount(String question, List<MoneyAccount> pool) {
+  final list = pool.take(6).toList();
+  return OpQuestion(
+    '$question: ${_orList([for (final a in list) a.name])}?',
+    field: 'account',
+    options: [
+      for (final a in list) ClarifyOption(label: a.name, value: a.id, aliases: AgentAccount.labels(a).toList()),
+    ],
+  );
+}
+
+/// The `accountId` of a money movement: the account the user named, else
+/// the only one that fits, else a question listing the ones that fit (a
+/// default is never picked silently when the user has several). Null when
+/// no account fits at all (the server then explains).
+Object? _moneyAccount(PlanOp op, OpContext c, String question, {bool holdsMoney = false}) {
+  final fits = _fittingAccounts(c, holdsMoney: holdsMoney);
+  final m = AgentAccount.match(c.snapshot, op.args['account'], '${c.userText} ${c.groundingText}');
+  if (m is Matched<MoneyAccount>) {
+    if (fits.isEmpty || fits.any((a) => a.id == m.value.id)) return m.value.id;
+    return _askAccount('${m.value.name} is a credit card, which cannot hold savings. $question', fits);
+  }
+  if (fits.length <= 1) {
+    final only = fits.firstOrNull?.id;
+    return only == c.snapshot.defaultAccount?.id ? null : only;
+  }
+  final said = _str(op.args['account'], max: 40);
+  if (m is Ambiguous<MoneyAccount>) {
+    final named = [for (final a in m.candidates) if (fits.any((f) => f.id == a.id)) a];
+    if (named.length > 1) return _askAccount(question, named);
+  }
+  return _askAccount(m is NoMatch<MoneyAccount> && said != null ? 'You have no "$said" account. $question' : question, fits);
+}
+
+/// Op types that move money on one account (`account` arg → `accountId`).
+const _accountOps = {'expense', 'income', 'settle', 'loan_pay', 'sub_paid', 'goal_add', 'goal_take', 'fund_add', 'fund_take'};
+const _setAsideOps = {'goal_add', 'fund_add'};
+
+/// A follow-up question for a change the server refused while preparing it,
+/// when one answer can fix it (another account, another amount). Null when
+/// the refusal is not about those (it is then reported as it is).
+/// [failedAccountId] is the account the refused input used.
+OpQuestion? refusalQuestion(PlanOp op, AppFailure failure, OpContext c, {String? failedAccountId}) {
+  if (failure.code != FailureCode.validation) return null;
+  final errors = failure.fieldErrors;
+  final reason = errors['accountId'] ?? errors['amount'] ?? failure.message;
+  final setAside = _setAsideOps.contains(op.type);
+  final others = [
+    for (final a in _fittingAccounts(c, holdsMoney: setAside))
+      if (a.id != failedAccountId) a,
+  ];
+  if (_accountOps.contains(op.type) && others.isNotEmpty && (errors.containsKey('accountId') || (setAside && errors.containsKey('amount')))) {
+    final q = _askAccount(
+      '${_sentence(reason)} ${setAside ? 'Which account should I set it aside on instead' : 'Which account should I use instead'}',
+      others,
+    );
+    return setAside && errors.containsKey('amount') ? OpQuestion('${q.question} Or tell me a smaller amount.', field: q.field, options: q.options) : q;
+  }
+  if (errors.containsKey('amount')) return OpQuestion('${_sentence(reason)} How much should it be?', field: 'amount');
+  return null;
+}
+
+String _sentence(String s) {
+  final t = s.trim();
+  return t.isEmpty || RegExp(r'[.!?]$').hasMatch(t) ? t : '$t.';
 }
 
 OpOutcome _transfer(PlanOp op, OpContext c) {
@@ -508,11 +590,17 @@ OpOutcome _settle(PlanOp op, OpContext c) {
   if (amount > v.outstanding) {
     return OpRejected('Only ${v.outstanding.format()} is still open with ${v.payment.counterparty} for ${v.payment.purpose}.');
   }
+  final account = _moneyAccount(
+    op,
+    c,
+    v.payment.direction == PendingDirection.owedToMe ? 'Which account did the money come into' : 'Which account did you pay from',
+  );
+  if (account is OpQuestion) return account;
   return OpAction('pending.settle', {
     'pendingId': v.payment.id,
     'amount': Out.money(amount),
     'date': Out.date(_date(op, c)),
-    'accountId': AgentAccount.resolve(c.snapshot, op.args['account'], c.userText),
+    'accountId': account,
     'channel': AgentChannel.resolve(op.args['channel'], c.userText),
     'recordCashMovement': true,
   });
@@ -631,12 +719,14 @@ OpOutcome _loanPay(PlanOp op, OpContext c) {
     'principal' || 'prepay' || 'prepayment' => 'principal',
     _ => 'installment',
   };
+  final account = _moneyAccount(op, c, 'Which account did you pay it from');
+  if (account is OpQuestion) return account;
   return OpAction('loans.recordPayment', {
     'loanId': l.loan.id,
     'kind': kind,
     'amount': Out.money(amount),
     'date': Out.date(_date(op, c)),
-    'accountId': AgentAccount.resolve(c.snapshot, op.args['account'], c.userText),
+    'accountId': account,
     'channel': AgentChannel.resolve(op.args['channel'], c.userText),
     'recordCashMovement': true,
   });
@@ -694,11 +784,16 @@ OpOutcome _subPaid(PlanOp op, OpContext c) {
   final found = _subscriptionNamed(op, c);
   if (found is OpOutcome) return found;
   final sub = found as Subscription;
+  // A subscription that has an account is paid from it unless another is named.
+  final account = sub.accountId == null
+      ? _moneyAccount(op, c, 'Which account paid for ${sub.name}')
+      : AgentAccount.resolve(c.snapshot, op.args['account'], '${c.userText} ${c.groundingText}');
+  if (account is OpQuestion) return account;
   return OpAction('subscriptions.markPaid', {
     'subscriptionId': sub.id,
     'date': Out.date(_date(op, c)),
     'amount': ?Out.moneyOpt(_money(op, 'amount')),
-    'accountId': AgentAccount.resolve(c.snapshot, op.args['account'], c.userText),
+    'accountId': account,
     'channel': AgentChannel.resolve(op.args['channel'], c.userText),
   });
 }
@@ -762,8 +857,13 @@ OpOutcome _goalMove(PlanOp op, OpContext c, String actionId) {
   final ref = _ref(op.args['goal']);
   if (ref != null) {
     if (amount == null) return const OpQuestion('How much?', field: 'amount');
-    return OpAction(actionId, {'goalId': '@$ref', 'amount': Out.money(amount), ..._onAccount(op, c), 'date': Out.date(_date(op, c))},
-        refs: {'goalId': ref});
+    final account = _onAccount(op, c, actionId);
+    if (account is OpQuestion) return account;
+    return OpAction(
+      actionId,
+      {'goalId': '@$ref', 'amount': Out.money(amount), ...account as Map<String, Object?>, 'date': Out.date(_date(op, c))},
+      refs: {'goalId': ref},
+    );
   }
   final found = _named<SavingsGoal>(
     op,
@@ -781,20 +881,34 @@ OpOutcome _goalMove(PlanOp op, OpContext c, String actionId) {
       field: 'amount',
     );
   }
-  return OpAction(actionId, {'goalId': goal.id, 'amount': Out.money(amount), ..._onAccount(op, c), 'date': Out.date(_date(op, c))});
+  final account = _onAccount(op, c, actionId);
+  if (account is OpQuestion) return account;
+  return OpAction(
+    actionId,
+    {'goalId': goal.id, 'amount': Out.money(amount), ...account as Map<String, Object?>, 'date': Out.date(_date(op, c))},
+  );
 }
 
-/// `accountId` when the user named an account for a set-aside or release;
-/// otherwise nothing (default account / the accounts holding the most).
-Map<String, Object?> _onAccount(PlanOp op, OpContext c) {
-  final id = AgentAccount.resolve(c.snapshot, op.args['account'], c.userText);
-  return id == null ? const {} : {'accountId': id};
+/// `accountId` input of a set-aside or release. Setting money aside needs
+/// the account it sits on (asked when the user has several that hold
+/// money); a release without a named account comes from the accounts
+/// holding the most (server side).
+Object _onAccount(PlanOp op, OpContext c, String actionId) {
+  if (actionId.endsWith('.contribute')) {
+    final id = _moneyAccount(op, c, 'Which account should I set this aside on', holdsMoney: true);
+    if (id is OpQuestion) return id;
+    return id == null ? const <String, Object?>{} : <String, Object?>{'accountId': id};
+  }
+  final id = AgentAccount.resolve(c.snapshot, op.args['account'], '${c.userText} ${c.groundingText}');
+  return id == null ? const <String, Object?>{} : <String, Object?>{'accountId': id};
 }
 
 OpOutcome _fund(PlanOp op, OpContext c, String actionId) {
   final amount = _money(op, 'amount');
   if (amount == null) return const OpQuestion('How much?', field: 'amount');
-  return OpAction(actionId, {'amount': Out.money(amount), ..._onAccount(op, c), 'date': Out.date(_date(op, c))});
+  final account = _onAccount(op, c, actionId);
+  if (account is OpQuestion) return account;
+  return OpAction(actionId, {'amount': Out.money(amount), ...account as Map<String, Object?>, 'date': Out.date(_date(op, c))});
 }
 
 // ---------------------------------------------------------------------------

@@ -228,7 +228,12 @@ class RemotePlanGateway implements PlanGateway {
   static AppFailure? _failure(Object? raw) {
     if (raw is! Map) return null;
     final code = FailureCode.values.where((c) => c.name == raw['code']).firstOrNull ?? FailureCode.unknown;
-    return AppFailure(code, raw['message']?.toString() ?? 'This could not be done.');
+    final fields = raw['fieldErrors'];
+    return AppFailure(
+      code,
+      raw['message']?.toString() ?? 'This could not be done.',
+      fieldErrors: fields is Map ? {for (final e in fields.entries) e.key.toString(): e.value.toString()} : const {},
+    );
   }
 
   static bool _transient(AppFailure f) => f.code == FailureCode.unavailable || (f.code == FailureCode.unknown && f.retryable);

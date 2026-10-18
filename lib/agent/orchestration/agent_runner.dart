@@ -295,6 +295,8 @@ class AgentRunner {
     final runId = ids.next('run');
     final avoid = {if (redo != null && redo.rejected) _fingerprintOfStep(redo.previous.proposal.stepId)};
     final records = <ActionRecord>[];
+    // Changes refused while being prepared that one answer can fix.
+    final refused = <({PlanOp op, OpQuestion q})>[];
     final created = Map<String, String>.of(existing);
     final notSaved = <String>{};
     var waiting = [
@@ -336,9 +338,19 @@ class AgentRunner {
         approve: approve,
         onEvent: onEvent,
         token: token,
+        ctx: ctx,
       );
       historyNotes = const [];
       rejected.addAll(round.problems);
+      refused.addAll(round.questions);
+      // Ops that need a refused change wait for the answer with it.
+      final waitFor = {for (final r in round.questions) r.op.ref};
+      for (final w in [...waiting]) {
+        if (w.action.refs.values.any(waitFor.contains)) {
+          waiting.remove(w);
+          dependents.add(w.op);
+        }
+      }
       records.addAll(round.records);
       for (final r in round.records) {
         final id = r.recordId;
@@ -358,17 +370,26 @@ class AgentRunner {
       for (final r in records)
         if (r.succeeded) RecentOp(actionId: r.proposal.descriptor.id, summary: _recentSummary(r), recordId: _firstId(r.recordId)),
     ]);
-    final questions = [for (final op in ops) if (outcomes[op.ref] case final OpQuestion q) (op: op, q: q)];
+    final questions = [
+      for (final op in ops)
+        if (outcomes[op.ref] case final OpQuestion q) (op: op, q: q),
+      ...refused,
+    ];
     final question = _question(ask, questions.map((e) => e.q).toList());
     if (question != null && !cancelled) {
-      final single = questions.length == 1 ? questions.single : null;
+      // One answer completes every op when they all asked the same thing.
+      final first = questions.firstOrNull;
+      final same = first != null &&
+          first.q.field != null &&
+          questions.every((e) => e.q.field == first.q.field && _sameOptions(e.q.options, first.q.options));
       memory.pending = PendingClarification(
         question: question,
         originalText: request,
         ops: [for (final e in questions) e.op, ...dependents],
-        opRef: single?.op.ref,
-        field: single?.q.field,
-        options: single?.q.options ?? const [],
+        opRef: same ? first.op.ref : null,
+        alsoRefs: same ? [for (final e in questions.skip(1)) e.op.ref] : const [],
+        field: same ? first.q.field : null,
+        options: same ? first.q.options : const [],
       );
     }
 
@@ -393,7 +414,7 @@ class AgentRunner {
   }
 
   /// One wave: preview together, one review card, one execution call.
-  Future<({List<ActionRecord> records, List<String> problems})> _round(
+  Future<({List<ActionRecord> records, List<String> problems, List<({PlanOp op, OpQuestion q})> questions})> _round(
     List<({PlanOp op, OpAction action, List<String> notes})> ready, {
     required Map<String, String> created,
     required String request,
@@ -403,10 +424,13 @@ class AgentRunner {
     required ApprovalHandler approve,
     required void Function(AgentEvent event)? onEvent,
     required CancellationToken token,
+    required OpContext ctx,
   }) async {
     final problems = <String>[];
+    final questions = <({PlanOp op, OpQuestion q})>[];
     final steps = <PlanStep>[];
     final refsOf = <String, String>{}; // step id → op ref
+    final planOps = <String, PlanOp>{}; // step id → op
     final notesOf = <String, List<String>>{};
     final opsOf = <String, Map<String, Object?>>{};
     final seen = <String, int>{};
@@ -434,6 +458,7 @@ class AgentRunner {
       final stepId = '$fp-$occurrence';
       steps.add(PlanStep(stepId: stepId, action: action, input: decoded));
       refsOf[stepId] = w.op.ref;
+      planOps[stepId] = w.op;
       opsOf[stepId] = w.op.toJson()..remove('id');
       notesOf[stepId] = [
         ...w.notes,
@@ -443,7 +468,7 @@ class AgentRunner {
           'You already recorded an identical entry earlier in this chat. Approve only if this is a separate one.',
       ];
     }
-    if (steps.isEmpty) return (records: const <ActionRecord>[], problems: problems);
+    if (steps.isEmpty) return (records: const <ActionRecord>[], problems: problems, questions: questions);
 
     onEvent?.call(const AgentToolStarted('plan', 'Preparing your changes'));
     final previews = await gateway.preview(planId, steps);
@@ -453,7 +478,15 @@ class AgentRunner {
       final s = steps[i];
       final p = previews[i];
       if (p.preview == null) {
-        problems.add('Couldn\'t prepare "${s.action.descriptor.title.toLowerCase()}": ${p.failure?.message ?? 'unknown problem'}');
+        final failed = s.input.toJson()['accountId'];
+        final q = p.failure == null
+            ? null
+            : refusalQuestion(planOps[s.stepId]!, p.failure!, ctx, failedAccountId: failed is String ? failed : null);
+        if (q != null) {
+          questions.add((op: planOps[s.stepId]!, q: q));
+        } else {
+          problems.add('Couldn\'t prepare "${s.action.descriptor.title.toLowerCase()}": ${p.failure?.message ?? 'unknown problem'}');
+        }
         continue;
       }
       final label = p.preview!.summary.length <= 300 ? p.preview!.summary : p.preview!.summary.substring(0, 300);
@@ -470,7 +503,7 @@ class AgentRunner {
         opJson: opsOf[s.stepId] ?? const {},
       ));
     }
-    if (proposals.isEmpty) return (records: const <ActionRecord>[], problems: problems);
+    if (proposals.isEmpty) return (records: const <ActionRecord>[], problems: problems, questions: questions);
 
     onEvent?.call(const AgentPlanReady(null));
     onEvent?.call(AgentAwaitingApproval(List.unmodifiable(proposals)));
@@ -494,7 +527,7 @@ class AgentRunner {
       history: HistoryWrite(
         runId: runId,
         request: _clip(request, 500),
-        notes: [for (final n in {...historyNotes, ...problems}.take(10)) _clip(n, 300)],
+        notes: [for (final n in {...historyNotes, ...problems, for (final q in questions) q.q.question}.take(10)) _clip(n, 300)],
       ),
     );
     final byStep = {for (final r in results) r.stepId: r};
@@ -517,7 +550,7 @@ class AgentRunner {
       ));
     }
     onEvent?.call(AgentActionsSettled(List.unmodifiable(records)));
-    return (records: records, problems: problems);
+    return (records: records, problems: problems, questions: questions);
   }
 
   /// Ops whose actions are not registered or not exposed to the agent are
@@ -621,10 +654,13 @@ class AgentRunner {
   /// records).
   static String? _question(String? ask, List<OpQuestion> local) {
     final choices = [for (final q in local) if (q.options.isNotEmpty) q.question];
-    if (ask != null) return [ask, ...choices.where((c) => c != ask)].join(' ');
+    if (ask != null) return {ask, ...choices}.join(' ');
     if (local.isEmpty) return null;
     return {for (final q in local) q.question}.join(' ');
   }
+
+  static bool _sameOptions(List<ClarifyOption> a, List<ClarifyOption> b) =>
+      a.length == b.length && [for (var i = 0; i < a.length; i++) a[i].value == b[i].value].every((x) => x);
 
   /// What the model is told about the change to redo.
   static String _redoContext(RedoRequest redo) {

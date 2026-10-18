@@ -8,6 +8,7 @@ import 'package:finn/core/money/money.dart';
 import 'package:finn/core/result/result.dart';
 import 'package:finn/features/pending/domain/pending_payment.dart';
 import 'package:finn/features/transactions/domain/transaction.dart';
+import 'package:finn/data/local/local_data_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../actions/action_harness.dart';
@@ -182,6 +183,53 @@ void main() {
       expect(second.actions.single.proposal.input.toJson(), containsPair('amount', '2000.00'));
       expect(second.reply, 'Paid Rahul Verma ₹2,000.');
       expect(r.history.entries.single.request, 'I paid Rahul back → the concert one');
+    });
+
+    test('no account named with several accounts: asked, and the answer completes it without the model', () async {
+      final r = AgentRig(
+        await ActionHarness.create(scenario: DataScenario.demo),
+        ScriptedProvider([
+          plan([
+            {'op': 'fund_add', 'amount': 500},
+          ]),
+        ]),
+      );
+      final first = await r.turn('Add ₹500 to my emergency fund');
+      expect(first.end, AgentTurnEnd.completed);
+      expect(first.actions, isEmpty);
+      expect(r.approvals, isEmpty);
+      expect(first.reply, startsWith('Which account should I set this aside on: Cash, '));
+
+      // Cash has nothing free in the demo data: asked again, not dropped.
+      final second = await r.turn('cash');
+      expect(second.actions, isEmpty);
+      expect(second.reply, startsWith('There is no free money in Cash to set aside. Which account should I set it aside on instead: '));
+
+      final third = await r.turn('sbi');
+      expect(r.provider.requests, hasLength(1)); // both answers resolved locally
+      final sbi = (await r.harness.snapshot()).activeAccounts.firstWhere((a) => a.name == 'SBI');
+      final input = third.actions.single.proposal.input.toJson();
+      expect((input['accountId'], input['amount']), (sbi.id, '500.00'));
+      expect(third.actions.single.status, ActionResultStatus.completed);
+      expect(r.history.entries.single.request, 'Add ₹500 to my emergency fund → cash → sbi');
+    });
+
+    test('a change refused while preparing is asked about instead of dropped', () async {
+      final r = AgentRig(
+        await ActionHarness.create(scenario: DataScenario.demo),
+        ScriptedProvider([
+          plan([
+            {'op': 'fund_add', 'amount': 90000000, 'account': 'Cash'},
+          ]),
+        ]),
+      );
+      final first = await r.turn('Add 9 crore to my emergency fund from cash');
+      expect(first.end, AgentTurnEnd.completed);
+      expect(r.approvals, isEmpty);
+      expect(first.reply, contains('Which account should I set it aside on instead: '));
+      expect(first.reply, endsWith('Or tell me a smaller amount.'));
+      expect(first.reply, isNot(contains("Couldn't prepare")));
+      expect(r.runner.memory.pending?.field, 'account');
     });
 
     test('a missing amount is asked for; a bare amount completes it locally', () async {

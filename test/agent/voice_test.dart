@@ -209,7 +209,7 @@ void main() {
     final capture = FakeCapture();
     final provider = ScriptedProvider([
       plan([
-        {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch'},
+        {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch', 'account': 'Cash'},
       ]),
     ]);
     await tester.pumpWidget(
@@ -218,7 +218,7 @@ void main() {
           ...env.overrides,
           llmProviderProvider.overrideWithValue(provider),
           voiceCaptureFactoryProvider.overrideWithValue(() => capture),
-          speechTranscriberProvider.overrideWithValue(FakeTranscriber('Spent 450 on lunch')),
+          speechTranscriberProvider.overrideWithValue(FakeTranscriber('Spent 450 on lunch in cash')),
         ],
         child: MaterialApp(
           theme: FinnTheme.light(),
@@ -240,7 +240,7 @@ void main() {
     final sent = ProviderScope.containerOf(tester.element(find.byType(AgentScreen)))
         .read(agentControllerProvider)
         .entries;
-    expect((sent.single as UserChatEntry).text, 'Spent 450 on lunch', reason: 'transcript sent as the user message');
+    expect((sent.single as UserChatEntry).text, 'Spent 450 on lunch in cash', reason: 'transcript sent as the user message');
     expect(find.text('Review this change'), findsOneWidget);
     expect(find.text('Nothing is saved until you approve.'), findsOneWidget);
     expect(find.text('Moves money'), findsWidgets);

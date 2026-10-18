@@ -7,6 +7,7 @@ import 'package:finn/agent/plan/resolvers.dart';
 import 'package:finn/agent/prompt/agent_prompt.dart';
 import 'package:finn/app/di/action_catalog.dart';
 import 'package:finn/core/money/money.dart';
+import 'package:finn/core/result/result.dart';
 import 'package:finn/data/local/local_data_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -141,29 +142,29 @@ void main() {
       final memory = AgentMemory()
         ..remember([RecentOp(actionId: 'transactions.create', summary: 'lunch', recordId: s.transactions.firstWhere((t) => !t.isLinked).id)]);
       final samples = <String, Map<String, Object?>>{
-        'expense': {'amount': 450, 'category': 'Food & Dining'},
-        'income': {'amount': '15k', 'category': 'Freelance', 'party': 'Acme'},
+        'expense': {'amount': 450, 'category': 'Food & Dining', 'account': 'Cash'},
+        'income': {'amount': '15k', 'category': 'Freelance', 'party': 'Acme', 'account': 'Cash'},
         'pending': {'dir': 'owe', 'person': 'Rohan', 'amount': 2000, 'kind': 'borrowed'},
-        'settle': {'person': 'Neha'},
+        'settle': {'person': 'Neha', 'account': 'Cash'},
         'write_off': {'person': 'Ananya'},
         'split': {'total': 1800, 'people': ['Aman', 'Riya']},
         'edit': {'target': '#1', 'set': {'amount': 400}},
         'category': {'name': 'Pets', 'type': 'expense'},
         'budget': {'category': 'Shopping', 'limit': 5000},
         'budget_pause': {'category': 'Travel', 'paused': true},
-        'loan_pay': {'loan': 'car loan'},
+        'loan_pay': {'loan': 'car loan', 'account': 'Cash'},
         'loan': {'name': 'Bike', 'lender': 'SBI', 'dir': 'borrowed', 'principal': 100000, 'rate': 10.5, 'start': 0, 'first_due': '2026-11-05', 'emis': 12},
-        'sub_paid': {'name': 'netflix'},
+        'sub_paid': {'name': 'netflix', 'account': 'Cash'},
         'sub_status': {'name': 'spotify', 'status': 'paused'},
         'sub_skip': {'name': 'youtube'},
         'subscription': {'name': 'Swiggy One', 'amount': 99, 'category': 'Subscriptions', 'every': 'monthly', 'next': '2026-11-01'},
         'goal': {'name': 'Goa', 'target': '50k', 'by': '2027-03-01'},
-        'goal_add': {'goal': 'Japan trip', 'amount': 2000},
+        'goal_add': {'goal': 'Japan trip', 'amount': 2000, 'account': 'SBI'},
         'goal_take': {'goal': 'macbook', 'amount': 500},
-        'fund_add': {'amount': 1000},
+        'fund_add': {'amount': 1000, 'account': 'SBI'},
         'fund_take': {'amount': 500},
       };
-      final text = 'gpay Aman Riya Rohan Neha Ananya Acme SBI';
+      final text = 'gpay Aman Riya Rohan Neha Ananya Acme SBI cash';
       for (final e in samples.entries) {
         final out = compileOp(
           PlanOp(ref: 'o1', type: e.key, args: e.value),
@@ -191,14 +192,69 @@ void main() {
       expect((c('pending', {'person': 'Amit', 'amount': 300}, text: 'amit') as OpQuestion).field, 'dir');
       final rahul = c('settle', {'person': 'Rahul'}) as OpQuestion;
       expect(rahul.options, hasLength(2));
-      expect(c('settle', {'person': 'Rahul', 'amount': 780}), isA<OpAction>()); // narrowed by amount
-      expect(c('settle', {'person': 'Rahul', 'note': 'concert'}), isA<OpAction>()); // narrowed by purpose
+      expect(c('settle', {'person': 'Rahul', 'amount': 780, 'account': 'Cash'}, text: 'cash'), isA<OpAction>()); // narrowed by amount
+      expect(c('settle', {'person': 'Rahul', 'note': 'concert', 'account': 'Cash'}, text: 'cash'), isA<OpAction>()); // narrowed by purpose
       expect((c('settle', {'person': 'Zed'}) as OpRejected).reason, 'There is no open pending payment with Zed.');
       expect((c('settle', {'person': 'Neha', 'amount': 99999}) as OpRejected).reason, contains('Only ₹850'));
       expect((c('goal_add', {'goal': 'yacht', 'amount': 5}) as OpRejected).reason, 'You don\'t have a goal called "yacht".');
       expect(c('loan_pay', {}), isA<OpQuestion>()); // several open loans
       expect(c('edit', {'target': '#1', 'set': {'amount': 1}}), isA<OpRejected>()); // nothing recent
       expect(c('teleport', {}), isA<OpRejected>());
+    });
+
+    test('a money movement without an account asks which one; savings never offer a credit card', () async {
+      final h = await ActionHarness.create(scenario: DataScenario.demo);
+      final s = await h.snapshot();
+      OpOutcome c(String type, Map<String, Object?> args, {String text = ''}) => compileOp(
+        PlanOp(ref: 'o1', type: type, args: args),
+        OpContext(snapshot: s, today: s.today, userText: text, memory: AgentMemory()),
+      );
+      final names = [for (final a in s.activeAccounts) a.name];
+      final credit = s.activeAccounts.firstWhere((a) => a.isLiability);
+
+      final spend = c('expense', {'amount': 450, 'category': 'Food & Dining'}) as OpQuestion;
+      expect(spend.field, 'account');
+      expect(spend.options.map((o) => o.label), names);
+      expect(spend.question, startsWith('Which account did you pay from: ${names.first}, '));
+
+      final fund = c('fund_add', {'amount': 5000}) as OpQuestion;
+      expect(fund.field, 'account');
+      expect(fund.question, startsWith('Which account should I set this aside on: '));
+      expect(fund.options.map((o) => o.value), isNot(contains(credit.id)));
+
+      final onCard = c('fund_add', {'amount': 5000, 'account': credit.name}, text: credit.name) as OpQuestion;
+      expect(onCard.question, startsWith('${credit.name} is a credit card, which cannot hold savings.'));
+      final unknown = c('goal_add', {'goal': 'Japan trip', 'amount': 500, 'account': 'Kotak'}, text: 'kotak') as OpQuestion;
+      expect(unknown.question, startsWith('You have no "Kotak" account. Which account should I set this aside on'));
+
+      expect((c('fund_add', {'amount': 500, 'account': 'Cash'}, text: 'from cash') as OpAction).input['accountId'], 'acc_cash');
+      expect(c('fund_take', {'amount': 500}), isA<OpAction>()); // released from where it is held
+    });
+
+    test('a refused change becomes a question when one answer can fix it', () async {
+      final h = await ActionHarness.create(scenario: DataScenario.demo);
+      final s = await h.snapshot();
+      final ctx = OpContext(snapshot: s, today: s.today, userText: '', memory: AgentMemory());
+      const fund = PlanOp(ref: 'o1', type: 'fund_add', args: {'amount': 5000});
+      final short = refusalQuestion(
+        fund,
+        const AppFailure.validation('Only ₹200 in Cash is free to set aside.', fields: {'amount': 'Only ₹200 in Cash is free to set aside.'}),
+        ctx,
+        failedAccountId: 'acc_cash',
+      )!;
+      expect(short.field, 'account');
+      expect(short.question, startsWith('Only ₹200 in Cash is free to set aside. Which account should I set it aside on instead: '));
+      expect(short.question, endsWith('Or tell me a smaller amount.'));
+      expect(short.options.map((o) => o.value), isNot(contains('acc_cash')));
+
+      final tooMuch = refusalQuestion(
+        const PlanOp(ref: 'o1', type: 'fund_take', args: {'amount': 9000}),
+        const AppFailure.validation('That is more than is set aside.', fields: {'amount': 'That is more than is set aside.'}),
+        ctx,
+      )!;
+      expect((tooMuch.field, tooMuch.question), ('amount', 'That is more than is set aside. How much should it be?'));
+
+      expect(refusalQuestion(fund, const AppFailure(FailureCode.unknown, 'Something went wrong.'), ctx), isNull);
     });
 
     test('an unknown category name falls back to "Other" with a note', () async {
@@ -255,6 +311,31 @@ void main() {
       expect(pick('concert'), 'p1');
       expect(pick('the cab to the airport one please'), 'p2');
       expect(pick('neither, it was the hotel booking from last month in Goa'), isNull);
+    });
+
+    test('an account answer matches its name, bank or kind and completes every op that asked', () {
+      final m = AgentMemory()
+        ..pending = const PendingClarification(
+          question: 'Which account did you pay from: Cash or HDFC Salary?',
+          originalText: 'lunch 450 and cab 200',
+          ops: [
+            PlanOp(ref: 'o1', type: 'expense', args: {'amount': 450}),
+            PlanOp(ref: 'o2', type: 'expense', args: {'amount': 200}),
+          ],
+          opRef: 'o1',
+          alsoRefs: ['o2'],
+          field: 'account',
+          options: [
+            ClarifyOption(label: 'Cash', value: 'acc_cash', aliases: ['Cash']),
+            ClarifyOption(label: 'HDFC Salary', value: 'acc_hdfc', aliases: ['HDFC Salary', 'HDFC', 'Bank account']),
+          ],
+        );
+      List<Object?>? pick(String t) =>
+          (LocalIntents.match(t, m) as ClarificationAnswer?)?.ops.map((o) => o.args['account']).toList();
+      expect(pick('cash'), ['acc_cash', 'acc_cash']);
+      expect(pick('hdfc'), ['acc_hdfc', 'acc_hdfc']);
+      expect(pick('bank account'), ['acc_hdfc', 'acc_hdfc']);
+      expect(pick('2'), ['acc_hdfc', 'acc_hdfc']);
     });
   });
 }
