@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/di/core_providers.dart';
+import '../../export/application/export_file_sink.dart';
 import '../data/mock_auth_service.dart';
 import '../domain/auth_session.dart';
 
@@ -42,13 +44,14 @@ class AuthController extends Notifier<AuthSession?> {
   }
 
   /// Signs out locally even if the provider call fails. Records stay on
-  /// this device.
+  /// this device; exported files do not.
   Future<void> signOut() async {
     try {
       await _service.signOut();
     } finally {
       state = null;
       await ref.read(sharedPreferencesProvider).remove(storageKey);
+      unawaited(ShareExportFileSink.purge());
     }
   }
 }

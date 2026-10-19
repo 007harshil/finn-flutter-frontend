@@ -122,14 +122,18 @@ class SyncEngine {
     _emit({...SyncCollections.all, ...SyncValues.all});
   }
 
-  /// Forgets the in-memory data; with [clearPersisted] also deletes the
-  /// offline cache of the current user (sign-out).
+  /// Forgets the in-memory data; with [clearPersisted] also deletes every
+  /// account's offline cache on this device (sign-out), including caches
+  /// left by sessions that ended while the app was closed.
   Future<void> close({bool clearPersisted = true}) async {
-    final id = _userId;
     _userId = null;
     _state = _SyncState.empty();
     _rerun = false;
-    if (clearPersisted && id != null) await prefs.remove(_storageKey(id));
+    if (clearPersisted) {
+      for (final key in prefs.getKeys().where((k) => k.startsWith(_storagePrefix)).toList()) {
+        await prefs.remove(key);
+      }
+    }
     _emit({...SyncCollections.all, ...SyncValues.all});
   }
 

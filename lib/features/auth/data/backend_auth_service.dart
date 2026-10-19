@@ -10,6 +10,7 @@ import '../../../core/time/clock.dart';
 import '../../../data/remote/api_client.dart';
 import '../../../data/remote/api_config.dart';
 import '../domain/auth_session.dart';
+import 'session_store.dart';
 
 /// The FiNN API session: a short-lived bearer token plus a rotating refresh
 /// token, and the account it belongs to.
@@ -88,8 +89,9 @@ class BackendAuthException implements Exception {
   String toString() => 'BackendAuthException($status, $code): $message';
 }
 
-/// Holds the FiNN API session, persists it in SharedPreferences and
-/// supplies its access token to [ApiClient].
+/// Holds the FiNN API session, persists it in a [SessionStore] (the
+/// platform keystore in the app) and supplies its access token to
+/// [ApiClient]. Call [restore] once before the first request.
 ///
 /// Refresh tokens rotate: every refresh stores the new one, and refreshes
 /// are serialised (one in flight at a time) because presenting an already
@@ -98,18 +100,30 @@ class BackendApiAuth implements ProactiveApiAuth {
   BackendApiAuth({
     required this.config,
     required this.prefs,
+    required this.store,
     http.Client? httpClient,
     this.clock = const SystemClock(),
     this.refreshMargin = const Duration(seconds: 60),
-  }) : _http = httpClient ?? http.Client() {
-    _session = _load();
-  }
+  }) : _http = httpClient ?? http.Client();
 
-  /// SharedPreferences key of the stored session.
+  /// SharedPreferences key where older builds kept the session in plain
+  /// text. [restore] moves it into [store].
   static const storageKey = 'finn.auth.session.v1';
 
+  /// Set once this install has run [restore]. A keystore entry without it
+  /// is left over from an earlier install (the iOS Keychain survives
+  /// uninstalling) and is discarded.
+  static const installedKey = 'finn.auth.installed.v1';
+
+  /// Set when a sign-out could not delete the keystore entry; [restore]
+  /// then never reads it back.
+  static const signedOutKey = 'finn.auth.signedOut.v1';
+
   final ApiConfig config;
+
+  /// Holds [installedKey] and the legacy session.
   final SharedPreferences prefs;
+  final SessionStore store;
   final Clock clock;
 
   /// How long before expiry the access token is renewed ahead of a request.
@@ -133,28 +147,88 @@ class BackendApiAuth implements ProactiveApiAuth {
   @override
   String? get accessToken => _session?.accessToken;
 
-  BackendSession? _load() {
-    final raw = prefs.getString(storageKey);
-    if (raw == null) return null;
+  /// Loads the stored session, moving a plain-text one from older builds
+  /// into [store].
+  Future<void> restore() async {
+    final legacy = prefs.getString(storageKey);
+    String? raw;
+    if (legacy != null) {
+      raw = legacy;
+      try {
+        await store.write(legacy);
+        await prefs.remove(storageKey);
+      } catch (e) {
+        // Keep the old copy and move it on the next launch.
+        debugPrint('Could not move the stored session: ${e.runtimeType}');
+      }
+    } else if (prefs.getBool(signedOutKey) == true || prefs.getBool(installedKey) != true) {
+      // A sign-out whose delete failed, or a keystore entry left over from
+      // an earlier install.
+      if (await _deleteStored()) await prefs.remove(signedOutKey);
+    } else {
+      raw = await _readStored();
+    }
+    await prefs.setBool(installedKey, true);
+    if (raw == null) return;
     try {
-      return BackendSession.fromJson(Map<String, Object?>.from(jsonDecode(raw) as Map));
+      _session = BackendSession.fromJson(Map<String, Object?>.from(jsonDecode(raw) as Map));
     } catch (e) {
-      debugPrint('Discarding unreadable auth session: $e');
-      unawaited(prefs.remove(storageKey));
-      return null;
+      // Never log the payload: it holds the tokens.
+      debugPrint('Discarding unreadable auth session: ${e.runtimeType}');
+      await clear();
+    }
+  }
+
+  /// Whether the last [restore] could not read the keystore. The entry is
+  /// kept (the keystore can be briefly unavailable, e.g. right after boot),
+  /// so the next launch can still restore it.
+  bool get restoreFailed => _restoreFailed;
+  bool _restoreFailed = false;
+
+  Future<String?> _readStored() async {
+    for (var attempt = 0; ; attempt++) {
+      try {
+        return await store.read();
+      } catch (e) {
+        if (attempt >= 2) {
+          debugPrint('Could not read the stored session: ${e.runtimeType}');
+          _restoreFailed = true;
+          return null;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
     }
   }
 
   /// Adopts [session] and persists it.
   Future<void> save(BackendSession session) async {
     _session = session;
-    await prefs.setString(storageKey, jsonEncode(session.toJson()));
+    await store.write(jsonEncode(session.toJson()));
+    await prefs.remove(signedOutKey);
   }
 
-  /// Forgets the session on this device.
+  /// Forgets the session on this device. When the keystore delete fails,
+  /// a marker makes the next [restore] ignore and retry deleting it.
   Future<void> clear() async {
     _session = null;
     await prefs.remove(storageKey);
+    if (await _deleteStored()) {
+      await prefs.remove(signedOutKey);
+    } else {
+      await prefs.setBool(signedOutKey, true);
+    }
+  }
+
+  Future<bool> _deleteStored() async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        await store.delete();
+        return true;
+      } catch (e) {
+        debugPrint('Could not delete the stored session: ${e.runtimeType}');
+      }
+    }
+    return false;
   }
 
   /// POSTs [body] to a public `/auth` endpoint (no Authorization header)

@@ -9,6 +9,7 @@ import '../../core/persistence/persistence_driver.dart';
 import '../../core/time/clock.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/data/backend_auth_service.dart';
+import '../../features/auth/data/session_store.dart';
 import '../../features/auth/domain/auth_session.dart';
 import '../local/local_data_store.dart';
 import 'api_client.dart';
@@ -27,7 +28,8 @@ Future<Widget> bootstrapRemoteApp({
   required SharedPreferences prefs,
   required Widget app,
 }) async {
-  final apiAuth = BackendApiAuth(config: config, prefs: prefs);
+  final apiAuth = BackendApiAuth(config: config, prefs: prefs, store: const SecureSessionStore());
+  await apiAuth.restore();
   final api = ApiClient(config: config, auth: apiAuth);
   final engine = SyncEngine(api: api, prefs: prefs);
 
@@ -39,6 +41,9 @@ Future<Widget> bootstrapRemoteApp({
   final userId = apiAuth.userId;
   if (apiAuth.session == null || userId == null) {
     await prefs.remove(AuthController.storageKey);
+    // The session ended while the app was closed: drop its offline cache
+    // (kept when the keystore was only unreadable this launch).
+    if (!apiAuth.restoreFailed) await engine.close();
   } else {
     if (prefs.getString(AuthController.storageKey) == null) {
       final session = AuthSession(email: apiAuth.email ?? '', signedInAt: const SystemClock().now());

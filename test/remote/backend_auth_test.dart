@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:finn/core/time/clock.dart';
 import 'package:finn/data/remote/api_client.dart';
 import 'package:finn/features/auth/data/backend_auth_service.dart';
+import 'package:finn/features/auth/data/session_store.dart';
 import 'package:finn/features/auth/domain/auth_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -38,7 +39,13 @@ http.Response unavailable(String message, {int? retryAfter}) => http.Response(
 
 class AuthHarness {
   AuthHarness(this.prefs, this.handler) {
-    auth = BackendApiAuth(config: testConfig, prefs: prefs, httpClient: MockClient(_handle), clock: clock);
+    auth = BackendApiAuth(
+      config: testConfig,
+      prefs: prefs,
+      store: store,
+      httpClient: MockClient(_handle),
+      clock: clock,
+    );
     service = BackendAuthService(
       auth: auth,
       clock: clock,
@@ -47,6 +54,7 @@ class AuthHarness {
   }
 
   final SharedPreferences prefs;
+  final store = MemorySessionStore();
   Future<http.Response> Function(http.Request req) handler;
   final clock = FixedClock(DateTime.utc(2026, 10, 12, 9));
   final requests = <http.Request>[];
@@ -67,7 +75,9 @@ Future<AuthHarness> harness(
   Map<String, Object> stored = const {},
 }) async {
   SharedPreferences.setMockInitialValues(stored);
-  return AuthHarness(await SharedPreferences.getInstance(), handler);
+  final h = AuthHarness(await SharedPreferences.getInstance(), handler);
+  await h.auth.restore();
+  return h;
 }
 
 Future<String> failureMessage(Future<Object?> call) async {
@@ -155,8 +165,10 @@ void main() {
       final restored = BackendApiAuth(
         config: testConfig,
         prefs: h.prefs,
+        store: h.store,
         httpClient: MockClient((_) async => ok(null)),
       );
+      await restored.restore();
       expect(restored.accessToken, 'access-1');
       expect(restored.session!.refreshToken, 'refresh-1');
       expect(restored.session!.expiresAt, _now.add(const Duration(minutes: 15)));
@@ -202,7 +214,7 @@ void main() {
       expect(await h.auth.refresh(), isTrue);
       expect(h.bodyOf(1), {'refreshToken': 'refresh-2'}, reason: 'the rotated token is used next');
 
-      final stored = jsonDecode(h.prefs.getString(BackendApiAuth.storageKey)!) as Map;
+      final stored = jsonDecode(h.store.value!) as Map;
       expect(stored['refreshToken'], 'refresh-3');
       expect(stored['accessToken'], 'access-3');
     });
@@ -214,7 +226,7 @@ void main() {
       );
       expect(await h.auth.refresh(), isFalse);
       expect(h.auth.session, isNull);
-      expect(h.prefs.getString(BackendApiAuth.storageKey), isNull);
+      expect(h.store.value, isNull);
     });
 
     test('returns false without a call when signed out', () async {
@@ -252,7 +264,7 @@ void main() {
       gate.complete(ok(sessionJson('2')));
       expect(await pending, isFalse);
       expect(h.auth.session, isNull);
-      expect(h.prefs.getString(BackendApiAuth.storageKey), isNull);
+      expect(h.store.value, isNull);
     });
 
     test('ApiClient renews a token about to expire before sending the request', () async {
@@ -306,14 +318,14 @@ void main() {
       expect(h.requests.single.url.path, '/api/v1/auth/logout');
       expect(h.bodyOf(0), {'refreshToken': 'refresh-1'});
       expect(h.auth.session, isNull);
-      expect(h.prefs.getString(BackendApiAuth.storageKey), isNull);
+      expect(h.store.value, isNull);
     });
 
     test('signOut clears the session even when logout fails', () async {
       final h = await harness((_) async => throw http.ClientException('offline'), stored: storedSession('1'));
       await h.service.signOut();
       expect(h.auth.session, isNull);
-      expect(h.prefs.getString(BackendApiAuth.storageKey), isNull);
+      expect(h.store.value, isNull);
     });
 
     test('expire runs the sign-out handler, or clears the session without one', () async {
@@ -332,7 +344,57 @@ void main() {
     test('an unreadable stored session is discarded', () async {
       final h = await harness((_) async => ok(null), stored: {BackendApiAuth.storageKey: '{"broken": true}'});
       expect(h.auth.session, isNull);
+      expect(h.store.value, isNull);
+    });
+
+    test('moves a plain-text session from older builds into the store', () async {
+      final h = await harness((_) async => ok(null), stored: storedSession('1'));
+      expect(h.auth.accessToken, 'access-1');
       expect(h.prefs.getString(BackendApiAuth.storageKey), isNull);
+      expect(jsonDecode(h.store.value!), containsPair('refreshToken', 'refresh-1'));
+    });
+
+    test('discards a stored session left over from an earlier install', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final store = MemorySessionStore()
+        ..value = jsonEncode(BackendSession.fromApi(sessionJson('1'), now: _now).toJson());
+      final auth = BackendApiAuth(config: testConfig, prefs: prefs, store: store);
+      await auth.restore();
+      expect(auth.session, isNull);
+      expect(store.value, isNull);
+      expect(prefs.getBool(BackendApiAuth.installedKey), isTrue);
+    });
+
+    test('keeps the stored session when the keystore cannot be read', () async {
+      SharedPreferences.setMockInitialValues({BackendApiAuth.installedKey: true});
+      final prefs = await SharedPreferences.getInstance();
+      final store = _FlakyStore()..failReads = true;
+      store.value = jsonEncode(BackendSession.fromApi(sessionJson('1'), now: _now).toJson());
+      final auth = BackendApiAuth(config: testConfig, prefs: prefs, store: store);
+      await auth.restore();
+      expect(auth.session, isNull);
+      expect(auth.restoreFailed, isTrue);
+      expect(store.value, isNotNull);
+    });
+
+    test('a sign-out whose keystore delete failed is not restored', () async {
+      final h = await harness((_) async => ok(null), stored: storedSession('1'));
+      final store = _FlakyStore()
+        ..value = h.store.value
+        ..failDeletes = true;
+      final auth = BackendApiAuth(config: testConfig, prefs: h.prefs, store: store);
+      await auth.restore();
+      expect(auth.accessToken, 'access-1');
+      await auth.clear();
+      expect(h.prefs.getBool(BackendApiAuth.signedOutKey), isTrue);
+
+      store.failDeletes = false;
+      final next = BackendApiAuth(config: testConfig, prefs: h.prefs, store: store);
+      await next.restore();
+      expect(next.session, isNull);
+      expect(store.value, isNull);
+      expect(h.prefs.getBool(BackendApiAuth.signedOutKey), isNull);
     });
   });
 
@@ -351,7 +413,7 @@ void main() {
       expect(h.paths, ['/api/v1/me/delete']);
       expect(h.bodyOf(0), {'code': '123456'});
       expect(h.auth.session, isNull);
-      expect(h.prefs.getString(BackendApiAuth.storageKey), isNull);
+      expect(h.store.value, isNull);
     });
 
     test('a wrong code shows the field message and keeps the session', () async {
@@ -382,4 +444,21 @@ void main() {
       expect(h.auth.session, isNotNull);
     });
   });
+}
+
+class _FlakyStore extends MemorySessionStore {
+  bool failReads = false;
+  bool failDeletes = false;
+
+  @override
+  Future<String?> read() async {
+    if (failReads) throw Exception('keystore unavailable');
+    return super.read();
+  }
+
+  @override
+  Future<void> delete() async {
+    if (failDeletes) throw Exception('keystore unavailable');
+    return super.delete();
+  }
 }

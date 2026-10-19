@@ -98,10 +98,12 @@ void main() {
     expect(offline.records(SyncCollections.transactions), isEmpty);
     expect(offline.cursor, isNull);
 
-    // Sign-out clears the persisted cache of the signed-in user.
+    // Sign-out clears every persisted cache, not only the signed-in user's.
+    await prefs.setString('finn.remote.cache.user-c', '{}');
     await offline.open('user-a');
     await offline.close();
     expect(prefs.getString('finn.remote.cache.user-a'), isNull);
+    expect(prefs.getString('finn.remote.cache.user-c'), isNull);
     expect(offline.records(SyncCollections.transactions), isEmpty);
   });
 
