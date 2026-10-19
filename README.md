@@ -64,7 +64,7 @@ lib/
 
 ## Privacy
 
-FiNN has no ads, analytics or tracking SDKs. Release builds sign in with an emailed code and sync to the FiNN API (https://finn-backend.vercel.app); the device keeps an offline cache that is excluded from Android backups. The assistant sends requests to OpenAI and voice clips to Groq for transcription, both via the FiNN API. Users can export data (CSV, JSON or PDF, from Settings → Export) and delete their account in the app. Balances can be masked app-wide. Policy: https://finn-backend.vercel.app/privacy.
+FiNN has no ads, analytics or tracking SDKs. Release builds sign in with an emailed code and sync to the FiNN API (https://finn-backend.vercel.app); the device keeps an offline cache that is excluded from Android backups. The assistant sends requests to OpenAI via the FiNN API. Voice input uses the device's own speech recognition; audio never reaches FiNN servers. Users can export data (CSV, JSON or PDF, from Settings → Export) and delete their account in the app. Balances can be masked app-wide. Policy: https://finn-backend.vercel.app/privacy.
 
 ## Release
 

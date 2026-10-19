@@ -19,12 +19,6 @@ Code: `lib/agent/`. Tests: `test/agent/`. Backend: `finn-backend` `POST /api/v1/
    | `OPENAI_TIMEOUT_MS` | `60000` | Upstream timeout (the route's `maxDuration` is 75 s) |
    | `AGENT_MAX_OUTPUT_TOKENS` | `2048` | Ceiling for `max_completion_tokens` (the app asks for 700) |
    | `AGENT_RATE_LIMIT_PER_MINUTE` / `AGENT_DAILY_REQUEST_LIMIT` | `20` / `300` | Per-user limits, kept in memory on each server instance |
-   | `GROQ_API_KEY` / `GROQ_BASE_URL` | (unset = voice disabled) / `https://api.groq.com/openai/v1` | Groq key for speech-to-text only. **Server only.** |
-   | `GROQ_STT_MODEL` | `whisper-large-v3` | Speech-to-text model (voice input) |
-   | `GROQ_STT_LANGUAGE` | (unset = auto-detect) | Default ISO-639-1 language for voice input |
-   | `GROQ_STT_PROMPT` | finance vocabulary hint | Whisper `prompt` for spelling of rupee/UPI/EMI/merchant terms |
-   | `GROQ_STT_TIMEOUT_MS` | `30000` | Transcription timeout (the route's `maxDuration` is 45 s) |
-   | `AGENT_STT_RATE_LIMIT_PER_MINUTE` / `AGENT_STT_DAILY_LIMIT` | `10` / `200` | Per-user transcription limits, separate from the completions limits, in memory per instance |
 
 2. **App:** run in remote mode (`--dart-define=FINN_API_URL=...`). In local mock mode the assistant screen says it is unavailable, because there is nowhere safe to hold the key. Open the assistant from the agent orb in the centre of the bottom navigation bar, between Budgets and Goals. On wide screens it sits at the top of the navigation rail. `AppRoutes.assistant` still opens the same console full screen, for deep links.
 
@@ -180,30 +174,15 @@ Per request: the 3-operation example went from 1 call / 9 API requests to 1 call
 
 ## Voice input
 
-**Engine.** Groq Whisper `whisper-large-v3`. It was chosen as the most accurate speech-to-text that is freely available: about 10.3% WER per Groq's docs, against 12% for `-turbo`. It is multilingual (English, Hindi and Hinglish auto-detected) and on Groq's free tier (about 20 requests per minute, 2,000 per day and 28,800 audio-seconds per day). It reuses the server-held Groq key, so nothing new ships in the app. A fixed finance vocabulary prompt (₹, lakh, UPI, EMI, Swiggy…) improves spelling.
+**Engine.** On-device speech-to-text through the free, open-source [`speech_to_text`](https://pub.dev/packages/speech_to_text) package. It uses the platform's own recognizer: Android `SpeechRecognizer` (Google), Apple Speech on iOS, and the Web Speech API in browsers. There is no API key, no cost and no FiNN server call; audio never reaches the FiNN API. Only the final text is sent, like a typed request. (Groq Whisper and `POST /api/v1/agent/transcriptions` were removed on 2026-10-20.)
 
 **App side** (`lib/agent/voice/`):
-- `RecordVoiceCapture` (package `record`) streams 16 kHz mono 16-bit PCM and wraps it as WAV in memory. That is Whisper's native input, so no quality is lost to compression, and no temp files are needed on Android, iOS or web.
-- `VoiceInputController` handles tap to talk. Recording stops when the user taps ✓, after 1.8 s of silence once speech was heard, or at 60 s. Clips under 0.5 s are dropped.
-- The transcript is sent straight to the agent. If the user had typed something, it is appended to the input instead. Every change still goes through the review panel.
-- `FinnRelayTranscriber` posts to the endpoint below.
-- Permissions: Android `RECORD_AUDIO` and iOS `NSMicrophoneUsageDescription`.
-
-`POST /api/v1/agent/transcriptions` turns a short recording into text for the assistant input. It uses the same session auth and Groq key as the relay.
-
-Request:
-
-```json
-{ "audio": "<base64>", "mimeType": "audio/m4a", "language": "en" }
-```
-
-- `audio`: base64 of the recording, at most 10 MB decoded (the body cap is about 14 MB). Empty or invalid base64 is a `validation` error.
-- `mimeType`: one of `audio/mp4`, `audio/m4a`, `audio/aac`, `audio/webm`, `audio/ogg`, `audio/wav`, `audio/mpeg`, `audio/flac`.
-- `language`: optional 2-letter ISO-639-1 code. Without it the server uses `GROQ_STT_LANGUAGE`, else Whisper auto-detects (English, Hindi, Hinglish).
-
-Response (`data`): `{ "text": string, "language": string | null, "durationSeconds": number | null }`. `text` is trimmed and is `""` when no speech was found, so the app can show "Didn't catch that".
-
-Errors use the relay's shapes: `unavailable` with `details.reason` `rateLimited` (with `retryAfterSeconds`), `providerRateLimited`, `timeout`, `network` or `notConfigured`, and `validation` with `details.reason: tooLarge`. Audio and transcript text are never logged or stored.
+- `DeviceSpeechRecognizer` (`speech_recognizer.dart`) wraps `speech_to_text`: dictation mode, partial results, and a 0..1 input level adapted from each platform's dB scale.
+- `VoiceInputController` handles tap to talk. **The microphone stays on until the user taps ✓ (send) or ✕ (discard).** There is no silence cut-off and no time limit. Android ends a recognition session after a pause; the controller starts a new one after 250 ms and keeps the words heard so far. Silence codes (`error_no_match`, `error_speech_timeout`) never stop it. Permission errors stop it at once; 3 other failed sessions in a row (for example `error_network`) stop it with a message.
+- While listening, the input bar shows the waveform, the clock and the live words.
+- On ✓ the controller stops the session, waits up to 3 s for the final words, and sends the transcript straight to the agent. If the user had typed something, it is appended to the input instead. Every change still goes through the review panel.
+- Permissions: Android `RECORD_AUDIO` plus a `<queries>` entry for `android.speech.RecognitionService` (Android 11+); iOS `NSMicrophoneUsageDescription` and `NSSpeechRecognitionUsageDescription`.
+- Some Android devices play a short tone each time a session restarts. That is the system recognizer, not FiNN.
 
 
 ## Adding an operation

@@ -19,6 +19,8 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>FiNN uses the microphone only while you speak a request to the FiNN agent.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>FiNN turns what you say to the FiNN agent into text.</string>
 	<key>CFBundleDisplayName</key>
 	<string>FiNN</string>
 	<key>CFBundleExecutable</key>

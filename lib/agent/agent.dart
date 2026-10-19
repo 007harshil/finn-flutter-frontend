@@ -4,7 +4,8 @@
 /// * [AgentModePanel] / [agentModeProvider]: agent mode, opened from the
 ///   [AgentOrb] in the navigation bar (the app shell locks everything else);
 /// * [AgentScreen]: the same experience full screen (route `AppRoutes.assistant`);
-/// * [voiceInputProvider] / [speechTranscriberProvider]: voice requests;
+/// * [voiceInputProvider] / [speechRecognizerProvider]: voice requests
+///   (on-device speech-to-text);
 /// * [agentControllerProvider]: chat state and commands (for other entry
 ///   points such as voice later);
 /// * [llmProviderProvider] / [agentConfigProvider]: override to swap the
@@ -22,6 +23,5 @@ export 'application/agent_mode.dart' show agentModeProvider, AgentModeController
 export 'presentation/agent_screen.dart' show AgentScreen, AgentModePanel, AgentExperience;
 export 'presentation/widgets/agent_visualizer.dart' show AgentVisualizer, AgentPresence;
 export 'presentation/widgets/agent_logo.dart' show AgentOrb, FinnAgentMark;
-export 'voice/speech_transcriber.dart' show SpeechTranscriber, FinnRelayTranscriber;
-export 'voice/voice_capture.dart' show VoiceCapture, VoiceClip, RecordVoiceCapture;
+export 'voice/speech_recognizer.dart';
 export 'voice/voice_input_controller.dart';

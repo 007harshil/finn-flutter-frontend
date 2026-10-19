@@ -659,9 +659,23 @@ class _InputBar extends StatelessWidget {
               liveRegion: true,
               label: 'Listening. Tap done when you finish speaking.',
               excludeSemantics: true,
-              child: CustomPaint(
-                size: const Size.fromHeight(32),
-                painter: _LevelPainter(levels: voice.levels, color: c.ink, track: c.lineStrong),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  CustomPaint(
+                    size: Size.fromHeight(voice.words.isEmpty ? 32 : 20),
+                    painter: _LevelPainter(levels: voice.levels, color: c.ink, track: c.lineStrong),
+                  ),
+                  // The words heard so far, newest kept in view.
+                  if (voice.words.isNotEmpty)
+                    Text(
+                      _tail(voice.words),
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                      style: t.label.copyWith(color: c.inkSoft),
+                    ),
+                ],
               ),
             ),
           ),
@@ -764,6 +778,9 @@ class _InputBar extends StatelessWidget {
       ),
     );
   }
+
+  static String _tail(String words, {int max = 48}) =>
+      words.length <= max ? words : '…${words.substring(words.length - max).trimLeft()}';
 
   static String _clock(Duration d) {
     final s = d.inSeconds;

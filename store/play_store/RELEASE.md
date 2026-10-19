@@ -58,11 +58,10 @@ flutter build appbundle --release --obfuscate --split-debug-info=build/symbols
 |---|---|---|---|---|
 | Email address | Yes | No | Account management | Required |
 | Other financial info (transactions, budgets, goals, loans, balances) | Yes | No* | App functionality | Required |
-| Voice or sound recordings | Yes | No* | App functionality (assistant voice input) | Optional |
 | Other user-generated content (assistant requests) | Yes | No* | App functionality | Optional |
 | User IDs (FiNN ID) | Yes | No | App functionality, account management | Required |
 
-\* OpenAI (assistant) and Groq (voice transcription) process this data on FiNN's behalf as **service providers**. Under Play's rules, that does not count as "sharing".
+\* OpenAI (assistant) processes this data on FiNN's behalf as **service providers**. Under Play's rules, that does not count as "sharing".
 
 - Encrypted in transit: Yes (HTTPS only).
 - Users can request deletion: Yes (in the app and at the URL above).

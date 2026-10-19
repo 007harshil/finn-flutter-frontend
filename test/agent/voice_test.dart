@@ -1,9 +1,4 @@
-import 'dart:async';
-import 'dart:typed_data';
-
 import 'package:finn/agent/agent.dart';
-import 'package:finn/agent/voice/voice_capture.dart' show wavFromPcm16, pcm16Level;
-import 'package:finn/core/result/result.dart';
 import 'package:finn/design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,185 +7,203 @@ import 'package:flutter_test/flutter_test.dart';
 import '../helpers/test_app.dart';
 import 'agent_fakes.dart';
 
-class FakeCapture implements VoiceCapture {
-  FakeCapture({this.permitted = true, this.clipLength = const Duration(seconds: 2)});
+/// Scripted recognizer: the test plays the platform's role by calling
+/// [say], [level] and [endSession].
+class FakeRecognizer implements SpeechRecognizer {
+  FakeRecognizer({this.readiness = SpeechReadiness.ready, this.onStop});
 
-  final bool permitted;
-  final Duration clipLength;
-  final levels = StreamController<double>.broadcast();
-  int starts = 0;
+  final SpeechReadiness readiness;
+
+  /// Words the platform delivers as final when the user taps Done.
+  final String? onStop;
+  SpeechSessionListener? _listener;
+  int sessions = 0;
   int stops = 0;
   int cancels = 0;
 
-  @override
-  Future<bool> requestPermission() async => permitted;
+  bool get open => _listener != null;
 
   @override
-  Future<Stream<double>> start() async {
-    starts++;
-    return levels.stream;
+  Future<SpeechReadiness> prepare() async => readiness;
+
+  @override
+  Future<void> listen(SpeechSessionListener listener) async {
+    sessions++;
+    _listener = listener;
+  }
+
+  void say(String words, {bool isFinal = false}) => _listener!.onWords(words, isFinal);
+  void level(double value) => _listener!.onLevel(value);
+
+  /// The platform ends the session on its own (after a pause, or an error).
+  void endSession([String? error]) {
+    final l = _listener;
+    _listener = null;
+    l!.onEnded(error);
   }
 
   @override
-  Future<VoiceClip?> stop() async {
+  Future<void> stop() async {
     stops++;
-    return VoiceClip(bytes: Uint8List(64), mimeType: 'audio/wav', duration: clipLength);
+    final l = _listener;
+    if (l == null) return;
+    if (onStop != null) l.onWords(onStop!, true);
+    _listener = null;
+    l.onEnded(null);
   }
 
   @override
-  Future<void> cancel() async => cancels++;
-
-  @override
-  Future<void> dispose() async {}
-}
-
-class FakeTranscriber implements SpeechTranscriber {
-  FakeTranscriber(this.reply);
-
-  /// A String transcript, an [AppFailure] to throw, or a Completer to wait on.
-  final Object reply;
-  final clips = <VoiceClip>[];
-
-  @override
-  Future<String> transcribe(VoiceClip clip) async {
-    clips.add(clip);
-    final r = reply;
-    if (r is AppFailure) throw r;
-    if (r is Completer<String>) return r.future;
-    return r as String;
+  Future<void> cancel() async {
+    cancels++;
+    _listener = null;
   }
 }
+
+const _fastConfig = VoiceConfig(
+  restartDelay: Duration(milliseconds: 1),
+  finalizeTimeout: Duration(milliseconds: 50),
+);
+
+Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 10));
 
 void main() {
-  group('audio helpers', () {
-    test('wavFromPcm16 writes a valid 16 kHz mono header', () {
-      final pcm = Uint8List(320);
-      final wav = wavFromPcm16(pcm, sampleRate: 16000);
-      final h = ByteData.sublistView(wav);
-      expect(wav.length, 44 + 320);
-      expect(String.fromCharCodes(wav.sublist(0, 4)), 'RIFF');
-      expect(String.fromCharCodes(wav.sublist(8, 12)), 'WAVE');
-      expect(h.getUint32(4, Endian.little), 36 + 320);
-      expect(h.getUint16(22, Endian.little), 1, reason: 'mono');
-      expect(h.getUint32(24, Endian.little), 16000);
-      expect(h.getUint32(28, Endian.little), 32000, reason: 'byte rate');
-      expect(h.getUint16(34, Endian.little), 16);
-      expect(String.fromCharCodes(wav.sublist(36, 40)), 'data');
-      expect(h.getUint32(40, Endian.little), 320);
-    });
-
-    test('pcm16Level maps silence to 0 and full scale to 1', () {
-      expect(pcm16Level(Uint8List(200)), 0);
-      final loud = ByteData(200);
-      for (var i = 0; i < 100; i++) {
-        loud.setInt16(i * 2, i.isEven ? 32767 : -32768, Endian.little);
-      }
-      expect(pcm16Level(loud.buffer.asUint8List()), closeTo(1, 0.01));
-    });
-  });
-
   group('VoiceInputController', () {
-    ProviderContainer containerWith(FakeCapture capture, SpeechTranscriber? transcriber) {
+    ProviderContainer containerWith(FakeRecognizer recognizer) {
       final container = ProviderContainer(
         overrides: [
-          voiceCaptureFactoryProvider.overrideWithValue(() => capture),
-          speechTranscriberProvider.overrideWithValue(transcriber),
+          speechRecognizerProvider.overrideWithValue(recognizer),
+          voiceConfigProvider.overrideWithValue(_fastConfig),
         ],
       );
       addTearDown(container.dispose);
       return container;
     }
 
-    test('is unavailable without a transcriber (local mode)', () async {
-      final capture = FakeCapture();
-      final container = containerWith(capture, null);
-      expect(container.read(voiceInputProvider).available, isFalse);
-      await container.read(voiceInputProvider.notifier).start();
-      expect(capture.starts, 0);
-    });
-
-    test('records, shows levels and publishes the transcript', () async {
-      final capture = FakeCapture();
-      final transcriber = FakeTranscriber('spent 450 on lunch');
-      final container = containerWith(capture, transcriber);
+    test('listens, shows levels and live words, then publishes the transcript', () async {
+      final recognizer = FakeRecognizer(onStop: 'spent 450 on lunch');
+      final container = containerWith(recognizer);
       final voice = container.read(voiceInputProvider.notifier);
 
       await voice.start();
       expect(container.read(voiceInputProvider).phase, VoicePhase.listening);
-      capture.levels
-        ..add(0.2)
-        ..add(0.8);
-      await pumpEventQueue();
+      recognizer
+        ..level(0.2)
+        ..level(0.8)
+        ..say('spent 450');
       expect(container.read(voiceInputProvider).levels, [0.2, 0.8]);
+      expect(container.read(voiceInputProvider).words, 'spent 450');
 
       await voice.finish();
       final state = container.read(voiceInputProvider);
       expect(state.phase, VoicePhase.idle);
       expect(state.transcript?.text, 'spent 450 on lunch');
-      expect(transcriber.clips.single.mimeType, 'audio/wav');
-      expect(capture.stops, 1);
+      expect(state.words, isEmpty);
+      expect(recognizer.stops, 1);
     });
 
-    test('denied permission reports an error and never records', () async {
-      final capture = FakeCapture(permitted: false);
-      final container = containerWith(capture, FakeTranscriber('x'));
+    test('keeps listening after the platform ends a session, until Done', () async {
+      final recognizer = FakeRecognizer();
+      final container = containerWith(recognizer);
+      final voice = container.read(voiceInputProvider.notifier);
+
+      await voice.start();
+      recognizer.say('spent 450 on lunch', isFinal: true);
+      recognizer.endSession();
+      await _settle();
+      // Silence ends the next sessions with an error; the mic still stays on.
+      recognizer.endSession('error_speech_timeout');
+      await _settle();
+      recognizer.endSession('error_no_match');
+      await _settle();
+      expect(recognizer.sessions, 4);
+      expect(recognizer.open, isTrue);
+      expect(container.read(voiceInputProvider).phase, VoicePhase.listening);
+
+      recognizer.say('in cash');
+      expect(container.read(voiceInputProvider).words, 'spent 450 on lunch in cash');
+      await voice.finish();
+      expect(container.read(voiceInputProvider).transcript?.text, 'spent 450 on lunch in cash');
+      await _settle();
+      expect(recognizer.sessions, 4, reason: 'no restart after Done');
+    });
+
+    test('Done between sessions sends the words without waiting', () async {
+      final recognizer = FakeRecognizer();
+      final container = containerWith(recognizer);
+      final voice = container.read(voiceInputProvider.notifier);
+      await voice.start();
+      recognizer.say('coffee 120', isFinal: true);
+      recognizer.endSession();
+      await voice.finish();
+      expect(container.read(voiceInputProvider).transcript?.text, 'coffee 120');
+      await _settle();
+      expect(recognizer.sessions, 1);
+    });
+
+    test('denied permission reports an error and never listens', () async {
+      final recognizer = FakeRecognizer(readiness: SpeechReadiness.denied);
+      final container = containerWith(recognizer);
       await container.read(voiceInputProvider.notifier).start();
       final state = container.read(voiceInputProvider);
       expect(state.phase, VoicePhase.idle);
       expect(state.error?.text, contains('Microphone access is off'));
-      expect(capture.starts, 0);
+      expect(recognizer.sessions, 0);
     });
 
-    test('a very short clip is discarded without transcribing', () async {
-      final capture = FakeCapture(clipLength: const Duration(milliseconds: 200));
-      final transcriber = FakeTranscriber('x');
-      final container = containerWith(capture, transcriber);
+    test('a device without speech recognition turns voice off', () async {
+      final recognizer = FakeRecognizer(readiness: SpeechReadiness.unavailable);
+      final container = containerWith(recognizer);
+      await container.read(voiceInputProvider.notifier).start();
+      final state = container.read(voiceInputProvider);
+      expect(state.available, isFalse);
+      expect(state.error?.text, contains('not available'));
+    });
+
+    test('nothing heard publishes no transcript', () async {
+      final recognizer = FakeRecognizer();
+      final container = containerWith(recognizer);
       final voice = container.read(voiceInputProvider.notifier);
       await voice.start();
       await voice.finish();
-      expect(transcriber.clips, isEmpty);
       expect(container.read(voiceInputProvider).transcript, isNull);
-    });
-
-    test('transcription failures surface the server message', () async {
-      final capture = FakeCapture();
-      final container = containerWith(
-        capture,
-        FakeTranscriber(
-          const AppFailure(FailureCode.unavailable, "You're sending requests too quickly.", retryable: true),
-        ),
-      );
-      final voice = container.read(voiceInputProvider.notifier);
-      await voice.start();
-      await voice.finish();
-      expect(container.read(voiceInputProvider).error?.text, "You're sending requests too quickly.");
       expect(container.read(voiceInputProvider).phase, VoicePhase.idle);
     });
 
-    test('cancel while transcribing drops the late transcript', () async {
-      final capture = FakeCapture();
-      final pending = Completer<String>();
-      final container = containerWith(capture, FakeTranscriber(pending));
+    test('repeated real failures stop the microphone with a message', () async {
+      final recognizer = FakeRecognizer();
+      final container = containerWith(recognizer);
+      await container.read(voiceInputProvider.notifier).start();
+      for (var i = 0; i < 3; i++) {
+        recognizer.endSession('error_network');
+        await _settle();
+      }
+      final state = container.read(voiceInputProvider);
+      expect(state.phase, VoicePhase.idle);
+      expect(state.error?.text, contains('Could not hear you'));
+      expect(recognizer.cancels, 1);
+    });
+
+    test('cancel drops the words and stops listening', () async {
+      final recognizer = FakeRecognizer();
+      final container = containerWith(recognizer);
       final voice = container.read(voiceInputProvider.notifier);
       await voice.start();
-      final finishing = voice.finish();
-      await pumpEventQueue();
-      expect(container.read(voiceInputProvider).phase, VoicePhase.transcribing);
+      recognizer.say('never mind');
       await voice.cancel();
-      pending.complete('too late');
-      await finishing;
       expect(container.read(voiceInputProvider).transcript, isNull);
       expect(container.read(voiceInputProvider).phase, VoicePhase.idle);
+      expect(recognizer.cancels, 1);
+      expect(recognizer.open, isFalse);
     });
 
     test('closing agent mode cancels an open microphone', () async {
-      final capture = FakeCapture();
+      final recognizer = FakeRecognizer();
       final env = await TestEnv.create();
       final container = ProviderContainer(
         overrides: [
           ...env.overrides,
-          voiceCaptureFactoryProvider.overrideWithValue(() => capture),
-          speechTranscriberProvider.overrideWithValue(FakeTranscriber('x')),
+          speechRecognizerProvider.overrideWithValue(recognizer),
+          voiceConfigProvider.overrideWithValue(_fastConfig),
         ],
       );
       addTearDown(container.dispose);
@@ -199,14 +212,14 @@ void main() {
       container.read(agentModeProvider.notifier).close();
       await pumpEventQueue();
       expect(container.read(agentModeProvider), isFalse);
-      expect(capture.cancels, 1);
+      expect(recognizer.cancels, 1);
       expect(container.read(voiceInputProvider).phase, VoicePhase.idle);
     });
   });
 
   testWidgets('a spoken request is sent to the agent and reviewed visually', (tester) async {
     final env = await TestEnv.create();
-    final capture = FakeCapture();
+    final recognizer = FakeRecognizer(onStop: 'Spent 450 on lunch in cash');
     final provider = ScriptedProvider([
       plan([
         {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch', 'account': 'Cash'},
@@ -217,8 +230,7 @@ void main() {
         overrides: [
           ...env.overrides,
           llmProviderProvider.overrideWithValue(provider),
-          voiceCaptureFactoryProvider.overrideWithValue(() => capture),
-          speechTranscriberProvider.overrideWithValue(FakeTranscriber('Spent 450 on lunch in cash')),
+          speechRecognizerProvider.overrideWithValue(recognizer),
         ],
         child: MaterialApp(
           theme: FinnTheme.light(),
@@ -231,6 +243,9 @@ void main() {
     await tester.tap(find.byTooltip('Speak'));
     await tester.pump();
     expect(find.byTooltip('Done speaking'), findsOneWidget);
+    recognizer.say('Spent 450');
+    await tester.pump();
+    expect(find.text('Spent 450'), findsOneWidget, reason: 'live words while listening');
 
     await tester.tap(find.byTooltip('Done speaking'));
     for (var i = 0; i < 6; i++) {
