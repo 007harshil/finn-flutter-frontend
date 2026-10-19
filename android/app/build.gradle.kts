@@ -71,6 +71,16 @@ android {
     }
 }
 
+// The debug-key fallback above is for local `flutter run --release` only. A Play
+// bundle must never be debug-signed: fail release bundle builds without the upload key.
+gradle.taskGraph.whenReady {
+    // Only this app's Play bundle task: plugin modules have tasks such as
+    // bundleLibCompileToJarRelease that every release build runs.
+    if (!hasUploadKey && allTasks.any { it.project == project && it.name == "bundleRelease" }) {
+        throw GradleException("Release bundle needs android/key.properties (upload key). See store/play_store/RELEASE.md.")
+    }
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
