@@ -81,6 +81,37 @@ void main() {
     await drain(tester);
   });
 
+  testWidgets('block an incoming request, then unblock', (tester) async {
+    await open(tester);
+    final request = env.store.friends.current.incoming.single;
+    await tester.tap(find.byKey(ValueKey('friend-block-request:${request.id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Block').last);
+    await tester.pumpAndSettle();
+    expect(env.store.friends.current.incoming, isEmpty);
+    expect(env.store.friends.current.blocked.single.user.id, 'u_rahul');
+    expect(find.byKey(const ValueKey('blocked:u_rahul')), findsOneWidget);
+
+    await find_(tester, 'R9VK6DHM');
+    expect(find.textContaining('Blocked'), findsWidgets);
+
+    await tester.tap(find.byKey(const ValueKey('unblock:u_rahul')));
+    await tester.pumpAndSettle();
+    expect(env.store.friends.current.blocked, isEmpty);
+    await drain(tester);
+  });
+
+  testWidgets('blocking a friend ends the friendship', (tester) async {
+    await open(tester);
+    await tester.tap(find.byKey(const ValueKey('friend-block:u_ramesh')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Block').last);
+    await tester.pumpAndSettle();
+    expect(env.store.friends.current.isFriend('u_ramesh'), isFalse);
+    expect(find.byKey(const ValueKey('blocked:u_ramesh')), findsOneWidget);
+    await drain(tester);
+  });
+
   testWidgets('a lookup of an incoming request offers accept and reject', (
     tester,
   ) async {

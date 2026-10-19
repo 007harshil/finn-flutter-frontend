@@ -23,4 +23,9 @@ abstract interface class FriendDirectory {
   Future<void> reject(String requestId);
   Future<void> cancel(String requestId);
   Future<void> removeFriend(String userId);
+
+  /// Blocks someone I am connected to (friend, request or shared item):
+  /// ends the friendship, drops open requests and stops new ones both ways.
+  Future<void> block(String userId);
+  Future<void> unblock(String userId);
 }

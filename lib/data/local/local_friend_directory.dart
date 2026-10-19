@@ -29,6 +29,7 @@ class LocalFriendDirectory implements FriendDirectory {
   late List<Friend> _friends;
   late List<FriendRequest> _incoming;
   final List<FriendRequest> _outgoing = [];
+  final List<Friend> _blocked = [];
   int _nextRequest = 1;
 
   static FinnUser _byId(String id) => mockFinnUsers.firstWhere((u) => u.id == id);
@@ -41,6 +42,7 @@ class LocalFriendDirectory implements FriendDirectory {
     friends: List.unmodifiable(_friends),
     incoming: List.unmodifiable(_incoming),
     outgoing: List.unmodifiable(_outgoing),
+    blocked: List.unmodifiable(_blocked),
     loaded: true,
   );
 
@@ -67,6 +69,7 @@ class LocalFriendDirectory implements FriendDirectory {
 
   FriendLookup _lookupOf(FinnUser user) {
     if (user.id == mockMyUserId) return FriendLookup(user: user, relation: FriendRelation.self);
+    if (_blocked.any((b) => b.user.id == user.id)) return FriendLookup(user: user, relation: FriendRelation.blocked);
     if (_friends.any((f) => f.user.id == user.id)) {
       return FriendLookup(user: user, relation: FriendRelation.friend);
     }
@@ -102,6 +105,8 @@ class LocalFriendDirectory implements FriendDirectory {
       case FriendRelation.incoming:
         await accept(relation.requestId!);
         return FriendRelation.friend;
+      case FriendRelation.blocked:
+        throw failure(FailureCode.conflict, 'You blocked this person. Unblock them first.');
       case FriendRelation.none:
         break;
     }
@@ -145,6 +150,33 @@ class LocalFriendDirectory implements FriendDirectory {
       for (final f in _friends)
         if (f.user.id != userId) f,
     ];
+    _emit();
+  }
+
+  @override
+  Future<void> block(String userId) async {
+    if (_blocked.any((b) => b.user.id == userId)) return;
+    final user = [
+      ..._friends.map((f) => f.user),
+      ..._incoming.map((r) => r.user),
+      ..._outgoing.map((r) => r.user),
+    ].where((u) => u.id == userId).firstOrNull;
+    if (user == null) throw const AppFailure.notFound('This person is not in your FiNN network.');
+    _friends = [
+      for (final f in _friends)
+        if (f.user.id != userId) f,
+    ];
+    _incoming.removeWhere((r) => r.user.id == userId);
+    _outgoing.removeWhere((r) => r.user.id == userId);
+    _blocked.add(Friend(user: user, since: DateTime.now()));
+    _emit();
+  }
+
+  @override
+  Future<void> unblock(String userId) async {
+    final before = _blocked.length;
+    _blocked.removeWhere((b) => b.user.id == userId);
+    if (_blocked.length == before) throw const AppFailure.notFound('You have not blocked this person.');
     _emit();
   }
 }

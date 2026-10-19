@@ -28,9 +28,9 @@ const _intro = [
     ['Budgets that warn before you overspend', 'Goals and a safety net that grow steadily'],
   ),
   _IntroPage(
-    'Your data stays on this device',
+    'Your data, kept private',
     'No bank logins, no ads, no selling your data. You decide what to record.',
-    ['Stored locally on your phone', 'Export a copy whenever you like'],
+    ['Saved securely to your FiNN account', 'Export a copy or delete your account anytime'],
   ),
 ];
 

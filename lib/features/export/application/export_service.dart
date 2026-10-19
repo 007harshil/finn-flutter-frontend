@@ -609,7 +609,7 @@ class ExportService {
       footer: (ctx) => pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text('Created on your device by FiNN. Nothing was uploaded.', style: muted.copyWith(fontSize: 7)),
+          pw.Text('Created on your device by FiNN.', style: muted.copyWith(fontSize: 7)),
           pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}', style: muted.copyWith(fontSize: 7)),
         ],
       ),

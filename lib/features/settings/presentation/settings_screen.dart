@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
+import '../../../core/links/legal_links.dart';
 import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../kit/kit.dart';
@@ -30,6 +31,7 @@ class SettingsScreen extends ConsumerWidget {
         PageBlock(top: Sp.section, child: _PrivacyGroup()),
         PageBlock(top: Sp.section, child: _MoneyGroup()),
         PageBlock(top: Sp.section, child: _DataGroup()),
+        PageBlock(top: Sp.section, child: _AboutGroup()),
         PageBlock(top: Sp.section, bottom: Sp.xl, child: _Footer()),
       ],
     );
@@ -285,6 +287,9 @@ class _DataGroup extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.ink;
+    // Sample data and erase-all replace the device dataset; a connected
+    // account is changed record by record (and deleted from Profile).
+    final local = !ref.watch(remoteModeProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -306,25 +311,77 @@ class _DataGroup extends ConsumerWidget {
                 chevron: true,
                 onTap: () => context.push(AppRoutes.activity),
               ),
-              LedgerRow(
-                leading: const IconWell(icon: LucideIcons.rotateCcw),
-                title: 'Load sample data',
-                subtitle: 'Replace your records with examples',
-                onTap: () => _loadSample(context, ref),
-              ),
+              if (local)
+                LedgerRow(
+                  leading: const IconWell(icon: LucideIcons.rotateCcw),
+                  title: 'Load sample data',
+                  subtitle: 'Replace your records with examples',
+                  onTap: () => _loadSample(context, ref),
+                ),
             ],
           ),
         ),
-        const SizedBox(height: Sp.lg),
-        LedgerButton(
-          key: const ValueKey('erase-all'),
-          label: 'Erase all data',
-          icon: LucideIcons.trash2,
-          variant: LedgerButtonVariant.quiet,
-          color: c.red,
-          onPressed: () => _erase(context, ref),
-        ),
+        if (local) ...[
+          const SizedBox(height: Sp.lg),
+          LedgerButton(
+            key: const ValueKey('erase-all'),
+            label: 'Erase all data',
+            icon: LucideIcons.trash2,
+            variant: LedgerButtonVariant.quiet,
+            color: c.red,
+            onPressed: () => _erase(context, ref),
+          ),
+        ],
       ],
+    );
+  }
+}
+
+/// Privacy policy, account deletion help and support (Play requires an
+/// in-app link to the privacy policy).
+class _AboutGroup extends StatelessWidget {
+  const _AboutGroup();
+
+  Future<void> _open(BuildContext context, Uri uri) async {
+    if (await LegalLinks.open(uri)) return;
+    if (context.mounted) {
+      FinnToast.error(
+        context,
+        'Could not open the link',
+        subtitle: uri.scheme == 'mailto' ? LegalLinks.supportEmail : uri.toString(),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LedgerSection(
+      title: 'About & privacy',
+      child: LedgerPanel(
+        children: [
+          LedgerRow(
+            key: const ValueKey('privacy-policy'),
+            leading: const IconWell(icon: LucideIcons.shieldCheck),
+            title: 'Privacy policy',
+            subtitle: 'What FiNN stores and why',
+            trailing: const Icon(LucideIcons.externalLink, size: 16),
+            onTap: () => _open(context, LegalLinks.privacyPolicy),
+          ),
+          LedgerRow(
+            leading: const IconWell(icon: LucideIcons.userX),
+            title: 'Deleting your account',
+            subtitle: 'Profile › Security › Delete account, or on the web',
+            trailing: const Icon(LucideIcons.externalLink, size: 16),
+            onTap: () => _open(context, LegalLinks.deleteAccount),
+          ),
+          LedgerRow(
+            leading: const IconWell(icon: LucideIcons.mail),
+            title: 'Contact support',
+            subtitle: LegalLinks.supportEmail,
+            onTap: () => _open(context, LegalLinks.support),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -337,7 +394,7 @@ class _Footer extends StatelessWidget {
     final t = context.type;
     final c = context.ink;
     return Text(
-      'Your data stays on this device.\nFiNN · Made for Indian households',
+      'Your records are saved to your FiNN account.\nFiNN by Zenvora Labs · Made for Indian households',
       style: t.label.copyWith(color: c.inkFaint),
       textAlign: TextAlign.center,
     );

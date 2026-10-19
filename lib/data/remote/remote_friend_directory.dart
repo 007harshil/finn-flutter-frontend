@@ -30,6 +30,7 @@ class RemoteFriendDirectory implements FriendDirectory {
       friends: _state.friends,
       incoming: _state.incoming,
       outgoing: _state.outgoing,
+      blocked: _state.blocked,
       loaded: _state.loaded,
     );
   }
@@ -48,6 +49,7 @@ class RemoteFriendDirectory implements FriendDirectory {
       friends: [for (final m in _maps(j['friends'])) ?_friendFrom(m)],
       incoming: [for (final m in _maps(j['incoming'])) ?_requestFrom(m)],
       outgoing: [for (final m in _maps(j['outgoing'])) ?_requestFrom(m)],
+      blocked: [for (final m in _maps(j['blocked'])) ?_friendFrom(m)],
       loaded: true,
     );
     _changes.add(current);
@@ -102,6 +104,18 @@ class RemoteFriendDirectory implements FriendDirectory {
   @override
   Future<void> removeFriend(String userId) async {
     await api.send('DELETE', '/friends/$userId');
+    await _reload();
+  }
+
+  @override
+  Future<void> block(String userId) async {
+    await api.post('/friends/blocks', body: {'userId': userId});
+    await _reload();
+  }
+
+  @override
+  Future<void> unblock(String userId) async {
+    await api.send('DELETE', '/friends/blocks/$userId');
     await _reload();
   }
 

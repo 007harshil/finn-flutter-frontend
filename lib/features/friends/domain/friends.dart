@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../pending/domain/shared_pending.dart';
 
 /// How another person relates to me, as shown after a FiNN ID lookup.
-enum FriendRelation { self, friend, outgoing, incoming, none }
+enum FriendRelation { self, friend, outgoing, incoming, blocked, none }
 
 @immutable
 class Friend {
@@ -35,6 +35,7 @@ class FriendState {
     this.friends = const [],
     this.incoming = const [],
     this.outgoing = const [],
+    this.blocked = const [],
     this.loaded = false,
   });
 
@@ -44,6 +45,10 @@ class FriendState {
   final List<Friend> friends;
   final List<FriendRequest> incoming;
   final List<FriendRequest> outgoing;
+
+  /// People I blocked ([Friend.since] is when). They cannot send me requests
+  /// or find me by my FiNN ID.
+  final List<Friend> blocked;
 
   /// False until the first successful load.
   final bool loaded;

@@ -98,7 +98,7 @@ class MoreMenu extends StatelessWidget {
           children: [
             Icon(LucideIcons.lock, size: 13, color: c.inkSoft),
             const SizedBox(width: Sp.xs + 2),
-            Flexible(child: Text('Your data stays on this device', style: t.small, textAlign: TextAlign.center)),
+            Flexible(child: Text('Private to your FiNN account', style: t.small, textAlign: TextAlign.center)),
           ],
         ),
       ],

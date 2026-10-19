@@ -1,8 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Required in release builds to reach the FiNN API (debug/profile manifests add it only for tooling). -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Voice requests to the FiNN agent (speech is transcribed by the FiNN API).
-         Asked at runtime only when the user starts voice input. -->
+    <!-- Voice requests to the FiNN agent (speech is turned into text by the
+         device's speech recognizer). Asked at runtime only when the user starts voice input. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <!-- Voice is optional: keep FiNN installable on devices without a microphone. -->
     <uses-feature android:name="android.hardware.microphone" android:required="false"/>
@@ -63,6 +63,15 @@
         <!-- On-device speech-to-text (speech_to_text) on Android 11+. -->
         <intent>
             <action android:name="android.speech.RecognitionService"/>
+        </intent>
+        <!-- Privacy policy and account-deletion pages, support email (url_launcher). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="mailto"/>
         </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>

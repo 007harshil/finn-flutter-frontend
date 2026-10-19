@@ -89,8 +89,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
           const SizedBox(height: Sp.lg),
           const AuthPrivacyNote(
-            text: 'Your email is only used to sign you in. Your financial records stay on this device.',
+            text: 'Your email is used to sign you in. Your records are saved securely to your FiNN account so you can '
+                'use them on any device.',
           ),
+          const SizedBox(height: Sp.sm),
+          const AuthPrivacyLink(),
         ],
       ),
     );

@@ -276,7 +276,7 @@ class _SecuritySectionState extends ConsumerState<_SecuritySection> {
       title: 'Sign out?',
       message:
           'You will need to sign in again with an email code to see your finances. '
-          'Your records stay on this device.',
+          'Your records stay safe in your FiNN account.',
       confirmLabel: 'Sign out',
       destructive: true,
     );
@@ -339,7 +339,7 @@ class _DeleteAccount extends StatelessWidget {
         ),
         const SizedBox(height: Sp.xs),
         Text(
-          'Your money data stays on this device.',
+          'Deletes your account and all its records from FiNN.',
           style: t.label.copyWith(color: c.inkFaint),
           textAlign: TextAlign.center,
         ),

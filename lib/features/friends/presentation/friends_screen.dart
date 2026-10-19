@@ -140,6 +140,28 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     });
   }
 
+  Future<void> _block(FinnUser user) async {
+    final ok = await showFinnConfirm(
+      context,
+      title: 'Block ${user.name}?',
+      message:
+          'They will not be able to send you friend requests or find you by your FiNN ID, '
+          'and you will no longer be friends. They are not told. Items you already share stay as they are.',
+      confirmLabel: 'Block',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    await _act(() async {
+      await ref.read(friendDirectoryProvider).block(user.id);
+      return '${user.name} blocked';
+    });
+  }
+
+  Future<void> _unblock(Friend b) => _act(() async {
+    await ref.read(friendDirectoryProvider).unblock(b.user.id);
+    return '${b.user.name} unblocked';
+  });
+
   @override
   Widget build(BuildContext context) {
     final state =
@@ -260,16 +282,54 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                             ),
                             title: f.user.name,
                             subtitle: _idOf(f.user),
-                            trailing: LedgerIconButton(
-                              icon: LucideIcons.userMinus,
-                              tooltip: 'Remove ${f.user.name}',
-                              onPressed: _busy ? null : () => _remove(f),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                LedgerIconButton(
+                                  icon: LucideIcons.userMinus,
+                                  tooltip: 'Remove ${f.user.name}',
+                                  onPressed: _busy ? null : () => _remove(f),
+                                ),
+                                LedgerIconButton(
+                                  key: ValueKey('friend-block:${f.user.id}'),
+                                  icon: LucideIcons.ban,
+                                  tooltip: 'Block ${f.user.name}',
+                                  onPressed: _busy ? null : () => _block(f.user),
+                                ),
+                              ],
                             ),
                           ),
                       ],
                     ),
             ),
           ),
+          if (state.blocked.isNotEmpty)
+            PageBlock(
+              bottom: Sp.xl,
+              child: LedgerSection(
+                title: 'Blocked',
+                count: state.blocked.length,
+                child: LedgerPanel(
+                  dividerIndent: _indent,
+                  children: [
+                    for (final b in state.blocked)
+                      LedgerRow(
+                        key: ValueKey('blocked:${b.user.id}'),
+                        leading: PendingInitials(name: b.user.name, size: 36),
+                        title: b.user.name,
+                        subtitle: _idOf(b.user),
+                        trailing: LedgerButton(
+                          key: ValueKey('unblock:${b.user.id}'),
+                          label: 'Unblock',
+                          variant: LedgerButtonVariant.quiet,
+                          small: true,
+                          onPressed: _busy ? null : () => _unblock(b),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -313,6 +373,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
         'Wants to be your friend',
         _acceptReject(requestOf(state.incoming)),
       ),
+      FriendRelation.blocked => ('Blocked', null),
     };
     return LedgerRow(
       leading: PendingInitials(name: user.name, size: 36),
@@ -327,7 +388,9 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     );
   }
 
-  Widget _acceptReject(FriendRequest r) => Row(
+  Widget _acceptReject(FriendRequest r) => Wrap(
+    spacing: Sp.sm,
+    runSpacing: Sp.sm,
     children: [
       LedgerButton(
         key: ValueKey('friend-accept:${r.id}'),
@@ -336,13 +399,20 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
         small: true,
         onPressed: _busy ? null : () => _accept(r),
       ),
-      const SizedBox(width: Sp.sm),
       LedgerButton(
         key: ValueKey('friend-reject:${r.id}'),
         label: 'Reject',
         variant: LedgerButtonVariant.secondary,
         small: true,
         onPressed: _busy ? null : () => _reject(r),
+      ),
+      LedgerButton(
+        key: ValueKey('friend-block-request:${r.id}'),
+        label: 'Block',
+        variant: LedgerButtonVariant.quiet,
+        color: context.ink.red,
+        small: true,
+        onPressed: _busy ? null : () => _block(r.user),
       ),
     ],
   );
