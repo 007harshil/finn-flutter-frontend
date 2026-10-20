@@ -11,6 +11,7 @@ import '../../../core/time/dates.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/async_view.dart';
+import '../../../shared/presentation/push_then_leave.dart';
 import '../application/loan_actions.dart';
 import '../domain/loan.dart';
 import '../domain/loan_calculator.dart';
@@ -292,7 +293,7 @@ class _Hero extends StatelessWidget {
             label: l.isBorrowed ? 'Record a payment' : 'Record money received',
             icon: LucideIcons.circleCheck,
             expand: true,
-            onPressed: () => context.push(AppRoutes.payLoan(l.id)),
+            onPressed: () => pushThenLeave(context, AppRoutes.payLoan(l.id)),
           ),
         ],
       ],

@@ -35,7 +35,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(filter().type, isNull);
 
-    // Tapping a legend chip filters to that category; its chip appears up top.
+    // Tapping a legend chip filters to that category; it shows as selected, once.
     final legend = find.byWidgetPredicate((w) => w.key is ValueKey<String> &&
         (w.key! as ValueKey<String>).value.startsWith('pulse-legend:') &&
         !(w.key! as ValueKey<String>).value.endsWith('_other'));
@@ -43,9 +43,9 @@ void main() {
       await tester.tap(legend.first);
       await tester.pumpAndSettle();
       expect(filter().categoryIds, hasLength(1));
-      final chip = find.byKey(ValueKey('active-filter:cat:${filter().categoryIds.single}'));
-      expect(chip, findsOneWidget);
-      await tester.tap(chip);
+      // The legend chip already shows it: no second chip for the same category.
+      expect(find.byKey(ValueKey('active-filter:cat:${filter().categoryIds.single}')), findsNothing);
+      await tester.tap(legend.first);
       await tester.pumpAndSettle();
       expect(filter().categoryIds, isEmpty);
     }

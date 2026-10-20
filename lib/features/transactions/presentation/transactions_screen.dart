@@ -16,7 +16,6 @@ import '../../../features/transactions/domain/transaction.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/transaction_row.dart';
 import '../../accounts/domain/transfer.dart';
-import '../../accounts/presentation/transfer_form_sheet.dart';
 import '../../accounts/presentation/widgets/transfer_row.dart';
 import '../application/transaction_filter.dart';
 import 'widgets/activity_filter_sheet.dart';
@@ -155,12 +154,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             child: PageHeader(
               title: 'Activity',
               actions: [
-                LedgerIconButton(
-                  key: const ValueKey('activity-transfer'),
-                  icon: LucideIcons.arrowLeftRight,
-                  tooltip: 'Record a transfer',
-                  onPressed: () => showTransferSheet(context),
-                ),
                 _SortButton(onPressed: _pickSort),
               ],
             ),

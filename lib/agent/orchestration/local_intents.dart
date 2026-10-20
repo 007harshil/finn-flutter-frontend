@@ -27,6 +27,17 @@ final class BalanceIntent extends LocalIntent {
   const BalanceIntent();
 }
 
+/// "Give me details about it" after a question about the user's records.
+final class DetailIntent extends LocalIntent {
+  const DetailIntent(this.query);
+  final Map<String, Object?> query;
+}
+
+/// "Give me a detailed guide to use this app", "what can you do?".
+final class GuideIntent extends LocalIntent {
+  const GuideIntent();
+}
+
 /// The reply completes the open clarification: [ops] are the unfinished ops
 /// with the answer filled in.
 final class ClarificationAnswer extends LocalIntent {
@@ -48,6 +59,17 @@ abstract final class LocalIntents {
     r"^(what'?s|what is|whats|show|tell me|check)?\s*(me\s+)?(my\s+)?(current\s+|available\s+|total\s+)?(balance|available balance|money left|cash in hand)\s*(now|today|please)?\s*\??$|^how much (money )?(do i have|have i got|is left)( left)?( now| today)?\s*\??$",
   );
 
+  static final _guide = [
+    RegExp(r'\b(guide|tutorial|walk ?through|user manual|getting started)\b'),
+    RegExp(r'\bhow (do|can|should|to) (i |we )?(use|start|get started with)\b.*\b(app|finn|this)\b'),
+    RegExp(r'\bwhat (all )?(can|do) (you|i)\b.*\b(do|help|features?)\b'),
+    RegExp(r'^(what are |show |list )?(the |all )?(app )?features\??$'),
+  ];
+
+  static final _detail = RegExp(
+    r'\b(details?|detailed|breakdown|break (it|that|this) down|elaborate|in[- ]?depth|more (info|information)|explain)\b',
+  );
+
   static String? _period(String t) {
     if (t.contains('yesterday')) return 'yesterday';
     if (t.contains('today')) return 'today';
@@ -66,6 +88,11 @@ abstract final class LocalIntents {
     }
     // Questions only: a message with an amount is treated as a new request.
     final hasNumber = RegExp(r'\d').hasMatch(t);
+    if (_guide.any((r) => r.hasMatch(t))) return const GuideIntent();
+    final last = memory.lastQuery;
+    if (last != null && !hasNumber && t.split(RegExp(r'\s+')).length <= 10 && _detail.hasMatch(t)) {
+      return DetailIntent(last);
+    }
     if (!hasNumber && _history.any((r) => r.hasMatch(t))) return HistoryIntent(_period(t));
     if (!hasNumber && _balance.hasMatch(t)) return const BalanceIntent();
     return null;

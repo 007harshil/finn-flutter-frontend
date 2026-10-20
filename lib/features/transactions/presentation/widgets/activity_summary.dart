@@ -74,7 +74,11 @@ class ActivitySummary extends ConsumerWidget {
           _StoryLine(feed: feed),
         ],
         _WhereItWent(feed: feed, cats: cats),
-        _ActiveFilters(filter: f, cats: cats),
+        _ActiveFilters(
+          filter: f,
+          cats: cats,
+          legendIds: _WhereItWent.legendIds(feed),
+        ),
       ],
     );
   }
@@ -315,6 +319,20 @@ class _WhereItWent extends ConsumerWidget {
 
   static const _ramp = [1.0, 0.7, 0.45, 0.25];
 
+  /// Categories the legend below the bar already lists (and marks selected
+  /// when filtered), so the filter chips do not repeat them.
+  static Set<String> legendIds(TransactionFeed feed) {
+    final f = feed.filter;
+    final incomeMode =
+        f.type == TransactionType.income ||
+        (feed.expense.isZero && feed.income.isPositive);
+    final shares = incomeMode ? feed.incomeByCategory : feed.expenseByCategory;
+    if (shares.fold<int>(0, (sum, s) => sum + s.amount.paise) <= 0) {
+      return const {};
+    }
+    return {for (final s in shares.take(_barCategories)) s.categoryId};
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.ink;
@@ -395,10 +413,15 @@ class _WhereItWent extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _ActiveFilters extends ConsumerWidget {
-  const _ActiveFilters({required this.filter, required this.cats});
+  const _ActiveFilters({
+    required this.filter,
+    required this.cats,
+    required this.legendIds,
+  });
 
   final TransactionFilter filter;
   final Map<String, TransactionCategory> cats;
+  final Set<String> legendIds;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -406,11 +429,14 @@ class _ActiveFilters extends ConsumerWidget {
     final notifier = ref.read(transactionFilterProvider.notifier);
     String catName(String id) => cats[id]?.name ?? 'Deleted category';
 
+    final hiddenCats = f.categoryIds.difference(legendIds);
     final chips = <(String, String, VoidCallback)>[
       if (f.amount != null)
         ('amount', amountRangeLabel(f.amount), () => notifier.setAmount(null)),
-      if (f.categoryIds.length <= 2)
-        for (final id in f.categoryIds)
+      if (hiddenCats.isEmpty)
+        ...const <(String, String, VoidCallback)>[]
+      else if (f.categoryIds.length <= 2)
+        for (final id in hiddenCats)
           ('cat:$id', catName(id), () => notifier.toggleCategory(id))
       else
         (

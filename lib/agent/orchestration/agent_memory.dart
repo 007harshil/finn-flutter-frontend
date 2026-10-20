@@ -73,6 +73,10 @@ class AgentMemory {
   final List<RecentOp> _recent = [];
   PendingClarification? pending;
 
+  /// Fields of the last question answered from the user's records, so
+  /// "give me details" can expand it without a model call.
+  Map<String, Object?>? lastQuery;
+
   /// Newest first.
   List<RecentOp> get recent => List.unmodifiable(_recent);
 
@@ -94,6 +98,7 @@ class AgentMemory {
   void clear() {
     _recent.clear();
     pending = null;
+    lastQuery = null;
   }
 
   static String _clip(String s, int max) => s.length <= max ? s : '${s.substring(0, max - 1)}…';

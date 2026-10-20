@@ -101,7 +101,7 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
     );
     if (!mounted) return;
     setState(() => _busy = false);
-    if (result != null) Navigator.of(context).maybePop();
+    if (result != null) Navigator.of(context).maybePop(true);
   }
 
   @override

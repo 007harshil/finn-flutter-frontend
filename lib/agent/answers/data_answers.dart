@@ -2,6 +2,7 @@ import '../../core/money/money.dart';
 import '../../core/money/money_format.dart';
 import '../../core/time/dates.dart';
 import '../../features/pending/domain/pending_payment.dart';
+import '../../features/categories/domain/category.dart';
 import '../../features/transactions/domain/transaction.dart';
 import '../../finance/finance_snapshot.dart';
 import '../plan/resolvers.dart';
@@ -66,7 +67,8 @@ abstract final class DataAnswers {
     return 'You have ${b.available.format()} available to spend (cash ${b.cash.format()}$set).';
   }
 
-  static String _total(Map<String, Object?> args, FinanceSnapshot s, DateTime today, TransactionType type) {
+  static ({List<Transaction> hits, String label, TransactionCategory? category, String? categoryName, String about})
+  _matching(Map<String, Object?> args, FinanceSnapshot s, DateTime today, TransactionType type) {
     final (range, label) = period(args, s, today);
     final categoryName = args['category'] is String ? args['category'] as String : null;
     final category = categoryName == null ? null : findCategory(s, categoryName, type);
@@ -84,18 +86,69 @@ abstract final class DataAnswers {
       }
       return true;
     }).toList();
-    final total = Money.sum(hits.map((t) => t.amount));
-    final verb = type == TransactionType.expense ? 'spent' : 'received';
-    final on = category != null
-        ? (type == TransactionType.expense ? ' on ${category.name}' : ' as ${category.name}')
-        : (categoryName != null ? ' on "$categoryName"' : '');
     final about = [
       if (text != null && text.isNotEmpty) 'matching "$text"',
       if (person != null && person.isNotEmpty) 'with $person',
     ].join(' ');
-    final count = hits.length == 1 ? '1 entry' : '${hits.length} entries';
+    return (hits: hits, label: label, category: category, categoryName: categoryName, about: about);
+  }
+
+  static String _total(Map<String, Object?> args, FinanceSnapshot s, DateTime today, TransactionType type) {
+    final m = _matching(args, s, today, type);
+    final total = Money.sum(m.hits.map((t) => t.amount));
+    final verb = type == TransactionType.expense ? 'spent' : 'received';
+    final category = m.category;
+    final categoryName = m.categoryName;
+    final on = category != null
+        ? (type == TransactionType.expense ? ' on ${category.name}' : ' as ${category.name}')
+        : (categoryName != null ? ' on "$categoryName"' : '');
+    final count = m.hits.length == 1 ? '1 entry' : '${m.hits.length} entries';
     if (categoryName != null && category == null) return 'You have no "$categoryName" category.';
-    return 'You $verb ${total.format()}$on${about.isEmpty ? '' : ' $about'} $label, across $count.';
+    return 'You $verb ${total.format()}$on${m.about.isEmpty ? '' : ' ${m.about}'} ${m.label}, across $count.';
+  }
+
+  /// The longer version of [answer] for "give me details": spending and income
+  /// get a category split, the biggest entries and a daily average; other
+  /// questions repeat their answer, which already lists what there is.
+  static String detail(Map<String, Object?> args, FinanceSnapshot s, DateTime today) {
+    final type = switch (args['metric']) {
+      'spent' => TransactionType.expense,
+      'earned' => TransactionType.income,
+      _ => null,
+    };
+    if (type == null) return answer(args, s, today);
+    final m = _matching(args, s, today, type);
+    if (m.categoryName != null && m.category == null) return answer(args, s, today);
+    if (m.hits.isEmpty) return answer(args, s, today);
+    final (range, _) = period(args, s, today);
+    final total = Money.sum(m.hits.map((t) => t.amount));
+    final first = m.hits.map((t) => t.date).reduce((a, b) => a.isBefore(b) ? a : b);
+    final start = first.isAfter(range.start) && range.start.year < 2001 ? first : range.start;
+    final days = daysBetween(start, range.end.isBefore(today) ? range.end : today) + 1;
+    final byCategory = <String, int>{};
+    for (final t in m.hits) {
+      byCategory[t.categoryId] = (byCategory[t.categoryId] ?? 0) + t.amount.paise;
+    }
+    final cats = byCategory.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final biggest = [...m.hits]..sort((a, b) => b.amount.compareTo(a.amount));
+    String who(Transaction t) {
+      final name = (t.counterparty ?? '').trim();
+      final note = (t.note ?? '').trim();
+      return name.isNotEmpty ? name : (note.isNotEmpty ? note : (s.category(t.categoryId)?.name ?? 'Entry'));
+    }
+
+    final split = [
+      for (final e in cats.take(5))
+        '${s.category(e.key)?.name ?? 'Deleted category'} ${Money.fromPaise(e.value).format()} (${(e.value * 100 / total.paise).round()}%)',
+    ].join(', ');
+    final top = [for (final t in biggest.take(3)) '${who(t)} ${t.amount.format()} on ${_d(t.date)}'].join(', ');
+
+    return [
+      '${_total(args, s, today, type)} Details:',
+      if (days > 1) 'Average ${Money.fromPaise(total.paise ~/ days).format()} a day over $days days.',
+      'By category: $split${cats.length > 5 ? ', and ${cats.length - 5} more' : ''}.',
+      'Biggest: $top.',
+    ].join('\n');
   }
 
   static String _owed(Map<String, Object?> args, FinanceSnapshot s) {

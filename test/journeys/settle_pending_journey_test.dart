@@ -44,8 +44,7 @@ void main() {
     expect(after.netWorth.netWorth, before.netWorth.netWorth, reason: 'a receivable became cash');
 
     // Back to the list: no longer an active item.
-    await tester.pageBack();
-    await tester.pumpAndSettle();
+    // Settling in full leaves the detail page, so we are already on the list.
     await scrollTo(tester, find.text('Money owed'), up: true);
     expect(find.text('Money owed'), findsOneWidget);
     expect(find.byKey(ValueKey(id)), findsNothing);

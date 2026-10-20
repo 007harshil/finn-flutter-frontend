@@ -42,7 +42,9 @@ void main() {
     expect(after.balance.creditOwed, before.balance.creditOwed + sub.amount);
     expect(after.balance.available, before.balance.available);
 
-    // Detail: next renewal moved forward; payment history lists the new expense.
+    // Marking paid leaves the detail screen; open it again to see the new cycle.
+    expect(find.text('Next renewal'), findsNothing);
+    await scrollAndTap(tester, find.descendant(of: find.byKey(ValueKey(sub.id)), matching: find.text(sub.name)));
     await scrollTo(tester, find.text('Next renewal'), up: true);
     expect(find.textContaining(DateFormats.dayMonthYear.format(expectedNext)), findsOneWidget);
     final row = find.byKey(ValueKey(newTx.single.id));

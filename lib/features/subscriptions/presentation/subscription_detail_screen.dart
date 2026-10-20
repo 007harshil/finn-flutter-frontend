@@ -29,6 +29,21 @@ class SubscriptionDetailScreen extends ConsumerStatefulWidget {
 
 class _SubscriptionDetailScreenState extends ConsumerState<SubscriptionDetailScreen> {
   final _key = newIdempotencyKey();
+  bool _busy = false;
+
+  /// One tap, one payment: a second tap while the first is still settling (or
+  /// after the screen already moved to the next cycle) must not pay again.
+  /// Leaves the screen once recorded so the user lands where they came from.
+  Future<void> _markPaid(Subscription s) async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      final paid = await markSubscriptionPaid(context, ref, s);
+      if (paid != null && mounted && context.canPop()) context.pop();
+    } finally {
+      _busy = false;
+    }
+  }
 
   Future<void> _setStatus(Subscription s, SubscriptionStatus status) => runAction(
         context,
@@ -48,13 +63,20 @@ class _SubscriptionDetailScreenState extends ConsumerState<SubscriptionDetailScr
       confirmLabel: 'Skip renewal',
     );
     if (!ok || !mounted) return;
-    await runAction(
-      context,
-      ref,
-      action: const SkipSubscriptionCycleAction(),
-      input: SkipSubscriptionCycleInput(subscriptionId: s.id, cycleDate: s.nextDueDate),
-      idempotencyKey: 'sub-skip-${s.id}-${DateFormats.iso.format(s.nextDueDate)}',
-    );
+    if (_busy) return;
+    _busy = true;
+    try {
+      final done = await runAction(
+        context,
+        ref,
+        action: const SkipSubscriptionCycleAction(),
+        input: SkipSubscriptionCycleInput(subscriptionId: s.id, cycleDate: s.nextDueDate),
+        idempotencyKey: 'sub-skip-${s.id}-${DateFormats.iso.format(s.nextDueDate)}',
+      );
+      if (done != null && mounted && context.canPop()) context.pop();
+    } finally {
+      _busy = false;
+    }
   }
 
   Future<void> _menu(Subscription s) async {
@@ -129,7 +151,7 @@ class _SubscriptionDetailScreenState extends ConsumerState<SubscriptionDetailScr
                   )
                 : _Body(
                     detail: d,
-                    onMarkPaid: () => markSubscriptionPaid(context, ref, d.subscription),
+                    onMarkPaid: () => _markPaid(d.subscription),
                     onSkip: () => _skip(d.subscription),
                     onResume: () => _setStatus(d.subscription, SubscriptionStatus.active),
                   ),

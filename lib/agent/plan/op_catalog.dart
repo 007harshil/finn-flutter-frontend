@@ -918,6 +918,7 @@ OpOutcome _fund(PlanOp op, OpContext c, String actionId) {
 OpOutcome _question(PlanOp op, OpContext c) {
   final answer = c.answer;
   if (answer == null) return const OpRejected('I can\'t look that up right now.');
+  c.memory.lastQuery = Map.of(op.args);
   return OpAnswer(answer(op.args, c.snapshot, c.today));
 }
 

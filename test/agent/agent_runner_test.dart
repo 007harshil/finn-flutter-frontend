@@ -529,6 +529,26 @@ void main() {
       expect(balance.usage.calls, 0);
     });
 
+    test('"details" after a question expands it, and a guide request is answered, with no model call', () async {
+      final r = await rig([
+        plan([
+          {'op': 'expense', 'amount': 450, 'category': 'Food & Dining', 'note': 'lunch'},
+        ]),
+        plan([
+          {'op': 'q', 'metric': 'spent', 'period': 'month'},
+        ]),
+      ]);
+      await r.turn('spent 450 on lunch');
+      final answer = await r.turn('how much did I spend this month');
+      expect(answer.reply, startsWith('You spent'));
+      final detail = await r.turn('give me detailed information about it');
+      expect(detail.reply, contains('By category:'));
+      expect(detail.reply, contains('Biggest:'));
+      final guide = await r.turn('give me in depth detailed guide to use this app');
+      expect(guide.reply, contains('Getting around'));
+      expect(r.provider.requests, hasLength(2));
+    });
+
     test('the model sees neither records nor history', () async {
       final r = await rig([
         plan([

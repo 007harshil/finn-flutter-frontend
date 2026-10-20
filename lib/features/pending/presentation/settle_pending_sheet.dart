@@ -103,7 +103,7 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
     );
     if (!mounted) return;
     setState(() => _busy = false);
-    if (result != null) Navigator.of(context).maybePop();
+    if (result != null) Navigator.of(context).maybePop(amount >= v.outstanding);
   }
 
   @override

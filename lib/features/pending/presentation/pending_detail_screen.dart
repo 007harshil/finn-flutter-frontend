@@ -11,6 +11,7 @@ import '../../../core/time/dates.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/async_view.dart';
+import '../../../shared/presentation/push_then_leave.dart';
 import '../application/pending_actions.dart';
 import '../domain/pending_payment.dart';
 import 'pending_split_ui.dart';
@@ -78,8 +79,9 @@ class _PendingDetailScreenState extends ConsumerState<PendingDetailScreen> {
       case _Menu.remind:
         await sharePendingReminder(context, v);
       case _Menu.writeOff:
-        await runAction(context, ref,
+        final done = await runAction(context, ref,
             action: const CancelPendingAction(), input: PendingIdInput(id: v.payment.id), idempotencyKey: '$_key-off');
+        if (done != null && mounted && context.canPop()) context.pop();
       case _Menu.delete:
         final done = await runAction(context, ref,
             action: const DeletePendingAction(), input: PendingIdInput(id: v.payment.id), idempotencyKey: '$_key-del');
@@ -253,7 +255,7 @@ class _Hero extends StatelessWidget {
                   label: 'Settle',
                   icon: LucideIcons.circleCheck,
                   expand: true,
-                  onPressed: () => context.push(AppRoutes.settlePending(p.id)),
+                  onPressed: () => pushThenLeave(context, AppRoutes.settlePending(p.id)),
                 ),
               ),
               if (!p.direction.isOwe) ...[

@@ -9,6 +9,7 @@ import '../../core/ids/id_generator.dart';
 import '../../core/result/result.dart';
 import '../../finance/finance_snapshot.dart';
 import '../agent_config.dart';
+import '../answers/app_guide.dart';
 import '../answers/data_answers.dart';
 import '../execution/action_recap.dart';
 import '../execution/plan_gateway.dart';
@@ -200,6 +201,10 @@ class AgentRunner {
         return AgentTurnResult(end: AgentTurnEnd.completed, reply: await _historyAnswer(period, onEvent));
       case BalanceIntent():
         return AgentTurnResult(end: AgentTurnEnd.completed, reply: DataAnswers.balance(snapshot));
+      case DetailIntent(:final query):
+        return AgentTurnResult(end: AgentTurnEnd.completed, reply: DataAnswers.detail(query, snapshot, today));
+      case GuideIntent():
+        return const AgentTurnResult(end: AgentTurnEnd.completed, reply: agentGuideText);
       case OutOfScopeIntent():
         return const AgentTurnResult(end: AgentTurnEnd.completed, reply: AgentGuard.refusal);
       case ClarificationAnswer(ops: final answered):

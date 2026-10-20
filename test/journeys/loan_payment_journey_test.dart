@@ -47,7 +47,8 @@ void main() {
     expect(after.transactions.length, before.transactions.length + 1);
     expect(after.balance.available, before.balance.available - emi);
 
-    // Loan detail: new outstanding in the hero, payment in the history.
+    // Recording a payment leaves the detail page; open the loan again to see it.
+    await scrollAndTap(tester, find.descendant(of: find.byKey(const ValueKey(loanId)), matching: find.text('Car loan')));
     await scrollTo(tester, find.text('Outstanding principal'), up: true);
     expect(find.text(AmountText.formatted(loanAfter.outstanding)), findsOneWidget);
     expect(find.text(AmountText.formatted(loanBefore.outstanding)), findsNothing);
