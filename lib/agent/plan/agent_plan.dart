@@ -2,16 +2,19 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../answers/agent_replies.dart';
 import 'agent_guard.dart';
 
+export '../answers/agent_replies.dart' show AgentReplyKind;
+
 /// The model's structured reply: every operation it found in the message,
-/// plus an optional clarification question or a plain reply.
+/// plus an optional clarification question or a reply kind.
 ///
 /// Wire format (one JSON object, see `agentInstructions`):
 /// ```json
 /// {"ops":[{"op":"income","amount":5000,"category":"Salary","date":-1},
 ///         {"op":"pending","dir":"collect","person":"Utsav","amount":300}],
-///  "ask":"...", "reply":"..."}
+///  "ask":"...", "reply":"greeting|thanks|help|advice|scope|unsupported", "topic":"budgets"}
 /// ```
 /// Each op has a type (`op`), its own fields, and optionally an `id`
 /// (`o1`, `o2`…) that later ops reference as `"@o1"` (e.g. a new category's
@@ -19,17 +22,24 @@ import 'agent_guard.dart';
 /// when given and `o<position>` otherwise, so every op has a stable ref.
 @immutable
 class AgentPlan {
-  const AgentPlan({this.ops = const [], this.ask, this.reply});
+  const AgentPlan({this.ops = const [], this.ask, this.replyKind, this.replyTopic});
 
   final List<PlanOp> ops;
 
   /// A clarification question for details the model could not resolve.
   final String? ask;
 
-  /// Plain text when no op fits (greeting, advice, unsupported request).
-  final String? reply;
+  /// What to say when no op fits. Only a kind: the words are the app's
+  /// (`AgentReplies.text`).
+  final AgentReplyKind? replyKind;
 
-  bool get isEmpty => ops.isEmpty && ask == null && reply == null;
+  /// The page a [AgentReplyKind.help] reply is about (a page key).
+  final String? replyTopic;
+
+  /// The text shown for [replyKind], or null.
+  String? get reply => replyKind == null ? null : AgentReplies.text(replyKind!, topic: replyTopic);
+
+  bool get isEmpty => ops.isEmpty && ask == null && replyKind == null;
 }
 
 @immutable
@@ -116,14 +126,27 @@ abstract final class PlanParser {
       return t.length <= maxTextChars ? t : '${t.substring(0, maxTextChars - 1)}…';
     }
 
-    final plan = AgentPlan(ops: ops, ask: text_(decoded['ask']), reply: text_(decoded['reply']));
+    final rawAsk = text_(decoded['ask']);
+    final ask = rawAsk != null && isQuestion(rawAsk) ? rawAsk : null;
+    final rawReply = text_(decoded['reply']);
+    var kind = rawReply == null ? null : AgentReplies.kindOf(rawReply);
+    // An "ask" that is not a short question (an answer smuggled into the
+    // question field) is dropped; with nothing else left, say so plainly.
+    if (rawAsk != null && ask == null && ops.isEmpty) kind ??= AgentReplyKind.unclear;
+    final topic = kind == AgentReplyKind.help ? text_(decoded['topic']) : null;
+    final plan = AgentPlan(ops: ops, ask: ask, replyKind: kind, replyTopic: topic);
     if (plan.isEmpty) throw const PlanFormatException('empty plan');
     // Output guardrail: a plan carrying code or secrets anywhere is dropped
     // for a refusal (nothing from it is shown or saved).
-    final texts = [?plan.ask, ?plan.reply, for (final op in ops) ..._strings(op.args)];
-    if (texts.any(AgentGuard.isUnsafeOutput)) return const AgentPlan(reply: AgentGuard.refusal);
+    final texts = [?plan.ask, ?rawReply, for (final op in ops) ..._strings(op.args)];
+    if (texts.any(AgentGuard.isUnsafeOutput)) return const AgentPlan(replyKind: AgentReplyKind.scope);
     return plan;
   }
+
+  static const maxAskChars = 240;
+
+  /// A clarification the model may word itself: one short question.
+  static bool isQuestion(String text) => text.length <= maxAskChars && text.contains('?');
 
   static Iterable<String> _strings(Object? value) sync* {
     if (value is String) {

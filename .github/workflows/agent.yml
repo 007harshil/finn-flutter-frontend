@@ -1,0 +1,80 @@
+# Agent quality gate.
+#
+# - checks: every push and pull request. Analyzer plus the agent's offline
+#   tests (guardrails, plan parser, op catalog, golden-set structure and the
+#   cases answered without the model). No secrets, no model calls.
+# - live-eval: the golden eval set against the real model. Runs nightly, on
+#   demand, and on pull requests that change the prompt or the eval set. It
+#   fails when any kind of case drops below its threshold
+#   (test/agent/evals/golden_cases.json). Needs the OPENAI_API_KEY repository
+#   secret; costs well under $0.01 per run.
+
+name: agent
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '30 21 * * *' # 03:00 IST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze lib/agent test/agent
+      - run: flutter test test/agent
+
+  live-eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Only for prompt or eval changes on pull requests
+        id: changed
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^(lib/agent/prompt/|test/agent/evals/)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: subosito/flutter-action@v2
+        if: steps.changed.outputs.run == 'true'
+        with:
+          channel: stable
+          cache: true
+      - if: steps.changed.outputs.run == 'true'
+        run: flutter pub get
+      - name: Golden eval (live model)
+        if: steps.changed.outputs.run == 'true'
+        env:
+          FINN_LIVE: '1'
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: flutter test test/agent/live/golden_eval_test.dart --reporter expanded
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.changed.outputs.run == 'true'
+        with:
+          name: golden-eval-report
+          path: docs/agent-benchmarks/golden_eval.json
+          if-no-files-found: ignore

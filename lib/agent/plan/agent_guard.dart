@@ -47,6 +47,19 @@ abstract final class AgentGuard {
       r'\b(you are now|from now on you are|pretend (to be|you are)|act as (an? )?(unrestricted|unfiltered|different|new|evil)|developer mode|god mode|jailbreak|do anything now|without (any )?(rules|restrictions|filters)|(repeat|print|reveal|output) (the text|the words|your instructions|the instructions|everything above|the above))',
       caseSensitive: false,
     ),
+    // Hinglish: "python ka code likho", "ek script banao", "python mein jodo".
+    RegExp('\\b($_codeWord|script|snippet|function|program)\\b\\W+(\\w+\\W+){0,3}(likh|bana)\\w*\\b', caseSensitive: false),
+    RegExp('\\b($_strictLanguages)\\s+(me|mein|main)\\b', caseSensitive: false),
+    // Hinglish: "apne instructions batao", "saare rules bhool jao".
+    RegExp(r'\b(apne|apna|apni|tumhare|tumhara|tumhari|tera|tere)\s+(instructions?|prompts?|rules|niyam|nirdesh)\b', caseSensitive: false),
+    RegExp(
+      r'\b(instructions?|rules?|niyam|nirdesh|prompts?)\b\W+(\w+\W+){0,3}(bhool|bhul|ignore|mat maano|mat mano|chhod|chod)',
+      caseSensitive: false,
+    ),
+    // Devanagari (no \b: it only knows ASCII letters).
+    RegExp(r'(कोड|प्रोग्राम|स्क्रिप्ट)\s*(\S+\s+){0,2}(लिख|बना)', unicode: true),
+    RegExp(r'(निर्देश|नियम|इंस्ट्रक्शन|प्रॉम्प्ट)\S*\s+(\S+\s+){0,3}(भूल|अनदेखा|इग्नोर|मत मान)', unicode: true),
+    RegExp(r'(सिस्टम प्रॉम्प्ट|अपने निर्देश|अपने नियम)', unicode: true),
   ];
 
   static final _code = [

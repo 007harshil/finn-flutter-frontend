@@ -144,6 +144,7 @@ class _PrivacyGroup extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final hide = ref.watch(settingsProvider.select((s) => s.hideBalances));
     final haptics = ref.watch(settingsProvider.select((s) => s.hapticsEnabled));
+    final assistant = ref.watch(settingsProvider.select((s) => s.agentConsent));
     final ctrl = ref.read(settingsProvider.notifier);
     return LedgerSection(
       title: 'Privacy & feel',
@@ -168,6 +169,16 @@ class _PrivacyGroup extends ConsumerWidget {
               value: haptics,
               onChanged: (v) =>
                   ctrl.update((s) => s.copyWith(hapticsEnabled: v)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+            child: LedgerSwitchRow(
+              key: const ValueKey('agent-consent'),
+              title: 'AI assistant',
+              subtitle: 'What you type or say to the assistant is processed by OpenAI. Your records are not sent.',
+              value: assistant,
+              onChanged: (v) => ctrl.update((s) => s.copyWith(agentConsent: v)),
             ),
           ),
         ],

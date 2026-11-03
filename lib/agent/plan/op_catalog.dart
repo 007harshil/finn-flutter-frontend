@@ -11,6 +11,7 @@ import '../../features/pending/domain/pending_payment.dart';
 import '../../features/subscriptions/domain/subscription.dart';
 import '../../features/transactions/domain/transaction.dart';
 import '../../finance/finance_snapshot.dart';
+import '../answers/app_pages.dart';
 import '../orchestration/agent_memory.dart';
 import 'agent_plan.dart';
 import 'resolvers.dart';
@@ -70,6 +71,15 @@ final class OpAnswer extends OpOutcome {
 final class OpHistory extends OpOutcome {
   const OpHistory({this.period});
   final String? period;
+}
+
+/// The user wants a page of the app (read-only, no review).
+final class OpNavigate extends OpOutcome {
+  const OpNavigate(this.navigation, {this.note});
+  final AgentNavigation navigation;
+
+  /// Why a named record was not opened ("I couldn't find …").
+  final String? note;
 }
 
 /// Everything an op needs to resolve against the user's own data.
@@ -142,6 +152,7 @@ final Map<String, OpSpec> opCatalog = {
     const OpSpec('transfer', {'transfers.create'}, _transfer),
     const OpSpec('q', {}, _question),
     const OpSpec('history', {}, _history),
+    const OpSpec('open', {}, _open),
   ])
     s.type: s,
 };
@@ -379,7 +390,11 @@ OpQuestion _askAccount(String question, List<MoneyAccount> pool) {
 /// no account fits at all (the server then explains).
 Object? _moneyAccount(PlanOp op, OpContext c, String question, {bool holdsMoney = false}) {
   final fits = _fittingAccounts(c, holdsMoney: holdsMoney);
-  final m = AgentAccount.match(c.snapshot, op.args['account'], '${c.userText} ${c.groundingText}');
+  final text = '${c.userText} ${c.groundingText}';
+  // The model sometimes leaves out an account the user did name ("Neha paid
+  // me back in cash"): take it from their words rather than ask again.
+  final inWords = op.args['account'] == null ? AgentAccount.namedIn(c.snapshot, text) : null;
+  final NameMatch<MoneyAccount> m = inWords != null ? Matched(inWords) : AgentAccount.match(c.snapshot, op.args['account'], text);
   if (m is Matched<MoneyAccount>) {
     if (fits.isEmpty || fits.any((a) => a.id == m.value.id)) return m.value.id;
     return _askAccount('${m.value.name} is a credit card, which cannot hold savings. $question', fits);
@@ -923,3 +938,9 @@ OpOutcome _question(PlanOp op, OpContext c) {
 }
 
 OpOutcome _history(PlanOp op, OpContext c) => OpHistory(period: _str(op.args['period'], max: 20));
+
+OpOutcome _open(PlanOp op, OpContext c) {
+  final found = AgentPages.resolve(_str(op.args['page'], max: 40), _str(op.args['name'], max: 60), c.snapshot);
+  if (found == null) return const OpRejected("I can't open that page.");
+  return OpNavigate(found.nav, note: found.note);
+}

@@ -7,6 +7,7 @@ import '../../app/di/action_providers.dart';
 import '../../app/di/core_providers.dart';
 import '../../core/ids/id_generator.dart';
 import '../../features/auth/application/auth_controller.dart';
+import '../answers/app_pages.dart';
 import '../execution/proposals.dart';
 import '../llm/llm_provider.dart';
 import '../orchestration/agent_events.dart';
@@ -39,6 +40,8 @@ final class AgentChatEntry extends ChatEntry {
     this.retryText,
     this.turn,
     String? message,
+    this.navigation,
+    this.autoOpen = false,
   }) : message = message ?? text;
   final String text;
   final AgentTurnEnd end;
@@ -56,6 +59,12 @@ final class AgentChatEntry extends ChatEntry {
   /// [text] without the recap of [actions], which the deck shows card by
   /// card; empty when the recap was all there was to say.
   final String message;
+
+  /// A page to offer ("Open Loans & EMIs"); see [AgentTurnResult.navigation].
+  final AgentNavigation? navigation;
+
+  /// Open [navigation] as soon as this entry lands.
+  final bool autoOpen;
 }
 
 @immutable
@@ -166,6 +175,8 @@ class AgentController extends Notifier<AgentViewState> {
     final provider = ref.read(llmProviderProvider);
     final trimmed = text.trim();
     if (provider == null || state.busy || trimmed.isEmpty) return;
+    // Nothing leaves the device before the user accepted how it is handled.
+    if (!ref.read(settingsProvider).agentConsent) return;
 
     final turnId = 'u${_seq++}';
     state = state.copyWith(
@@ -190,6 +201,8 @@ class AgentController extends Notifier<AgentViewState> {
           retryText: canRetry ? trimmed : null,
           turn: turnId,
           message: result.message,
+          navigation: result.navigation,
+          autoOpen: result.autoOpen,
         ),
       ],
       decks: _withDeck(turnId, (d) => d.copyWith(request: result.request ?? trimmed)),

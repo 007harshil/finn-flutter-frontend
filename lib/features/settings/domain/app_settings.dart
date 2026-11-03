@@ -36,6 +36,7 @@ class AppSettings {
     this.defaultBudgetWarningBps = 8000,
     this.disabledAlertTypes = const {},
     this.onboardingComplete = false,
+    this.agentConsent = false,
   });
 
   final ThemePreference theme;
@@ -59,6 +60,11 @@ class AppSettings {
   final Set<AlertType> disabledAlertTypes;
   final bool onboardingComplete;
 
+  /// The user read how the assistant handles their words (sent to FiNN's
+  /// server and an AI provider) and chose to use it. Off until they do;
+  /// turning it off in Settings withdraws it.
+  final bool agentConsent;
+
   bool isAlertEnabled(AlertType type) => !disabledAlertTypes.contains(type);
 
   AppSettings copyWith({
@@ -74,6 +80,7 @@ class AppSettings {
     int? defaultBudgetWarningBps,
     Set<AlertType>? disabledAlertTypes,
     bool? onboardingComplete,
+    bool? agentConsent,
   }) =>
       AppSettings(
         theme: theme ?? this.theme,
@@ -88,6 +95,7 @@ class AppSettings {
         defaultBudgetWarningBps: defaultBudgetWarningBps ?? this.defaultBudgetWarningBps,
         disabledAlertTypes: disabledAlertTypes ?? this.disabledAlertTypes,
         onboardingComplete: onboardingComplete ?? this.onboardingComplete,
+        agentConsent: agentConsent ?? this.agentConsent,
       );
 
   Map<String, Object?> toJson() => {
@@ -103,6 +111,7 @@ class AppSettings {
         'defaultBudgetWarningBps': defaultBudgetWarningBps,
         'disabledAlertTypes': disabledAlertTypes.map((e) => e.name).toList(),
         'onboardingComplete': onboardingComplete,
+        'agentConsent': agentConsent,
       };
 
   factory AppSettings.fromJson(Map<String, Object?> j) {
@@ -128,6 +137,7 @@ class AppSettings {
           .whereType<AlertType>()
           .toSet(),
       onboardingComplete: b('onboardingComplete', false),
+      agentConsent: b('agentConsent', false),
     );
   }
 
@@ -138,5 +148,5 @@ class AppSettings {
 
   @override
   int get hashCode => Object.hash(theme, motion, hideBalances, showPaise, monthStartDay,
-      onboardingComplete, disabledAlertTypes.length);
+      onboardingComplete, agentConsent, disabledAlertTypes.length);
 }

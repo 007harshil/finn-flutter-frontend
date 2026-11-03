@@ -5,6 +5,7 @@ import 'package:finn/agent/llm/llm_provider.dart';
 import 'package:finn/agent/orchestration/agent_runner.dart';
 import 'package:finn/agent/execution/proposals.dart';
 import 'package:finn/agent/reports/agent_reports.dart';
+import 'package:finn/app/di/core_providers.dart';
 import 'package:finn/design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -98,6 +99,53 @@ void main() {
   });
 
   group('AgentScreen', () {
+    Widget screen(TestEnv env, LlmProvider provider) => ProviderScope(
+      overrides: [...env.overrides, llmProviderProvider.overrideWithValue(provider)],
+      child: MaterialApp(
+        theme: FinnTheme.light(),
+        home: const MotionScope(reduceMotion: true, child: AgentScreen()),
+      ),
+    );
+
+    testWidgets('asks for consent before anything is sent, and Continue remembers it', (tester) async {
+      final env = await TestEnv.create(agentConsent: false);
+      final provider = ScriptedProvider([plan([lunch()])]);
+      await tester.pumpWidget(screen(env, provider));
+      await tester.pump();
+      expect(find.text('Before you start'), findsOneWidget);
+      expect(find.textContaining('processed by OpenAI'), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(AgentScreen)));
+      await container.read(agentControllerProvider.notifier).send('Spent 450 on lunch in cash');
+      expect(provider.requests, isEmpty, reason: 'no consent, no request');
+
+      final accept = find.byKey(const ValueKey('agent-consent-accept'));
+      await tester.scrollUntilVisible(accept, 200);
+      await tester.tap(accept);
+      await tester.pumpAndSettle();
+      expect(container.read(settingsProvider).agentConsent, isTrue);
+      expect(find.text('Before you start'), findsNothing);
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('a page answer shows an Open button', (tester) async {
+      final env = await TestEnv.create();
+      final provider = ScriptedProvider([
+        plan([
+          {'op': 'open', 'page': 'budgets'},
+          {'op': 'q', 'metric': 'spent', 'period': 'month'},
+        ]),
+      ]);
+      await tester.pumpWidget(screen(env, provider));
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), 'show budgets and what I spent');
+      await tester.tap(find.byTooltip('Send'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('agent-open-page')), findsOneWidget);
+      expect(find.text('Open Budgets'), findsOneWidget);
+    });
+
     testWidgets('shows the unavailable state in local mode', (tester) async {
       final env = await TestEnv.create();
       await env.pumpWidget(tester, const AgentScreen());

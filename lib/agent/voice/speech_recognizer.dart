@@ -65,6 +65,11 @@ class DeviceSpeechRecognizer implements SpeechRecognizer {
   SpeechSessionListener? _listener;
   bool _ready = false;
 
+  /// Indian English when the device has it: it knows Indian names, amounts
+  /// ("1.5 lakh") and Hinglish far better than US English. Null = the
+  /// device's default language.
+  String? _localeId;
+
   // Platforms report levels on different dB scales, so the range adapts to
   // what this device has reported.
   double _lowDb = double.infinity;
@@ -74,7 +79,10 @@ class DeviceSpeechRecognizer implements SpeechRecognizer {
   Future<SpeechReadiness> prepare() async {
     if (_ready) return SpeechReadiness.ready;
     _ready = await _speech.initialize(onStatus: _onStatus, onError: _onError);
-    if (_ready) return SpeechReadiness.ready;
+    if (_ready) {
+      _localeId = await _indianEnglish();
+      return SpeechReadiness.ready;
+    }
     return await _speech.hasPermission ? SpeechReadiness.unavailable : SpeechReadiness.denied;
   }
 
@@ -86,6 +94,7 @@ class DeviceSpeechRecognizer implements SpeechRecognizer {
       onSoundLevelChange: _onSoundLevel,
       listenOptions: SpeechListenOptions(
         listenMode: ListenMode.dictation,
+        localeId: _localeId,
         partialResults: true,
         // Upper bounds where a platform honours them (iOS, web). Stopping is
         // the user's call; Android still ends after a pause and is restarted.
@@ -93,6 +102,15 @@ class DeviceSpeechRecognizer implements SpeechRecognizer {
         pauseFor: const Duration(minutes: 30),
       ),
     );
+  }
+
+  Future<String?> _indianEnglish() async {
+    try {
+      final locales = await _speech.locales();
+      return locales.where((l) => l.localeId.replaceAll('-', '_').toLowerCase() == 'en_in').firstOrNull?.localeId;
+    } catch (_) {
+      return null;
+    }
   }
 
   @override

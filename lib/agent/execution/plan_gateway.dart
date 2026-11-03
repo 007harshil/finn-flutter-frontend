@@ -44,10 +44,27 @@ class StepResult {
 /// The agent history entry an execution writes (see `agent_history.dart`).
 @immutable
 class HistoryWrite {
-  const HistoryWrite({required this.runId, required this.request, this.notes = const []});
+  const HistoryWrite({
+    required this.runId,
+    required this.request,
+    this.notes = const [],
+    this.promptVersion,
+    this.model,
+    this.modelCalls = 0,
+  });
   final String runId;
   final String request;
   final List<String> notes;
+
+  /// `agentPromptVersion` when the model planned the turn (null when the
+  /// app answered on its own), so quality can be compared per prompt.
+  final String? promptVersion;
+
+  /// The model that planned the turn, as the relay reported it.
+  final String? model;
+
+  /// Model calls the turn made (a retry after unusable output counts).
+  final int modelCalls;
 }
 
 /// How the agent previews and executes a plan. Independent steps go to the
@@ -297,6 +314,9 @@ class RemotePlanGateway implements PlanGateway {
           'request': history.request,
           if (history.notes.isNotEmpty) 'notes': history.notes.take(10).toList(),
           'labels': {for (final s in steps) if (s.label != null) s.stepId: s.label},
+          'promptVersion': ?history.promptVersion,
+          'model': ?history.model,
+          if (history.modelCalls > 0) 'modelCalls': history.modelCalls,
         },
     };
     final List<Map<String, Object?>> reports;

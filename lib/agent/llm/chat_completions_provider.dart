@@ -110,6 +110,7 @@ class ChatCompletionsProvider implements LlmProvider {
       toolCalls: calls,
       finishReason: finish,
       refusal: refusal is String && refusal.trim().isNotEmpty ? refusal.trim() : null,
+      model: json['model'] is String && (json['model'] as String).length <= 100 ? json['model'] as String : null,
       usage: LlmUsage(
         inputTokens: tokens('prompt_tokens'),
         outputTokens: tokens('completion_tokens'),

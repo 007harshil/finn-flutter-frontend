@@ -1,3 +1,4 @@
+import '../answers/app_pages.dart';
 import '../plan/agent_guard.dart';
 import '../plan/agent_plan.dart';
 import '../plan/resolvers.dart';
@@ -38,6 +39,12 @@ final class GuideIntent extends LocalIntent {
   const GuideIntent();
 }
 
+/// "Open budgets", "take me to my loans page", "goals kholo": the page key.
+final class NavigateIntent extends LocalIntent {
+  const NavigateIntent(this.page);
+  final String page;
+}
+
 /// The reply completes the open clarification: [ops] are the unfinished ops
 /// with the answer filled in.
 final class ClarificationAnswer extends LocalIntent {
@@ -66,6 +73,25 @@ abstract final class LocalIntents {
     RegExp(r'^(what are |show |list )?(the |all )?(app )?features\??$'),
   ];
 
+  /// The whole message is "open `page`" (English or Hinglish). Anything
+  /// more ("open budgets and add 500…") goes to the model.
+  static final _open = [
+    RegExp(
+      r'^(please\s+)?(open|go to|goto|take me to|navigate to|jump to|switch to|show me the|show the)\s+(the\s+|my\s+)?(.+?)(\s+(page|screen|tab|section))?(\s+please)?\s*[.!]?$',
+    ),
+    RegExp(r'^(mera\s+|meri\s+|mere\s+)?(.+?)(\s+(page|screen|tab))?\s+(kholo|khol do|dikhao|pe chalo|par chalo)\s*[.!]?$'),
+  ];
+
+  static String? _page(String t) {
+    for (final r in _open) {
+      final m = r.firstMatch(t);
+      if (m == null) continue;
+      final key = AgentPages.keyOf(m.group(r == _open.first ? 4 : 2));
+      if (key != null) return key;
+    }
+    return null;
+  }
+
   static final _detail = RegExp(
     r'\b(details?|detailed|breakdown|break (it|that|this) down|elaborate|in[- ]?depth|more (info|information)|explain)\b',
   );
@@ -89,6 +115,7 @@ abstract final class LocalIntents {
     // Questions only: a message with an amount is treated as a new request.
     final hasNumber = RegExp(r'\d').hasMatch(t);
     if (_guide.any((r) => r.hasMatch(t))) return const GuideIntent();
+    if (_page(t) case final page?) return NavigateIntent(page);
     final last = memory.lastQuery;
     if (last != null && !hasNumber && t.split(RegExp(r'\s+')).length <= 10 && _detail.hasMatch(t)) {
       return DetailIntent(last);

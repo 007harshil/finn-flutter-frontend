@@ -18,6 +18,9 @@ import 'package:http/http.dart' as http;
 String? get liveSkipReason => Platform.environment['FINN_LIVE'] == '1' ? null : 'Set FINN_LIVE=1 to call OpenAI';
 
 String _env(String name) {
+  // CI passes the key as an environment variable (a repository secret).
+  final fromEnv = Platform.environment[name];
+  if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
   final file = File('../finn-backend/.env.local');
   if (!file.existsSync()) throw StateError('finn-backend/.env.local not found');
   for (final line in file.readAsLinesSync()) {

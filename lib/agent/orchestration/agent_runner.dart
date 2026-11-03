@@ -10,6 +10,7 @@ import '../../core/result/result.dart';
 import '../../finance/finance_snapshot.dart';
 import '../agent_config.dart';
 import '../answers/app_guide.dart';
+import '../answers/app_pages.dart';
 import '../answers/data_answers.dart';
 import '../execution/action_recap.dart';
 import '../execution/plan_gateway.dart';
@@ -67,6 +68,8 @@ class AgentTurnResult {
     this.error,
     this.usage = const LlmUsage(),
     this.request,
+    this.navigation,
+    this.autoOpen = false,
   }) : message = message ?? reply;
 
   final AgentTurnEnd end;
@@ -89,6 +92,13 @@ class AgentTurnResult {
   /// Model usage of the turn ([LlmUsage.calls] is 0 when it was answered
   /// without the model).
   final LlmUsage usage;
+
+  /// A page the user asked for (or that a help answer is about).
+  final AgentNavigation? navigation;
+
+  /// Open [navigation] right away: the turn did nothing else the user
+  /// needs to read or decide.
+  final bool autoOpen;
 }
 
 /// The agent: one model request turns a message into a structured plan,
@@ -156,6 +166,11 @@ class AgentRunner {
   final Map<String, int> _completed = {};
   int _proposalSeq = 0;
 
+  /// Model that planned the current turn (as the relay reported it) and the
+  /// model calls the turn made, for its history entry.
+  String? _turnModel;
+  int _turnCalls = 0;
+
   static const waitingLabel = 'Still working on it…';
 
   /// Runs one turn for [userText]. With [redo], the turn instead reads the
@@ -193,7 +208,9 @@ class AgentRunner {
     List<PlanOp>? ops;
     String? ask;
     String? modelReply;
+    AgentNavigation? navigation;
     var grounding = '';
+    _turnModel = null;
     var request = text;
     var usage = const LlmUsage();
     switch (redo == null ? LocalIntents.match(text, memory) : null) {
@@ -205,6 +222,9 @@ class AgentRunner {
         return AgentTurnResult(end: AgentTurnEnd.completed, reply: DataAnswers.detail(query, snapshot, today));
       case GuideIntent():
         return const AgentTurnResult(end: AgentTurnEnd.completed, reply: agentGuideText);
+      case NavigateIntent(:final page):
+        final nav = AgentPages.page(page)!;
+        return AgentTurnResult(end: AgentTurnEnd.completed, reply: 'Opening ${nav.label}.', navigation: nav, autoOpen: true);
       case OutOfScopeIntent():
         return const AgentTurnResult(end: AgentTurnEnd.completed, reply: AgentGuard.refusal);
       case ClarificationAnswer(ops: final answered):
@@ -251,7 +271,9 @@ class AgentRunner {
       ops = plan.ops;
       ask = plan.ask;
       modelReply = plan.reply;
+      if (plan.replyKind == AgentReplyKind.help) navigation = AgentPages.page(plan.replyTopic);
     }
+    _turnCalls = usage.calls;
 
     // 3. Resolve every op deterministically.
     final ctx = OpContext(
@@ -264,10 +286,14 @@ class AgentRunner {
     );
     final outcomes = <String, OpOutcome>{for (final op in ops) op.ref: _checked(compileOp(op, ctx))};
     final answers = <String>[];
+    String? opening;
     for (final op in ops) {
       switch (outcomes[op.ref]) {
         case OpAnswer(:final text):
           answers.add(text);
+        case OpNavigate(navigation: final nav, :final note) when opening == null:
+          navigation = nav;
+          opening = [?note, 'Opening ${nav.label}.'].join(' ');
         case OpHistory(:final period):
           answers.add(await _historyAnswer(period, onEvent));
         default:
@@ -400,7 +426,8 @@ class AgentRunner {
 
     String join(List<String?> parts) => parts.whereType<String>().where((s) => s.trim().isNotEmpty).join('\n');
     final lead = [
-      if (records.isEmpty && answers.isEmpty && modelReply != null) modelReply,
+      if (records.isEmpty && answers.isEmpty && opening == null && modelReply != null) modelReply,
+      ?opening,
       ...answers,
     ];
     final tail = [
@@ -415,6 +442,9 @@ class AgentRunner {
       actions: records,
       usage: usage,
       request: request,
+      navigation: navigation,
+      // Leave only when nothing else in the turn needs reading or deciding.
+      autoOpen: opening != null && records.isEmpty && answers.isEmpty && rejected.isEmpty && question == null && !cancelled,
     );
   }
 
@@ -533,6 +563,9 @@ class AgentRunner {
         runId: runId,
         request: _clip(request, 500),
         notes: [for (final n in {...historyNotes, ...problems, for (final q in questions) q.q.question}.take(10)) _clip(n, 300)],
+        promptVersion: _turnCalls > 0 ? agentPromptVersion : null,
+        model: _turnModel,
+        modelCalls: _turnCalls,
       ),
     );
     final byStep = {for (final r in results) r.stepId: r};
@@ -596,7 +629,9 @@ class AgentRunner {
         throw _PlanFailure(e.message, usage: usage, error: e);
       }
       usage = usage + response.usage;
-      if (response.refusal != null) return (AgentPlan(reply: response.refusal), usage);
+      _turnModel = response.model ?? _turnModel;
+      // A provider refusal is shown as the app's own scope answer, never as written.
+      if (response.refusal != null) return (const AgentPlan(replyKind: AgentReplyKind.scope), usage);
       if (response.finishReason == LlmFinishReason.length) {
         throw _PlanFailure('That is a lot at once. Please send it in smaller parts.', usage: usage);
       }

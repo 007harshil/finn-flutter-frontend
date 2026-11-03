@@ -160,6 +160,7 @@ class LlmResponse {
     this.usage = const LlmUsage(),
     this.providerState,
     this.refusal,
+    this.model,
   });
 
   final String? text;
@@ -170,8 +171,13 @@ class LlmResponse {
   /// Opaque replay data; copied into [LlmMessage.assistant].
   final Object? providerState;
 
-  /// The model declined to answer (a safety refusal); safe to show.
+  /// The model declined to answer (a safety refusal). The agent shows its
+  /// own scope answer instead of this text.
   final String? refusal;
+
+  /// The model that answered, as the provider reported it (fallbacks
+  /// included), for the agent history.
+  final String? model;
 
   /// The assistant message to append to the conversation.
   LlmMessage toMessage() => LlmMessage.assistant(text: text, toolCalls: toolCalls, providerState: providerState);

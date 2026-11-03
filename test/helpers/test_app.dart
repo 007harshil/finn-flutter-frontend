@@ -29,10 +29,11 @@ class TestEnv {
     DataScenario scenario = DataScenario.demo,
     bool onboarded = true,
     bool signedIn = true,
+    bool agentConsent = true,
     Map<String, Object> prefsValues = const {},
   }) async {
     SharedPreferences.setMockInitialValues({
-      if (onboarded) 'finn.settings.v1': '{"onboardingComplete":true,"motion":"reduced"}',
+      if (onboarded) 'finn.settings.v1': '{"onboardingComplete":true,"motion":"reduced","agentConsent":$agentConsent}',
       if (signedIn) 'finn.auth.v1': '{"email":"aarav@example.com","signedInAt":"2026-10-01T09:00:00.000"}',
       ...prefsValues,
     });

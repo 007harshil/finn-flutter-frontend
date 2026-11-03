@@ -1,4 +1,5 @@
 import 'package:finn/actions/action_registry.dart';
+import 'package:finn/agent/answers/agent_replies.dart';
 import 'package:finn/agent/orchestration/agent_memory.dart';
 import 'package:finn/agent/orchestration/local_intents.dart';
 import 'package:finn/agent/plan/agent_plan.dart';
@@ -27,7 +28,7 @@ void main() {
     });
 
     test('tolerates a fenced block', () {
-      expect(PlanParser.parse('```json\n{"reply":"Hi!"}\n```').reply, 'Hi!');
+      expect(PlanParser.parse('```json\n{"reply":"greeting"}\n```').reply, AgentReplies.greeting);
     });
 
     test('rejects unusable output', () {

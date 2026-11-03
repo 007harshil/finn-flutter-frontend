@@ -130,6 +130,18 @@ abstract final class AgentAccount {
     return matchByName(raw, s.activeAccounts, labels);
   }
 
+  /// The one account the user's own words name ("in cash", "from SBI",
+  /// "कैश से") when the model left `account` out. Whole words only, so
+  /// "cashback" is not Cash; null when none or several are named.
+  static MoneyAccount? namedIn(FinanceSnapshot s, String userText) {
+    final words = spokenWords(userText);
+    final named = [
+      for (final a in s.activeAccounts)
+        if (nameTokens(a.name) case final t when t.isNotEmpty && t.every(words.contains)) a,
+    ];
+    return named.length == 1 ? named.single : null;
+  }
+
   /// The account id the model named, or null (use the default account)
   /// when none was said, it was not in the user's words, or it is
   /// ambiguous ("card" with several cards).
@@ -189,10 +201,41 @@ const _filler = {
   'that', 'this', 'it', 'was', 'is', 'wala', 'vala',
 };
 
+/// Hindi (Devanagari) and Hinglish words for accounts and payment methods,
+/// with the Latin word the model writes for them ("कैश से" → account
+/// "cash"). Without these, a Hindi message's account would never count as
+/// said.
+const _spokenAliases = {
+  'कैश': 'cash',
+  'नकद': 'cash',
+  'नकदी': 'cash',
+  'nakad': 'cash',
+  'naqad': 'cash',
+  'बैंक': 'bank',
+  'कार्ड': 'card',
+  'क्रेडिट कार्ड': 'credit card',
+  'यूपीआई': 'upi',
+  'एसबीआई': 'sbi',
+  'एक्सिस': 'axis',
+  'एचडीएफसी': 'hdfc',
+  'आईसीआईसीआई': 'icici',
+};
+
+/// The words of [text], plus the Latin word for each Hindi alias it uses.
+Set<String> spokenWords(String text) {
+  final lower = text.toLowerCase();
+  return {
+    ...nameTokens(lower),
+    for (final e in _spokenAliases.entries)
+      if (lower.contains(e.key)) ...nameTokens(e.value),
+  };
+}
+
 /// Whether [value] (a shop or person the model extracted) appears in the
 /// user's [text] or in [extra] app context, so it was not invented.
 bool grounded(String value, String text, {String extra = ''}) {
-  final hay = '${text.toLowerCase()} ${extra.toLowerCase()}';
+  final said = '${text.toLowerCase()} ${extra.toLowerCase()}';
+  final hay = [said, for (final e in _spokenAliases.entries) if (said.contains(e.key)) e.value].join(' ');
   final tokens = nameTokens(value).where((t) => t.length >= 2);
   return tokens.isNotEmpty && tokens.any(hay.contains);
 }

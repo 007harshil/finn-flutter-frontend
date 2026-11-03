@@ -35,6 +35,8 @@ void main() {
 
     final increase = find.byTooltip('Increase Budget month starts');
     await tester.scrollUntilVisible(increase, 200);
+    await tester.ensureVisible(increase);
+    await tester.pumpAndSettle();
     await tester.tap(increase);
     await tester.pumpAndSettle();
     expect(container.read(settingsProvider).monthStartDay, 2);
