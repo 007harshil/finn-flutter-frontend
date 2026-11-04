@@ -105,6 +105,8 @@ class _AccountDetailScreenState extends ConsumerState<AccountDetailScreen> {
           idempotencyKey: '$_key-delete-${a.version}',
           successTitle: 'Account deleted',
           successSubtitle: a.name,
+          confirmLabel: 'Delete',
+          destructive: true,
         );
         if (done != null && mounted) {
           if (context.canPop()) {

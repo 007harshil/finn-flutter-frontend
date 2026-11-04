@@ -147,7 +147,8 @@ class _Hero extends StatelessWidget {
     final net = o.net;
     final label = net.isPositive ? 'You’ll get overall' : (net.isNegative ? 'You owe overall' : 'Evenly balanced');
     final both = o.toPay.isPositive && o.toCollect.isPositive;
-    return Column(
+    return KhataPanel(
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(label, style: t.label),
@@ -183,6 +184,7 @@ class _Hero extends StatelessWidget {
           ),
         ],
       ],
+      ),
     );
   }
 }

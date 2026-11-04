@@ -131,6 +131,7 @@ class Loan {
     PrepaymentStrategy? prepaymentStrategy,
     LoanStatus? status,
     String? Function()? note,
+    String? Function()? disbursementTransactionId,
     DateTime? updatedAt,
     int? version,
   }) =>
@@ -149,7 +150,8 @@ class Loan {
         maturityDate: maturityDate != null ? maturityDate() : this.maturityDate,
         prepaymentStrategy: prepaymentStrategy ?? this.prepaymentStrategy,
         status: status ?? this.status,
-        disbursementTransactionId: disbursementTransactionId,
+        disbursementTransactionId:
+            disbursementTransactionId != null ? disbursementTransactionId() : this.disbursementTransactionId,
         note: note != null ? note() : this.note,
         createdAt: createdAt,
         updatedAt: updatedAt ?? this.updatedAt,

@@ -205,11 +205,12 @@ void main() {
   });
 
   group('accounts with savings', () {
-    test('cannot be deleted while money is set aside on them; archiving is allowed', () async {
+    test('deleting an account removes the money set aside on it', () async {
       await h.run(const EmergencyFundMovementAction.contribute(), _ef(100, account: sbi));
-      final err = await h.reject(const DeleteAccountAction(), AccountIdInput(id: sbi));
-      expect(err.message, contains('Archive it instead'));
-      await h.run(const ArchiveAccountAction(), ArchiveAccountInput(id: sbi, archived: true));
+      await h.run(const EmergencyFundMovementAction.contribute(), _ef(50, account: hdfc));
+      await h.run(const DeleteAccountAction(), AccountIdInput(id: sbi));
+      final s = await h.snapshot();
+      expect(s.savingsMovements.map((m) => m.accountId), [hdfc]);
     });
   });
 }

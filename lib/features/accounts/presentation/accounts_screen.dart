@@ -147,32 +147,65 @@ class _Total extends ConsumerWidget {
     final b = ref.watch(balanceProvider).value;
     final owed = ref.watch(creditOwedProvider).value;
     if (b == null) return const SizedBox(height: 80);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('Total money', style: t.label),
-        const SizedBox(height: Sp.xs),
-        AnimatedAmount(
-          b.cash,
-          style: t.figureXL,
-          decimals: DecimalDisplay.none,
-          fit: true,
-          animateOnMount: true,
-        ),
-        if (owed != null && owed.isPositive) ...[
-          const SizedBox(height: Sp.sm),
+    final hidden = AmountVisibility.hiddenOf(context);
+    final held = [
+      for (final x in ref.watch(accountBalancesProvider).value ?? const <AccountBalance>[])
+        if (!x.account.isArchived && x.balance.isPositive) x,
+    ]..sort((x, y) => y.balance.paise.compareTo(x.balance.paise));
+    final total = held.fold<int>(0, (sum, x) => sum + x.balance.paise);
+    final hues = [for (var i = 0; i < held.length; i++) c.tint(i * 3 + 9).$1];
+    return KhataPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Row(
             children: [
-              Text('Credit card owed  ', style: t.label),
-              AmountText(
-                owed,
-                style: t.figureSmall.copyWith(color: c.red),
-                decimals: DecimalDisplay.none,
+              KhataDonut(
+                size: 108,
+                stroke: 14,
+                parts: [for (var i = 0; i < held.length; i++) BarPart(held[i].balance.paise.toDouble(), hues[i])],
+                center: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('${held.length}', style: t.figure.copyWith(fontSize: 22)),
+                    Text(held.length == 1 ? 'account' : 'accounts', style: t.small),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Total money', style: t.label),
+                    const SizedBox(height: 2),
+                    AnimatedAmount(b.cash, style: t.figureL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
+                    if (owed != null && owed.isPositive) ...[
+                      const SizedBox(height: Sp.xs),
+                      Row(
+                        children: [
+                          Flexible(child: Text('Credit card owed  ', style: t.label, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                          AmountText(owed, style: t.figureSmall.copyWith(color: c.red), decimals: DecimalDisplay.none),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ],
           ),
+          if (held.length > 1 && total > 0) ...[
+            const SizedBox(height: Sp.md),
+            for (var i = 0; i < held.length && i < 5; i++)
+              KhataKey(
+                color: hues[i],
+                // Name with share, so the key never repeats a row title.
+                label: '${held[i].account.name} · ${hidden ? '••' : '${(held[i].balance.paise * 100 / total).round()}%'}',
+                value: const SizedBox.shrink(),
+              ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

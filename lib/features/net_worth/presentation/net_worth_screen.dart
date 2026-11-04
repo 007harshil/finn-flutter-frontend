@@ -86,44 +86,88 @@ class _Hero extends StatelessWidget {
     final t = context.type;
     final s = view.snapshot;
     final ratio = view.debtRatioBps;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('What you own minus what you owe', style: t.label),
-        const SizedBox(height: Sp.xs),
-        AnimatedAmount(s.netWorth, style: t.figureXL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
-        const SizedBox(height: Sp.lg),
-        Row(
-          children: [
-            Expanded(
-              child: LedgerStat(
-                label: 'You own',
-                value: AmountText(s.totalAssets, style: t.figure, decimals: DecimalDisplay.none, fit: true),
+    final c = context.ink;
+    final hidden = AmountVisibility.hiddenOf(context);
+    final own = s.totalAssets.paise;
+    final owe = s.liabilities.paise;
+    return KhataPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              // Outer: what you own by group. Inner: owe against own.
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  KhataDonut(
+                    size: 116,
+                    stroke: 14,
+                    parts: [for (final x in view.slices) BarPart(x.fraction, _sliceColor(c, x.group))],
+                  ),
+                  KhataRing(
+                    value: own <= 0 ? 0 : owe / own,
+                    size: 72,
+                    stroke: 6,
+                    color: c.red,
+                    center: Text(
+                      hidden || ratio == null ? '—' : formatBps(ratio, decimals: 0),
+                      style: t.small.copyWith(color: c.ink, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(width: Sp.lg),
-            Expanded(
-              child: LedgerStat(
-                label: 'You owe',
-                value: AmountText(s.liabilities, style: t.figure, decimals: DecimalDisplay.none, fit: true),
+              const SizedBox(width: Sp.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('What you own minus what you owe', style: t.label),
+                    const SizedBox(height: 2),
+                    AnimatedAmount(s.netWorth, style: t.figureL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
+                    const SizedBox(height: Sp.sm),
+                    KhataStamp(
+                      label: s.netWorth.isNegative ? 'In the red' : 'In the black',
+                      color: s.netWorth.isNegative ? c.red : c.green,
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-        if (ratio != null && s.liabilities.isPositive) ...[
+            ],
+          ),
           const SizedBox(height: Sp.md),
-          Text('Debts are ${formatBps(ratio, decimals: 0)} of what you own', style: t.label),
+          Row(
+            children: [
+              Expanded(
+                child: LedgerStat(
+                  label: 'You own',
+                  value: AmountText(s.totalAssets, style: t.figure, decimals: DecimalDisplay.none, fit: true),
+                ),
+              ),
+              const SizedBox(width: Sp.lg),
+              Expanded(
+                child: LedgerStat(
+                  label: 'You owe',
+                  value: AmountText(s.liabilities, style: t.figure.copyWith(color: c.red), decimals: DecimalDisplay.none, fit: true),
+                ),
+              ),
+            ],
+          ),
+          if (ratio != null && s.liabilities.isPositive) ...[
+            const SizedBox(height: Sp.md),
+            Text('Debts are ${formatBps(ratio, decimals: 0)} of what you own', style: t.label),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
 
-/// Neutral ink steps: the bar shows share, not good or bad.
+/// One hue per group (share, not good or bad); debts stay red.
 Color _sliceColor(LedgerColors c, NetWorthGroup g) => switch (g) {
-  NetWorthGroup.cash => c.ink,
-  NetWorthGroup.assets => c.inkSoft,
-  NetWorthGroup.receivables => c.inkFaint,
+  NetWorthGroup.cash => c.brand,
+  NetWorthGroup.assets => c.info,
+  NetWorthGroup.receivables => c.marigold,
   NetWorthGroup.liabilities => c.red,
 };
 

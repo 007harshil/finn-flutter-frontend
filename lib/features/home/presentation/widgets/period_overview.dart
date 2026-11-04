@@ -13,6 +13,7 @@ import '../../../../core/money/money.dart';
 import '../../../../core/money/money_format.dart';
 import '../../../../core/time/dates.dart';
 import '../../../../finance/ledger.dart';
+import '../../../analytics/presentation/spend_pulse.dart';
 import '../../../../kit/kit.dart';
 import '../../../../shared/presentation/async_view.dart';
 import '../../../transactions/domain/transaction.dart';
@@ -92,10 +93,67 @@ class _MonthFlow extends ConsumerWidget {
         ? DateRange(prev.start, DateTime(prev.year, prev.month, math.min(today.day, prev.dayCount)))
         : prev.range;
     final before = ref.watch(rangeSummaryProvider(compare)).value;
-    return AsyncView<PeriodSummary>(
-      value: ref.watch(monthSummaryProvider(month)),
-      loading: const LedgerSkeleton(height: 180, radius: Rad.lg),
-      builder: (context, s) => _FlowPanel(summary: s, before: before, month: month, isCurrent: isCurrent),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _WeekColumns(month: month),
+        AsyncView<PeriodSummary>(
+          value: ref.watch(monthSummaryProvider(month)),
+          loading: const LedgerSkeleton(height: 180, radius: Rad.lg),
+          builder: (context, s) => _FlowPanel(summary: s, before: before, month: month, isCurrent: isCurrent),
+        ),
+      ],
+    );
+  }
+}
+
+/// Spending week by week on khata paper; the costliest week in teal.
+class _WeekColumns extends ConsumerWidget {
+  const _WeekColumns({required this.month});
+
+  final MonthKey month;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = context.type;
+    final pulse = ref.watch(spendPulseProvider(month)).value;
+    if (pulse == null || pulse.spent <= 0) return const SizedBox.shrink();
+    final running = pulse.thisMonth;
+    final weeks = <int>[];
+    for (var start = 0; start < pulse.days; start += 7) {
+      final end = (start + 7).clamp(0, pulse.days);
+      if (start >= running.length) {
+        weeks.add(0);
+        continue;
+      }
+      final last = running[(end - 1).clamp(0, running.length - 1)];
+      weeks.add(last - (start == 0 ? 0 : running[start - 1]));
+    }
+    final peak = weeks.indexOf(weeks.reduce((x, y) => x > y ? x : y));
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Sp.md),
+      child: KhataPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text('Spent each week', style: t.labelStrong)),
+                AmountText(Money.fromPaise(weeks[peak]), style: t.figureSmall, decimals: DecimalDisplay.none),
+              ],
+            ),
+            const SizedBox(height: Sp.sm),
+            KhataColumns(
+              height: 64,
+              semanticLabel: 'Spending in each week of the month',
+              columns: [
+                for (var w = 0; w < weeks.length; w++)
+                  KhataColumn('${w * 7 + 1}–${((w + 1) * 7).clamp(0, pulse.days)}', weeks[w].toDouble(), highlight: w == peak),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

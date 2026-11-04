@@ -119,33 +119,85 @@ class _Hero extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Set aside', style: t.label),
-        const SizedBox(height: Sp.xs),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Flexible(
-              child: AnimatedAmount(s.saved, style: t.figureXL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
-            ),
-            if (configured) ...[
-              const SizedBox(width: Sp.sm),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 5),
-                child: Text('of ${savingsMoney(context, s.target)}', style: t.figureSmall),
+        KhataPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  if (configured) ...[
+                    KhataRing(
+                      value: s.progress,
+                      size: 112,
+                      stroke: 11,
+                      color: color,
+                      semanticLabel: 'Emergency fund, ${s.level.label}. $line'
+                          '${hidden ? '' : '. ${AmountText.spokenLabel(s.saved)} of ${AmountText.spokenLabel(s.target)} saved'}',
+                      center: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(coverage == null ? formatBps(s.progressBps, decimals: 0) : _tenths(coverage),
+                              style: t.figure.copyWith(fontSize: 20)),
+                          Text(coverage == null ? 'saved' : 'months', style: t.small),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: Sp.lg),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Set aside', style: t.label),
+                        const SizedBox(height: 2),
+                        AnimatedAmount(s.saved, style: t.figureL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
+                        if (configured) Text('of ${savingsMoney(context, s.target)}', style: t.figureSmall),
+                        if (color != null) ...[
+                          const SizedBox(height: Sp.sm),
+                          KhataStamp(label: s.level.label, color: color),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               ),
+              if (configured && months != null && months > 0) ...[
+                const SizedBox(height: Sp.lg),
+                // One box per planned month, filled as far as savings cover.
+                ExcludeSemantics(
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < months; i++)
+                        Expanded(
+                          child: Container(
+                            height: 22,
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            decoration: BoxDecoration(
+                              color: c.isDark ? c.sunken : c.surface,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: c.khataRule),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            alignment: Alignment.centerLeft,
+                            child: FractionallySizedBox(
+                              widthFactor: ((coverage ?? 0) - i).clamp(0.0, 1.0),
+                              heightFactor: 1,
+                              child: ColoredBox(color: color ?? c.brand),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              if (configured) ...[
+                const SizedBox(height: Sp.md),
+                Text(line, style: t.label.copyWith(color: s.level == EmergencyFundLevel.funded ? c.green : null)),
+              ],
             ],
-          ],
+          ),
         ),
         if (configured) ...[
-          const SizedBox(height: Sp.lg),
-          LedgerBar(
-            value: s.progress,
-            color: color,
-            semanticLabel: 'Emergency fund, ${s.level.label}. $line'
-                '${hidden ? '' : '. ${AmountText.spokenLabel(s.saved)} of ${AmountText.spokenLabel(s.target)} saved'}',
-          ),
-          const SizedBox(height: Sp.md),
-          Text(line, style: t.label.copyWith(color: s.level == EmergencyFundLevel.funded ? c.green : null)),
           const SizedBox(height: Sp.xl),
           Row(
             children: [

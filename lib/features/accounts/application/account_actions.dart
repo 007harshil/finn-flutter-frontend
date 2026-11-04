@@ -4,6 +4,8 @@ import '../../../core/money/money_format.dart';
 import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../loans/domain/loan.dart';
+import '../../pending/domain/pending_payment.dart';
 import '../domain/money_account.dart';
 
 /// Largest balance accepted (Rs 1,000 crore) — guards against typos.
@@ -140,10 +142,31 @@ bool _hasMovements(FinanceSnapshot s, String accountId) =>
     s.transactions.any((t) => t.accountId == accountId) ||
     s.transfers.any((t) => t.fromAccountId == accountId || t.toAccountId == accountId);
 
-bool _isReferenced(FinanceSnapshot s, String accountId) =>
-    _hasMovements(s, accountId) ||
-    s.subscriptions.any((x) => x.accountId == accountId) ||
-    s.settlements.any((x) => x.accountId == accountId);
+/// What deleting an account removes (transactions, transfers, set-aside
+/// savings) and unlinks (subscriptions, settlements). Mirrors the server.
+class _AccountRecords {
+  const _AccountRecords({
+    required this.transactions,
+    required this.transfers,
+    required this.savings,
+    required this.subscriptions,
+    required this.settlements,
+  });
+
+  factory _AccountRecords.of(FinanceSnapshot s, String accountId) => _AccountRecords(
+        transactions: s.transactions.where((t) => t.accountId == accountId).length,
+        transfers: s.transfers.where((t) => t.fromAccountId == accountId || t.toAccountId == accountId).length,
+        savings: s.savingsMovements.where((m) => m.accountId == accountId).length,
+        subscriptions: s.subscriptions.where((x) => x.accountId == accountId).length,
+        settlements: s.settlements.where((x) => x.accountId == accountId).length,
+      );
+
+  final int transactions;
+  final int transfers;
+  final int savings;
+  final int subscriptions;
+  final int settlements;
+}
 
 /// Account balance after changing opening values (preview helper).
 AccountBalance? _balanceOf(FinanceSnapshot s, String id) =>
@@ -543,8 +566,9 @@ class DeleteAccountAction extends FinancialAction<AccountIdInput, MoneyAccount> 
         id: 'accounts.delete',
         module: 'accounts',
         title: 'Delete an account',
-        description: 'Removes an account that nothing refers to. Accounts with transactions, transfers, '
-            'subscriptions, settlements or set-aside savings must be archived instead.',
+        description: 'Permanently deletes an account together with its transactions, transfers and set-aside '
+            'savings. Subscriptions and settlements paid from it are kept but no longer linked to an account. '
+            'Cannot delete the last active account.',
         risk: ActionRisk.consequential,
         reversible: false,
         fields: [ActionFieldSpec('id', FieldKind.id, 'Account id')],
@@ -557,26 +581,105 @@ class DeleteAccountAction extends FinancialAction<AccountIdInput, MoneyAccount> 
   Result<ActionPreview> prepare(AccountIdInput input, FinanceSnapshot s, ActionEnvironment env) {
     final a = s.account(input.id);
     if (a == null) return const Result.err(AppFailure.notFound('This account no longer exists.'));
-    if (s.accounts.length <= 1) {
-      return const Result.err(AppFailure.validation('You need at least one account.'));
+    if (!a.isArchived && !s.activeAccounts.any((x) => x.id != a.id)) {
+      return const Result.err(AppFailure.validation('You need at least one active account.'));
     }
-    if (_isReferenced(s, a.id) || s.savingsMovements.any((m) => m.accountId == a.id)) {
-      return Result.err(AppFailure.validation(
-          '${a.name} is used by existing transactions, transfers, subscriptions or set-aside savings. Archive it instead.'));
-    }
+    final n = _AccountRecords.of(s, a.id);
+    String plural(int count, String word) => '$count $word${count == 1 ? '' : 's'}';
+    final unlinked = [
+      if (n.subscriptions > 0) plural(n.subscriptions, 'subscription'),
+      if (n.settlements > 0) plural(n.settlements, 'settlement'),
+    ];
     return Result.ok(preview(
       input,
-      title: 'Delete account?',
+      title: 'Delete ${a.name}?',
       summary: 'Deleted ${a.name}',
-      lines: [PreviewLine('Account', a.name), PreviewLine('Kind', a.kind.label)],
-      warnings: const ['This cannot be undone.'],
-      basis: {'v': a.version},
+      lines: [
+        PreviewLine('Account', a.name),
+        PreviewLine('Kind', a.kind.label),
+        if (n.transactions > 0) PreviewLine('Transactions deleted', '${n.transactions}'),
+        if (n.transfers > 0) PreviewLine('Transfers deleted', '${n.transfers}'),
+        if (n.savings > 0) PreviewLine('Set-aside savings deleted', '${n.savings}'),
+      ],
+      warnings: [
+        if (n.transactions + n.transfers + n.savings > 0)
+          'These records are deleted with the account. Balances, budgets and goal progress update to match.',
+        if (unlinked.isNotEmpty) '${unlinked.join(' and ')} paid from it will be kept without an account.',
+        'This cannot be undone. To keep the history, archive the account instead.',
+      ],
+      basis: {
+        'v': a.version,
+        'transactions': n.transactions,
+        'transfers': n.transfers,
+        'savings': n.savings,
+        'subscriptions': n.subscriptions,
+        'settlements': n.settlements,
+      },
     ));
   }
 
   @override
   Future<Result<MoneyAccount>> execute(AccountIdInput input, FinanceSnapshot s, ActionEnvironment env) async {
     final a = s.account(input.id)!;
+    final now = env.clock.now();
+    final txIds = {for (final t in s.transactions) if (t.accountId == a.id) t.id};
+    // Keep loans, loan payments, settlements and subscriptions; only unlink them.
+    for (final l in s.loans) {
+      if (txIds.contains(l.disbursementTransactionId)) {
+        await env.repos.loans.save(
+          l.copyWith(disbursementTransactionId: () => null, updatedAt: now, version: l.version + 1),
+        );
+      }
+    }
+    for (final p in s.loanPayments) {
+      if (txIds.contains(p.transactionId)) {
+        await env.repos.loanPayments.save(LoanPayment(
+          id: p.id,
+          loanId: p.loanId,
+          kind: p.kind,
+          date: p.date,
+          interestComponent: p.interestComponent,
+          principalComponent: p.principalComponent,
+          createdAt: p.createdAt,
+          periodNumber: p.periodNumber,
+          note: p.note,
+        ));
+      }
+    }
+    for (final st in s.settlements) {
+      final unlinkTx = txIds.contains(st.transactionId);
+      final unlinkAccount = st.accountId == a.id;
+      if (unlinkTx || unlinkAccount) {
+        await env.repos.settlements.save(PendingSettlement(
+          id: st.id,
+          pendingId: st.pendingId,
+          amount: st.amount,
+          date: st.date,
+          createdAt: st.createdAt,
+          accountId: unlinkAccount ? null : st.accountId,
+          channel: st.channel,
+          transactionId: unlinkTx ? null : st.transactionId,
+          note: st.note,
+        ));
+      }
+    }
+    for (final sub in s.subscriptions) {
+      if (sub.accountId == a.id) {
+        await env.repos.subscriptions.save(
+          sub.copyWith(accountId: () => null, updatedAt: now, version: sub.version + 1),
+        );
+      }
+    }
+    // Delete what lived on the account.
+    for (final m in s.savingsMovements) {
+      if (m.accountId == a.id) await env.repos.savingsMovements.delete(m.id);
+    }
+    for (final t in s.transfers) {
+      if (t.fromAccountId == a.id || t.toAccountId == a.id) await env.repos.transfers.delete(t.id);
+    }
+    for (final id in txIds) {
+      await env.repos.transactions.delete(id);
+    }
     await env.repos.moneyAccounts.delete(a.id);
     if (a.isDefault) {
       // Hand the default to the next active account.

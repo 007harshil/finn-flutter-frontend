@@ -31,6 +31,8 @@ Future<O?> runAction<I extends ActionInput, O>(
   String? successTitle,
   String? successSubtitle,
   bool celebrate = false,
+  String confirmLabel = 'Confirm',
+  bool destructive = false,
   void Function(Map<String, String> fieldErrors)? onFieldErrors,
 }) async {
   final dispatcher = ref.read(actionDispatcherProvider);
@@ -39,7 +41,12 @@ Future<O?> runAction<I extends ActionInput, O>(
 
   if (outcome is ActionNeedsConfirmation<O>) {
     if (!context.mounted) return null;
-    final approved = await showActionReview(context, outcome.preview);
+    final approved = await showActionReview(
+      context,
+      outcome.preview,
+      confirmLabel: confirmLabel,
+      destructive: destructive,
+    );
     if (!approved || !context.mounted) return null;
     outcome = await dispatcher.dispatch(
       action,
@@ -78,12 +85,19 @@ Future<O?> runAction<I extends ActionInput, O>(
 }
 
 /// Review sheet for consequential operations: shows exactly what will
-/// happen and asks for explicit approval.
-Future<bool> showActionReview(BuildContext context, ActionPreview preview) async {
+/// happen and asks for explicit approval. [destructive] draws the approve
+/// button in red outline (like [showFinnConfirm]) for irreversible deletes.
+Future<bool> showActionReview(
+  BuildContext context,
+  ActionPreview preview, {
+  String confirmLabel = 'Confirm',
+  bool destructive = false,
+}) async {
   final result = await showFinnSheet<bool>(
     context,
     builder: (ctx) {
       final t = ctx.type;
+      final c = ctx.ink;
       return FinnSheetScaffold(
         title: preview.title,
         description: preview.lines.isEmpty && preview.warnings.isEmpty ? null : preview.summary,
@@ -100,7 +114,13 @@ Future<bool> showActionReview(BuildContext context, ActionPreview preview) async
             const SizedBox(width: Sp.md),
             Expanded(
               flex: 2,
-              child: LedgerButton(label: 'Confirm', expand: true, onPressed: () => Navigator.of(ctx).pop(true)),
+              child: LedgerButton(
+                label: confirmLabel,
+                expand: true,
+                variant: destructive ? LedgerButtonVariant.secondary : LedgerButtonVariant.primary,
+                color: destructive ? c.red : null,
+                onPressed: () => Navigator.of(ctx).pop(true),
+              ),
             ),
           ],
         ),

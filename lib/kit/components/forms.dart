@@ -837,17 +837,22 @@ class LedgerPickerField<T> extends StatelessWidget {
           borderRadius: Rad.rMd,
           onTap: enabled ? () => _open(context) : null,
           child: InputDecorator(
-            isEmpty: cur == null,
             decoration: _boxDecoration(
               context,
-              hint: hint,
               errorText: errorText,
               helper: helper,
               enabled: enabled,
               suffix: Icon(LucideIcons.chevronDown, size: 18, color: c.inkSoft),
             ),
+            // The hint is drawn as the child (not the decoration's hint) so
+            // it sits on the same centred line as a chosen value.
             child: cur == null
-                ? const SizedBox(height: 22)
+                ? Text(
+                    hint,
+                    style: t.body.copyWith(color: c.inkSoft),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )
                 : Row(
                     children: [
                       if (lead != null) ...[

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:finn/actions/dispatcher.dart';
 import 'package:finn/core/money/money.dart';
 import 'package:finn/core/persistence/persistence_driver.dart';
 import 'package:finn/core/result/result.dart';
@@ -160,20 +161,25 @@ void main() {
       expect((await h.snapshot()).activeAccounts, hasLength(2));
     });
 
-    test('delete is blocked while anything references the account, then allowed', () async {
-      await h.run(const CreateTransactionAction(), spend(50, accountId: sbi.id));
-      final blocked = await h.reject(const DeleteAccountAction(), AccountIdInput(id: sbi.id));
-      expect(blocked.message, contains('Archive'));
-
+    test('delete always asks first and removes the account transactions and transfers', () async {
+      final tx = await h.run(const CreateTransactionAction(), spend(50, accountId: sbi.id));
       final spare = await h.run(const CreateAccountAction(), newAccount('Spare', MoneyAccountKind.bank));
       await h.run(const CreateTransferAction(),
           TransferInput(fromAccountId: sbi.id, toAccountId: spare.id, amount: const Money.rupees(1), date: DateTime(2026, 10, 9)));
-      final viaTransfer = await h.reject(const DeleteAccountAction(), AccountIdInput(id: spare.id));
-      expect(viaTransfer.code, FailureCode.validation);
 
-      final other = await h.run(const CreateAccountAction(), newAccount('Unused', MoneyAccountKind.bank));
-      await h.run(const DeleteAccountAction(), AccountIdInput(id: other.id));
-      expect((await h.snapshot()).account(other.id), isNull);
+      final first = await h.dispatcher.dispatch(const DeleteAccountAction(), AccountIdInput(id: sbi.id),
+          idempotencyKey: h.nextKey());
+      expect(first, isA<ActionNeedsConfirmation<MoneyAccount>>());
+      final preview = (first as ActionNeedsConfirmation<MoneyAccount>).preview;
+      expect(preview.lines.firstWhere((l) => l.label == 'Transactions deleted').value, '1');
+      expect(preview.lines.firstWhere((l) => l.label == 'Transfers deleted').value, '1');
+
+      await h.run(const DeleteAccountAction(), AccountIdInput(id: sbi.id));
+      final s = await h.snapshot();
+      expect(s.account(sbi.id), isNull);
+      expect(s.transactions.where((t) => t.id == tx.id), isEmpty);
+      expect(s.transfers, isEmpty);
+      expect(s.account(spare.id), isNotNull);
     });
 
     test('the last account cannot be deleted; deleting the default hands the default on', () async {

@@ -109,7 +109,7 @@ New entity `Transfer`: `id` (`trf_…`), `fromAccountId`, `toAccountId`
 | `accounts.setBalance` | `id, balance(money), asOf?(default today)` | "Correct balance": sets `openingPaise` so the computed balance (owed for credit) on today equals `balance`; preview shows old → new |
 | `accounts.setDefault` | `id` | unsets previous default |
 | `accounts.archive` | `id, archived(bool)` | cannot archive the last active account or the default (choose another default first) |
-| `accounts.delete` | `id` | only when no transactions, transfers, subscriptions, settlements reference it; otherwise validation error suggesting archive; cannot delete last account |
+| `accounts.delete` | `id` | always asks for confirmation (preview counts what goes); deletes the account with its transactions, transfers and set-aside savings; subscriptions and settlements paid from it are kept with no account; loan/settlement links to deleted transactions are cleared; cannot delete last active account |
 | `transfers.create` | `fromAccountId, toAccountId, amount, date, channel?, note?` | |
 | `transfers.update` | `id, version?, …same` | |
 | `transfers.delete` | `id` | |
