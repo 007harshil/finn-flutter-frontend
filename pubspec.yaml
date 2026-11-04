@@ -79,9 +79,9 @@ flutter:
   # Variable font (wght 200–800) used by the lib/kit design system. The
   # kit sets the `wght` axis explicitly (see kit/tokens.dart).
   fonts:
-    - family: Atkinson
+    - family: Manrope
       fonts:
-        - asset: assets/fonts/AtkinsonHyperlegibleNext.ttf
+        - asset: assets/fonts/Manrope.ttf
 
   assets:
     - assets/branding/finn_logo.png

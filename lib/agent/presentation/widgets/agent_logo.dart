@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../design_system/design_system.dart';
 import '../../../kit/kit.dart' show LedgerContext;
 
-/// The FiNN agent mark: a fin cresting a wave on an ink disc, with a small
+/// The FiNN agent mark: a fin cresting a wave on a deep teal disc, with a small
 /// spark for "assistant". Flat ink and paper like the rest of the ledger kit,
 /// deliberately not a gradient, sparkle or robot.
 ///
@@ -23,7 +23,7 @@ class FinnAgentMark extends StatelessWidget {
     final c = context.ink;
     final mark = CustomPaint(
       size: Size.square(size),
-      painter: _MarkPainter(disc: c.ink, glyph: c.onInk, phase: phase),
+      painter: _MarkPainter(disc: c.deep, glyph: const Color(0xFFFFFFFF), phase: phase),
     );
     if (semanticLabel == null) return ExcludeSemantics(child: mark);
     return Semantics(label: semanticLabel, image: true, child: mark);

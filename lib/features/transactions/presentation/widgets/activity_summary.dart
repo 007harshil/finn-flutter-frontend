@@ -211,7 +211,7 @@ class _FlowTab extends StatelessWidget {
               duration: motion.fast,
               curve: motion.standard,
               height: 2,
-              color: selected ? c.ink : Colors.transparent,
+              color: selected ? c.brand : Colors.transparent,
             ),
           ],
         ),
@@ -317,8 +317,6 @@ class _WhereItWent extends ConsumerWidget {
   final TransactionFeed feed;
   final Map<String, TransactionCategory> cats;
 
-  static const _ramp = [1.0, 0.7, 0.45, 0.25];
-
   /// Categories the legend below the bar already lists (and marks selected
   /// when filtered), so the filter chips do not repeat them.
   static Set<String> legendIds(TransactionFeed feed) {
@@ -349,9 +347,16 @@ class _WhereItWent extends ConsumerWidget {
     final rest = total - top.fold<int>(0, (sum, s) => sum + s.amount.paise);
     int pct(int paise) => (paise * 100 / total).round();
     String name(String id) => cats[id]?.name ?? 'Deleted category';
+    // Each category keeps the colour of its icon well, so the bar, legend
+    // and rows below read as one key.
+    Color hue(String id) {
+      final cat = cats[id];
+      return cat == null ? c.inkSoft : c.tint(cat.colorIndex).$1;
+    }
+
     final parts = [
       for (var i = 0; i < top.length; i++)
-        BarPart(top[i].amount.paise / total, c.ink.withValues(alpha: _ramp[i])),
+        BarPart(top[i].amount.paise / total, hue(top[i].categoryId)),
       if (rest > 0) BarPart(rest / total, c.sunken),
     ];
     final spoken = [
@@ -389,7 +394,7 @@ class _WhereItWent extends ConsumerWidget {
                         '${name(top[i].categoryId)}  ${pct(top[i].amount.paise)}%',
                     dot: f.categoryIds.contains(top[i].categoryId)
                         ? null
-                        : c.ink.withValues(alpha: _ramp[i]),
+                        : hue(top[i].categoryId),
                     selected: f.categoryIds.contains(top[i].categoryId),
                     semanticLabel:
                         '${name(top[i].categoryId)}, ${pct(top[i].amount.paise)} percent. '

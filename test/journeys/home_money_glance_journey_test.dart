@@ -27,6 +27,7 @@ void main() {
     expect(inHero(rupees(b.cash)), findsOneWidget);
 
     // The current month is partial; swiping right goes to last month.
+    await scrollTo(tester, find.text('This month'));
     expect(find.text('This month'), findsOneWidget);
     expect(find.text('Kept so far'), findsOneWidget);
     await scrollTo(tester, find.text('Money in'));

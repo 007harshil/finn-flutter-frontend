@@ -511,7 +511,9 @@ class _RangePill extends StatelessWidget {
 // List pieces
 // ---------------------------------------------------------------------------
 
-/// "Today", "Yesterday", "Fri, 9 Oct" with the day's net on the right.
+/// A ledger day: the date numeral in the margin (above the rows' icons,
+/// like a khata page), "Today" / "Yesterday" / the weekday beside it, and
+/// the day's net and entry count on the right.
 class _DayHeader extends StatelessWidget {
   const _DayHeader({required this.date, required this.today, required this.net, required this.count});
 
@@ -522,30 +524,64 @@ class _DayHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ink;
     final t = context.type;
     final hidden = AmountVisibility.hiddenOf(context);
     final diff = daysBetween(today, date);
+    final weekday = DateFormats.weekday.format(date);
     final label = switch (diff) {
       0 => 'Today',
       -1 => 'Yesterday',
-      _ =>
-        date.year == today.year
-            ? DateFormats.shortWeekdayDayMonth.format(date)
-            : '${DateFormats.shortWeekdayDayMonth.format(date)} ${date.year}',
+      _ => weekday,
     };
+    final month = date.year == today.year ? DateFormats.monthName.format(date) : DateFormats.monthYear.format(date);
+    final detail = diff == 0 || diff == -1 ? '$weekday · $month' : month;
+    final spoken = diff == 0 || diff == -1
+        ? label
+        : date.year == today.year
+            ? DateFormats.shortWeekdayDayMonth.format(date)
+            : '${DateFormats.shortWeekdayDayMonth.format(date)} ${date.year}';
     final sign = net.isZero ? SignDisplay.auto : SignDisplay.always;
     return Semantics(
       header: true,
-      label: '$label, $count transaction${count == 1 ? '' : 's'}'
+      label: '$spoken, $count transaction${count == 1 ? '' : 's'}'
           '${hidden ? '' : ', net ${AmountText.spokenLabel(net, sign: sign)}'}',
       excludeSemantics: true,
       child: Padding(
-        padding: const EdgeInsets.only(top: Sp.xl, bottom: Sp.sm),
+        padding: const EdgeInsets.only(top: Sp.xl, bottom: Sp.sm + 2),
         child: Row(
           children: [
-            Expanded(child: Text(label, style: t.labelStrong, maxLines: 1, overflow: TextOverflow.ellipsis)),
+            // Centred over the rows' 40 px icon wells (16 px row inset).
+            Padding(
+              padding: const EdgeInsets.only(left: Sp.lg),
+              child: SizedBox(
+                width: 40,
+                child: Text(
+                  '${date.day}',
+                  textAlign: TextAlign.center,
+                  style: t.figureL.copyWith(fontSize: 26, height: 1, color: diff == 0 ? c.brand : c.ink),
+                ),
+              ),
+            ),
+            const SizedBox(width: Sp.md + 2),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: t.labelStrong, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(detail, style: t.small, maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
             const SizedBox(width: Sp.md),
-            AmountText(net, sign: sign, decimals: DecimalDisplay.none, style: t.figureSmall),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                AmountText(net, sign: sign, decimals: DecimalDisplay.none, style: t.figureSmall.copyWith(color: c.ink)),
+                Text('$count ${count == 1 ? 'entry' : 'entries'}', style: t.small),
+              ],
+            ),
+            const SizedBox(width: Sp.lg),
           ],
         ),
       ),

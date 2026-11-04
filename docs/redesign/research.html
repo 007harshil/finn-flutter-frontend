@@ -1,0 +1,270 @@
+<title>FiNN Design Research</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap">
+<style>
+/* Layout: one reading column (~68ch) with wide tables that scroll inside their own frame. */
+:root{
+  --bg:#f7f9f8; --surface:#ffffff; --sunken:#eef2f1; --ink:#13201f; --muted:#4d5c5a; --line:#d9e1df;
+  --accent:#0f6f6b; --accent-soft:#e1f0ee; --good:#1d6b45; --warn:#8a5200; --bad:#a8271f;
+  --display:"Schibsted Grotesk",ui-sans-serif,system-ui,sans-serif;
+  --body:"Newsreader",Georgia,"Times New Roman",serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1514; --surface:#151f1e; --sunken:#1b2726; --ink:#e4edeb; --muted:#9fb1ae; --line:#2a3836;
+  --accent:#5ec5bc; --accent-soft:#183331; --good:#6cc196; --warn:#e2a954; --bad:#f2836f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1514; --surface:#151f1e; --sunken:#1b2726; --ink:#e4edeb; --muted:#9fb1ae; --line:#2a3836;
+  --accent:#5ec5bc; --accent-soft:#183331; --good:#6cc196; --warn:#e2a954; --bad:#f2836f; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:400 18px/1.6 var(--body);margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:46rem;margin:0 auto;padding-block:48px 96px;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3,h4{font-family:var(--display);line-height:1.15;text-wrap:balance;margin:0}
+h1{font-size:2.6rem;font-weight:800;letter-spacing:-.02em}
+h2{font-size:1.6rem;font-weight:700;margin-top:36px;letter-spacing:-.01em}
+h3{font-size:1.15rem;font-weight:650}
+p,li{max-width:68ch}
+p{margin:0}
+ul,ol{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:6px}
+a{color:var(--accent);text-underline-offset:2px}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.lede{font-size:1.2rem;color:var(--muted)}
+.meta{font:500 .9rem/1.4 var(--display);color:var(--muted)}
+.note{background:var(--accent-soft);border-radius:12px;padding:14px 18px;font-size:1rem}
+.frame{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font:400 .86rem/1.45 var(--display);font-variant-numeric:tabular-nums}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}
+th{font-weight:650;background:var(--sunken);position:sticky;top:0}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:650;white-space:nowrap}
+.wide table{min-width:980px}
+details{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:0 18px}
+details[open]{padding-bottom:16px}
+summary{cursor:pointer;padding:14px 0;font:600 1.05rem/1.3 var(--display);list-style:none;display:flex;justify-content:space-between;gap:12px}
+summary::after{content:"+";color:var(--muted);font-weight:400}
+details[open] summary::after{content:"\2013"}
+details dl{display:grid;grid-template-columns:9.5rem 1fr;gap:8px 16px;margin:0;font-size:1rem}
+details dt{font:600 .85rem/1.5 var(--display);color:var(--muted)}
+details dd{margin:0}
+@media (max-width:560px){details dl{grid-template-columns:1fr}details dd{margin-bottom:6px}}
+.spec{border-left:3px solid var(--accent);padding:2px 0 2px 16px;display:flex;flex-direction:column;gap:6px}
+.spec h3{font-size:1.05rem}
+.spec p{font-size:1rem}
+.tag{font:600 .75rem/1 var(--display);padding:4px 8px;border-radius:999px;background:var(--sunken);color:var(--muted);white-space:nowrap}
+.yes{color:var(--good);font-weight:700}.no{color:var(--bad);font-weight:700}
+.sources li{font-size:.95rem;word-break:break-word}
+@media (prefers-reduced-motion:no-preference){details[open] dl{animation:open .18s ease-out}}
+@keyframes open{from{opacity:.4;transform:translateY(-4px)}to{opacity:1;transform:none}}
+</style>
+
+<main>
+  <p class="meta">FiNN redesign, stage 1 · research · 4 Nov 2026</p>
+  <h1>What people love in money apps, and what FiNN should take from it</h1>
+  <p class="lede">A study of 16 finance apps, design-community work and user reviews, written to decide FiNN's new look before any code changes.</p>
+
+  <div class="note">
+    <p><strong>How this was gathered.</strong> Web search across store trackers, reviews, vendor posts and design write-ups; five competitor marketing sites opened in Chrome to read their live fonts, colours and button styles; every candidate typeface downloaded and checked for the ₹ glyph. Store pages, Mobbin, Page Flows and Screenlane were not browsed (login walls, and no page-fetch tool this session), so star ratings come from third-party trackers and are quoted with their source. Most 2026 review coverage is affiliate content; claims that rest on one weak source are marked <em>single source</em>. Motion notes describe public product behaviour and marketing footage, not teardown of the apps.</p>
+  </div>
+
+  <h2>The apps at a glance</h2>
+  <p>Fi Money was dropped from the study: it wound down its banking service in 2025. Mint closed in 2024; its users mostly moved to Monarch, Copilot and Credit Karma.</p>
+  <div class="frame wide">
+    <table>
+      <thead><tr><th>App</th><th>Market</th><th>Rating signal</th><th>What it does best</th><th>Top complaint</th><th>Lesson for FiNN</th></tr></thead>
+      <tbody>
+        <tr><td>Copilot Money</td><td>US · iOS, Mac, web (2026)</td><td>Apple Design Award finalist 2024, Editors' Choice; trackers 4.4–4.9 (~28K)</td><td>Polish: native interactive charts, budget rings, review inbox</td><td>Apple-only, price, mis-categorised or late transactions</td><td>Charts can be the interface, if they are interactive and calm</td></tr>
+        <tr><td>Monarch</td><td>US · web, iOS, Android</td><td>iOS ≈4.9 (~80K), Play 4.8 (~20K)</td><td>One customisable dashboard; couples share free</td><td>Price, setup effort, bank sync, filters removed</td><td>Let people reorder the home; shared money is a feature</td></tr>
+        <tr><td>YNAB</td><td>Global · all</td><td>iOS average reportedly fell 2.92 → 1.96 after v26.20, June 2026 <span class="tag">single source</span></td><td>A method that changes behaviour; "ready to assign" number</td><td>Redesigned transaction editor added taps; in-app ads; learning curve</td><td>Never add a tap to logging an expense</td></tr>
+        <tr><td>Rocket Money</td><td>US</td><td>BBB "B"; mixed trackers</td><td>Instant subscription discovery as the first "aha"</td><td>Cancelling premium, billing surprises, sync</td><td>Show value in the first minute; be plain about money the app takes</td></tr>
+        <tr><td>Cleo</td><td>US/UK · Gen Z</td><td>Mixed-positive</td><td>Chat-first coach with an opt-in "roast" voice</td><td>Feature clutter, cash-advance issues</td><td>Personality works when it is opt-in and the core stays simple</td></tr>
+        <tr><td>Emma</td><td>UK</td><td>iOS 4.7, Play 4.2 (8.4K)</td><td>Polished overview, subscription finder</td><td>Upselling, thin free tier</td><td>Never interrupt a task with a sales screen</td></tr>
+        <tr><td>PocketGuard</td><td>US</td><td>iOS 4.6–4.7, Play 3.6–4.4</td><td>"In My Pocket": one number for what is safe to spend</td><td>Free tier gated; suits steady incomes</td><td>FiNN's "Available to spend" is the right hero; explain it</td></tr>
+        <tr><td>Revolut</td><td>Global</td><td>iOS 4.7 (UK, ~66K)</td><td>Revolut 10: widgets, themes, backgrounds on home</td><td>Super-app density</td><td>Personal home, but keep one job per screen</td></tr>
+        <tr><td>Wise</td><td>Global</td><td>≈4.7</td><td>Fee transparency; bold brand with a dedicated numeric face</td><td>Support at scale</td><td>A brand can be loud in type and still feel honest</td></tr>
+        <tr><td>CRED</td><td>India</td><td>Play 4.76 (~3M), Sep 2026</td><td>Premium feel; open-source NeoPOP system; serif display</td><td>Animated flows feel slow when you just want to pay</td><td>Delight must never sit between a person and their task</td></tr>
+        <tr><td>INDmoney</td><td>India</td><td>Play 4.56–4.68 (~456K)</td><td>Net-worth tracking across assets</td><td>Clutter, display bugs, app failures in 4% of reviews</td><td>Breadth needs strict hierarchy</td></tr>
+        <tr><td>Jupiter</td><td>India</td><td>Play ≈4.4 (older)</td><td>Neobank with money insights</td><td>KYC, frozen accounts, support</td><td>Trust is earned in error and support states</td></tr>
+        <tr><td>Axio (Walnut)</td><td>India · Android</td><td>Play 4.0–4.3</td><td>Zero-effort SMS auto-tracking</td><td>Product drift (BNPL, FD)</td><td>Speed of capture is the Indian table stake</td></tr>
+        <tr><td>Fold</td><td>India · beta</td><td>Positive, small base</td><td>Account Aggregator sync; "perpetual awareness"; hand-drawn everyday objects</td><td>Beta gaps</td><td>Show commitments plainly and let people decide; no nagging</td></tr>
+        <tr><td>Splitwise</td><td>Global</td><td>iOS 4.25 (105K); Trustpilot 2/5</td><td>The default for "who owes whom"</td><td>Daily limits on free tier, dated UI</td><td>FiNN's pending + split flow can beat it on clarity</td></tr>
+        <tr><td>FiNN today</td><td>India · Android, iOS</td><td>—</td><td>Honest numbers: available vs set aside, budget pace, debt age</td><td>Looks like a utility; type and shell feel unfinished</td><td>Keep the substance; give it a voice</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>App by app</h2>
+  <p>Each entry covers the five areas in the brief, then components, theme and what makes it feel the way it does.</p>
+
+  <details><summary>Copilot Money</summary><dl>
+    <dt>Onboarding</dt><dd>Links accounts first, then drops you into a review queue so the first task is confirming categories. Fast path to a populated dashboard.</dd>
+    <dt>Home</dt><dd>"₹ left of ₹ budgeted" headline over a cumulative spend line, with an over-budget marker where the line crosses the plan. Category budgets as small rings with an emoji glyph in the centre.</dd>
+    <dt>Transactions</dt><dd>Review inbox (mark as reviewed), rules, tags, search by merchant, category, account and amount.</dd>
+    <dt>Charts</dt><dd>Swift Charts throughout; the Cash Flow section is a set of interactive bar and line charts you can scrub. Thin strokes, saturated category colours on a dark navy canvas.</dd>
+    <dt>Motion</dt><dd>Ring fills and chart transitions use iOS springs; scrubbing follows the finger 1:1. No celebratory noise.</dd>
+    <dt>Components, theme</dt><dd>Large rounded cards, pill segmented controls, SF Pro, dark-first with a light mode. Marketing site: soft blue gradients, emoji category icons, rounded pill CTAs.</dd>
+    <dt>Feels</dt><dd>Premium and native. Users rate the design highly but complain loudest about data accuracy, so polish only counts when numbers are right.</dd>
+  </dl></details>
+
+  <details><summary>Monarch</summary><dl>
+    <dt>Onboarding</dt><dd>Account linking, goals, household invite. Reviewers call setup steep.</dd>
+    <dt>Home</dt><dd>Reorderable widgets: net worth, spending, budget, recent transactions, upcoming recurring.</dd>
+    <dt>Transactions</dt><dd>Splits, rules, tags, review flow; mobile shows group totals, which users find limiting.</dd>
+    <dt>Charts</dt><dd>Sankey cash-flow diagram (web since Sept 2023, now "Reports" on mobile with a Sankey / trend-bar switch); net-worth area line.</dd>
+    <dt>Motion</dt><dd>Restrained, standard platform transitions.</dd>
+    <dt>Components, theme</dt><dd>Serif headline and wordmark on the site, orange pill CTA, otherwise neutral grey UI. Light and dark.</dd>
+    <dt>Feels</dt><dd>Calm, grown-up, household. Rated on usefulness more than beauty.</dd>
+  </dl></details>
+
+  <details><summary>YNAB</summary><dl>
+    <dt>Onboarding</dt><dd>Method first: give every rupee a job. Education videos and workshops. Weeks to feel fluent.</dd>
+    <dt>Home</dt><dd>The plan table: "Ready to Assign" at the top, category rows with a coloured available-amount pill (green, amber, red).</dd>
+    <dt>Transactions</dt><dd>Per-account registers. The June 2026 editor redesign hid functions and added taps; the backlash was immediate.</dd>
+    <dt>Charts</dt><dd>Minimal: spending breakdown, net worth, age of money.</dd>
+    <dt>Motion</dt><dd>Little; the app is a tool.</dd>
+    <dt>Feels</dt><dd>Methodical, demanding. Proof that speed of entry matters more than a fresh look.</dd>
+  </dl></details>
+
+  <details><summary>Rocket Money</summary><dl>
+    <dt>Onboarding</dt><dd>Link accounts, then a reveal of every recurring charge found. The clearest first-minute payoff in the category.</dd>
+    <dt>Home</dt><dd>This month's cumulative spend as a line against last month's, upcoming bills, net worth.</dd>
+    <dt>Charts</dt><dd>The month-over-month cumulative line is the pattern worth borrowing: one glance says ahead or behind.</dd>
+    <dt>Feels</dt><dd>Useful but salesy; complaints centre on cancelling premium and charges people did not expect.</dd>
+  </dl></details>
+
+  <details><summary>Cleo</summary><dl>
+    <dt>Onboarding</dt><dd>Conversation from the first screen; you set the tone (hype or roast).</dd>
+    <dt>Home</dt><dd>Chat thread with cards for balances and spend.</dd>
+    <dt>Charts, motion</dt><dd>Simple bars inside chat cards; playful GIF-like reactions.</dd>
+    <dt>Feels</dt><dd>Funny and young. Users praise the personality and complain as features pile up. FiNN's assistant can carry personality while the rest of the app stays quiet.</dd>
+  </dl></details>
+
+  <details><summary>Emma and PocketGuard</summary><dl>
+    <dt>Home</dt><dd>Emma: balances, spend by category, subscriptions. PocketGuard: one "In My Pocket" figure computed as income minus bills and goals.</dd>
+    <dt>Charts</dt><dd>Donuts and bars; legible but generic.</dd>
+    <dt>Feels</dt><dd>Friendly. Both lose stars to paywalls and upselling inside everyday flows.</dd>
+  </dl></details>
+
+  <details><summary>Revolut and Wise</summary><dl>
+    <dt>Home</dt><dd>Revolut 10 puts accounts, cards and widgets on one home; themes and backgrounds personalise it; widgets give one-tap transfers. Wise leads with balances per currency and a plain activity list.</dd>
+    <dt>Motion</dt><dd>Revolut: card stack, parallax balance header, lots of springs. Wise: short, purposeful transitions.</dd>
+    <dt>Theme (observed)</dt><dd>Wise's live site sets headings in its own "Wise Sans" at 800 weight in forest ink (#163300), buttons as full pills with lime text (#9FE870) on forest, body in Inter, and loads a separate "Wise Sans Numeric" face for figures.</dd>
+    <dt>Feels</dt><dd>Revolut: dense and confident. Wise: honest and direct; the loud brand never hides a fee.</dd>
+  </dl></details>
+
+  <details><summary>CRED</summary><dl>
+    <dt>Design system</dt><dd>NeoPOP, CRED's fourth system, open-sourced for Android, iOS, Flutter and web: right-angled boxes, "plunk" buttons with a visible 3D edge that presses in, a serif display face (the site loads Cirka).</dd>
+    <dt>Motion</dt><dd>Heavy and cinematic: gamified reward reveals, isometric illustration, long transitions.</dd>
+    <dt>Feels</dt><dd>Premium and playful. A design-agency review found the flows look premium but feel slow and repetitive when you only want to pay a bill.</dd>
+  </dl></details>
+
+  <details><summary>INDmoney, Jupiter, Axio, Fold</summary><dl>
+    <dt>INDmoney</dt><dd>Net worth across stocks, funds and accounts; praised as polished, criticised for clutter and failures.</dd>
+    <dt>Jupiter</dt><dd>Neobank with spend insights; reviews turn on KYC and support, not visuals.</dd>
+    <dt>Axio</dt><dd>Reads bank SMS so tracking needs no typing; India's oldest pattern for zero-effort capture.</dd>
+    <dt>Fold (observed)</dt><dd>Account Aggregator sync. Its site uses GT Walsheim at 100 px for the headline in deep navy (rgb 32,41,76), 8 px radius buttons, and hand-drawn illustrations of everyday Indian things (a chai glass, a coin, a slice of pizza). Its stated stance: make commitments visible and leave the decision to the user.</dd>
+  </dl></details>
+
+  <details><summary>Splitwise</summary><dl>
+    <dt>Core</dt><dd>Groups, balances per person, "settle up". The mental model FiNN's pending and split features compete with.</dd>
+    <dt>Feels</dt><dd>Trusted but dated; 2026 reviews are angry about daily entry limits on the free tier.</dd>
+  </dl></details>
+
+  <h2>Design community: what shots show, and what survives contact with real data</h2>
+  <ul>
+    <li>Dribbble expense-tracker shots (for example <a href="https://dribbble.com/shots/24560839-Expense-Tracker-App">Expense Tracker App</a>, <a href="https://dribbble.com/shots/21903841--Finance-tracker-Case-study">Finance tracker case study</a>, <a href="https://WWW.dribbble.com/shots/23951080-Finance-Management-Mobile-App-Design">Finance Management</a>, <a href="https://dribbble.com/shots/20420654-Wallet-App-design">Wallet App</a>) cluster around gradient hero cards, 3D credit cards, glass panels, oversized donuts and short round numbers.</li>
+    <li>Real Indian figures break those layouts: ₹12,34,567.89 is 12 characters with Indian grouping, and category names like "EMI &amp; Loan Repayment" overflow chips designed for "Food".</li>
+    <li>Case studies that tested with users report the same fixes: simpler onboarding, designed empty states and more visible budget alerts (<a href="https://finio-gamma.vercel.app/case-study">finio</a>, an app for young Indian professionals, tested with 8 people); calm, reduced feature sets for anxious first budgeters (<a href="https://www.behance.com/gallery/6119969/BDGT-App">BDGT on Behance</a>).</li>
+    <li>Pattern-library analysis of 1,460 onboarding flows found finance onboarding is among the longest and works when it reaches the "aha" moment quickly; few apps personalise it.</li>
+  </ul>
+
+  <h2>Patterns that line up with high satisfaction</h2>
+  <ol>
+    <li><strong>One honest headline number, explained on tap.</strong> PocketGuard's "In My Pocket", YNAB's "Ready to Assign", Copilot's "left of budgeted". FiNN already has the best version of this ("Available to spend" = cash minus set aside).</li>
+    <li><strong>Logging in two or three taps.</strong> Axio removes typing; YNAB lost a star average by adding taps. Amount first, category second, save.</li>
+    <li><strong>Interactive, calm charts.</strong> Copilot's scrub-able cash flow and month-over-month lines beat static donuts. One chart per question.</li>
+    <li><strong>A home you can arrange.</strong> Monarch widgets, Revolut 10. Ranked by what the person uses, not by feature count.</li>
+    <li><strong>Shared money treated as first class.</strong> Monarch's free couples sharing, Splitwise's loyalty despite its UI.</li>
+    <li><strong>A non-judgemental voice.</strong> Fold shows commitments without telling you to cancel; Cleo's roast is opt-in. Spending is normal; only going over a limit you set is a warning.</li>
+    <li><strong>Nothing between a person and the task.</strong> No ads, upsells or long reward animations in paid or core flows (YNAB, Emma, Splitwise, CRED critiques).</li>
+    <li><strong>Accuracy over beauty.</strong> Copilot's top complaints are wrong or late transactions. Visible system states (saved, pending, failed) build trust.</li>
+  </ol>
+
+  <h2>Standout animations and components, specified to rebuild</h2>
+  <p>Specs are FiNN's own interpretation of the pattern, not a copy of any app's implementation.</p>
+  <div class="spec"><h3>Rolling figure counter</h3><p>Hero amounts change digit by digit, each digit on its own vertical track, 420 ms, spring (stiffness 380, damping ratio 0.86), rightmost digit settles first, tabular figures so width never jumps. Count up from the previous value, never from zero after the first load. Reduced motion: swap instantly. Seen in Revolut's balance header and Copilot's totals.</p></div>
+  <div class="spec"><h3>Budget ring and bar fill</h3><p>Ring starts at 12 o'clock and fills clockwise to spent / limit, 600 ms ease-out cubic, stroke caps rounded; colour changes only at 85% (amber) and 100% (red), never as a gradient. A tick on the track marks where spending should be today (FiNN's pace marker). Reference: <a href="https://www.copilot.money/">Copilot budget rings</a>.</p></div>
+  <div class="spec"><h3>Scrub-able spend line</h3><p>Cumulative spend this month against last month (dashed) and the budget pace. Long-press (300 ms) shows a vertical cursor; the value pins above the chart, not under the finger. Haptic selection tick only when the cursor crosses a day boundary, at most one per 60 ms, because dense ticks feel disconnected (<a href="https://forum.figma.com/ask-the-community-7/haptic-feedback-on-rolling-values-not-useful-even-distracting-turn-on-off-26587">user report</a>). Reference implementation: <a href="https://cds.coinbase.com/components/charts/Scrubber/">Coinbase CDS Scrubber</a>; pattern from Copilot and Rocket Money.</p></div>
+  <div class="spec"><h3>Chart draw-in</h3><p>Lines draw left to right by path length, 700 ms ease-out; bars grow from the baseline with a 24 ms stagger, capped at 8 bars. Runs once per data change, never on every rebuild. Reduced motion: fade 120 ms.</p></div>
+  <div class="spec"><h3>Cash-flow ribbon (mobile Sankey)</h3><p>Monarch's Sankey made compact: one horizontal ribbon, income width = 100%, split into set aside, spent by top 4 categories and free. Tap a segment to expand it into rows. Reference: <a href="https://www.monarch.com/blog/visualize-your-cash-flow-like-never-before">Monarch cash-flow Sankey</a>.</p></div>
+  <div class="spec"><h3>Amount-first keypad sheet</h3><p>Add expense opens as a bottom sheet already focused on a large amount display with a custom keypad (no system keyboard jump). Category chips (recent first) sit above the keypad; "Save" stays reachable by the thumb. Sheet uses a spring (stiffness 300, damping ratio 0.9) with a 25% and 92% snap. Each key: 60 ms scale to 0.94 and a light haptic.</p></div>
+  <div class="spec"><h3>Plunk button (pressable depth)</h3><p>CRED's open-source NeoPOP button shows a hard edge that collapses as you press. FiNN version: 3 px bottom edge in a darker tone, press translates the face 3 px down in 70 ms, release springs back. Reserve for the one primary action per screen. Reference: <a href="https://cred.club/neopop">NeoPOP</a>.</p></div>
+  <div class="spec"><h3>Row to detail shared element</h3><p>Tapping a transaction row morphs its category tile and amount into the detail header (Flutter Hero, 320 ms, emphasised easing). Keeps place and makes the detail feel like the same object.</p></div>
+  <div class="spec"><h3>Swipe actions on rows</h3><p>Swipe left reveals Edit and Delete; past 60% width the delete commits with a medium haptic and an Undo toast for 5 s. Swipe right on a pending row marks it settled. Always mirrored by a long-press menu for screen readers.</p></div>
+  <div class="spec"><h3>Skeleton, pull-to-refresh, success</h3><p>Skeletons match final layout (no shimmer sweep wider than the card; 1.4 s cycle). Pull-to-refresh uses the brand mark filling as you pull. Success is a 280 ms check stroke plus a soft haptic; a celebration (a short burst of brand shapes) only for a goal reached or a debt fully settled.</p></div>
+
+  <h2>Anti-patterns to avoid</h2>
+  <ul>
+    <li>Adding taps or hiding fields in the add-transaction flow.</li>
+    <li>Ads, upsells or "rate us" prompts inside a task.</li>
+    <li>Reward animations longer than 400 ms between a person and the next step.</li>
+    <li>Red for all spending. Red means over a limit you set; ordinary spending stays ink.</li>
+    <li>Deadlines, "overdue" or "late" language for informal debts between people (FiNN rule).</li>
+    <li>Donuts with more than five slices, legends far from the data, colour as the only signal.</li>
+    <li>Grey-on-grey labels under 13 px, glass panels over busy backgrounds, pure black dark mode.</li>
+    <li>Proportional figures in money columns, and zeros that read as Ø (FiNN's current font).</li>
+    <li>A home that lists every module; clutter is the top complaint in Indian super-apps.</li>
+  </ul>
+
+  <h2>Typefaces: which ones can actually write rupees</h2>
+  <p>Each candidate was downloaded from Google Fonts and its character map checked for ₹ (U+20B9) and Devanagari (for the Hinglish assistant). All are SIL Open Font License, which allows bundling in a commercial app.</p>
+  <div class="frame">
+    <table>
+      <thead><tr><th>Typeface</th><th>₹</th><th>Devanagari</th><th>Tabular figures</th></tr></thead>
+      <tbody>
+        <tr><td>Anek Latin / Anek Devanagari (Ek Type, India)</td><td class="yes">yes</td><td class="yes">sibling family</td><td class="yes">yes</td></tr>
+        <tr><td>Mukta (Ek Type, India)</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td></tr>
+        <tr><td>Bricolage Grotesque</td><td class="yes">yes</td><td>no</td><td class="yes">yes</td></tr>
+        <tr><td>Schibsted Grotesk</td><td class="yes">yes</td><td>no</td><td class="yes">yes</td></tr>
+        <tr><td>Familjen Grotesk</td><td class="yes">yes</td><td>no</td><td class="yes">yes</td></tr>
+        <tr><td>Geist / Geist Mono</td><td class="yes">yes</td><td>no</td><td class="yes">yes</td></tr>
+        <tr><td>Manrope, Figtree, Plus Jakarta Sans, Archivo, Rubik, Unbounded</td><td class="yes">yes</td><td>no</td><td class="yes">yes</td></tr>
+        <tr><td>Fraunces, Newsreader, Gloock (serifs)</td><td class="yes">yes</td><td>no</td><td>partly</td></tr>
+        <tr><td>Instrument Sans and Serif, Sora, Onest, Hanken Grotesk, Outfit, Red Hat Display, Funnel, JetBrains Mono</td><td class="no">no</td><td>no</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>What this means for FiNN</h2>
+  <ul>
+    <li>Keep the substance: available vs set aside, budget pace and run-out dates, debt aging, exact EMI math. These are rarer and more honest than most competitors.</li>
+    <li>Fix the shell: one theme source of truth (today the Material theme and the screens read two different colour sets), a nav bar that does not collide with the add button, and a number face built for money.</li>
+    <li>Make logging the fastest thing in the app and the assistant the most characterful.</li>
+    <li>Spend motion on three moments only: the hero number, chart draw-in and the save confirmation.</li>
+  </ul>
+
+  <h2>Sources</h2>
+  <ol class="sources">
+    <li><a href="https://developer.apple.com/articles/copilot-money">Apple Developer: How Copilot Money developed an interest in Swift Charts</a></li>
+    <li><a href="https://apps.apple.com/us/app/id1447330651">Copilot on the App Store</a> · <a href="https://9to5mac.com/2026/01/01/copilot-money-brings-clarity-to-your-finances-now-on-the-web/">9to5Mac: Copilot on the web</a> · <a href="https://blakecrosley.com/guides/design/copilot-money">Blake Crosley design study</a> · <a href="https://www.thepennyhoarder.com/budgeting/budgeting-copilot-money-review/">Penny Hoarder review</a></li>
+    <li><a href="https://apps.apple.com/us/app/id1459319842">Monarch on the App Store</a> · <a href="https://apppricinglab.com/app/apple/1459319842">AppPricingLab</a> · <a href="https://apptail.io/app/monarch-budget-track-money-Phqb/united-states">AppTail</a> · <a href="https://www.monarch.com/blog/visualize-your-cash-flow-like-never-before">Monarch Sankey post</a> · <a href="https://help.monarch.com/hc/en-us/articles/21846787088916-Using-Reports">Monarch Reports help</a></li>
+    <li><a href="https://mwm.ai/articles/ynab-v26-20-adds-ceo-book-ads-sparks-user-outrage-over-ui-changes-in-june-2026">YNAB v26.20 backlash report</a> · <a href="https://www.trustpilot.com/review/youneedabudget.com">YNAB on Trustpilot</a></li>
+    <li><a href="https://joingerald.com/learn/financial-wellness/reddit-rocket-money-reviews">Rocket Money Reddit roundup</a> · <a href="https://tooliverse.ai/tools/rocket-money">Tooliverse Rocket Money</a></li>
+    <li><a href="https://www.thepennyhoarder.com/budgeting/cleo-app-review/">Penny Hoarder: Cleo</a></li>
+    <li><a href="https://www.householdmoneysaving.com/emma-app-review/">Emma review</a> · <a href="https://apppricinglab.com/app/apple/1270062373">Emma ratings</a></li>
+    <li><a href="https://www.thepennyhoarder.com/budgeting/pocketguard-review/">Penny Hoarder: PocketGuard</a> · <a href="https://fool.com/the-ascent/personal-finance/pocketguard-review/">Motley Fool: PocketGuard</a></li>
+    <li><a href="https://www.revolut.com/news/revolut_launches_revolut_10_as_it_targets_primary_accounts_and_passes_35m_customers_worldwide">Revolut 10 launch</a> · <a href="https://clickyourapp.com/gb/charts/app-store/com.revolut.revolut/">Revolut ratings</a></li>
+    <li><a href="https://wise.com/in/">wise.com (observed in Chrome)</a> · <a href="https://styles.refero.design/style/367c0c6e-73a7-441c-a8ff-91d139ac60dc">Wise style reference</a></li>
+    <li><a href="https://cred.club/neopop">CRED NeoPOP</a> · <a href="https://analyticsindiamag.com/cred-open-sources-its-ui-design-system-neopop/">AIM: NeoPOP open-sourced</a> · <a href="https://www.yellowslice.in/blog/cred-app-review-5-tips-for-improving-the-ux">Yellow Slice: CRED UX review</a> · <a href="https://quashbugs.com/release-health/cred">Quash: CRED release health</a></li>
+    <li><a href="https://quashbugs.com/release-health/indmoney">Quash: INDmoney</a> · <a href="https://kimola.com/reports/unlock-indmoney-user-insights-solutions-with-our-report-google-play-hi-144809">Kimola: INDmoney reviews</a></li>
+    <li><a href="https://www.newsbytesapp.com/news/business/fi-money-shuts-banking-services-for-35-million-users/tldr">Fi Money winds down banking</a> · <a href="https://kimola.com/reports/unlock-insights-jupiter-money-user-feedback-report-app-store-in-144557">Kimola: Jupiter reviews</a></li>
+    <li><a href="https://www.similarweb.com/app/google/com.daamitt.walnut.app">Axio on Similarweb</a> · <a href="https://www.apkmirror.com/apk/axio-digital-pvt-ltd/axio-expense-tracker-bnpl/">Axio release notes</a></li>
+    <li><a href="https://zerodha.com/z-connect/rainmatter/introducing-fold">Zerodha: Introducing Fold</a> · <a href="https://www.republicworld.com/initiatives/how-fold-is-reimagining-healthy-financial-habits-for-genz-2026-10-06-138406">Republic World: Fold</a> · <a href="https://fold.money">fold.money (observed in Chrome)</a></li>
+    <li><a href="https://nl-be.trustpilot.com/review/splitwise.com">Splitwise on Trustpilot</a> · <a href="https://appgoblin.info/apps/458023433">Splitwise ratings</a> · <a href="https://yellowslice.in/bed/splitwise-app-review-ux-ui-improvements/">Yellow Slice: Splitwise</a></li>
+    <li><a href="https://gummysearch.com/tools/best-products/budget-app">Reddit budget-app mentions (GummySearch)</a> · <a href="https://beancount.io/forum/t/copilot-vs-monarch-vs-ynab-which-premium-budget-app-is-worth-it/98">Beancount forum comparison</a></li>
+    <li><a href="https://app-dev-and-marketing.pages.dev/mobbin-i-studied-1460-onboarding-flows.html">1,460 onboarding flows on Mobbin</a> · <a href="https://designerup.co/video/the-14-types-of-onboarding-patterns-used-by-top-apps-and-how-to-copy-them">14 onboarding patterns</a></li>
+    <li><a href="https://finio-gamma.vercel.app/case-study">finio case study</a> · <a href="https://www.behance.com/gallery/6119969/BDGT-App">BDGT on Behance</a> · <a href="https://tubikstudio.com/blog/case-study-home-budget-app-ui-for-finance/">Tubik: Home Budget</a></li>
+    <li><a href="https://www.thealien.design/insights/fintech-ux-design-trends">Fintech UX trends 2026</a> · <a href="https://markswebb.com/insights/mobile-banking-apps-trends-for-2026/">Mark's Web: banking app trends 2026</a></li>
+    <li><a href="https://m3.material.io/styles/motion/overview">Material 3 motion</a> · <a href="https://pub.dev/documentation/material_3_expressive/1.0.8/">material_3_expressive spring tokens</a> · <a href="https://cds.coinbase.com/components/charts/Scrubber/">Coinbase CDS Scrubber</a> · <a href="https://forum.figma.com/ask-the-community-7/haptic-feedback-on-rolling-values-not-useful-even-distracting-turn-on-off-26587">Haptics on scrubbing</a></li>
+  </ol>
+</main>

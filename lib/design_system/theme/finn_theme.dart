@@ -42,6 +42,7 @@ abstract final class FinnTheme {
     );
     return ThemeData(
       useMaterial3: true,
+      fontFamily: 'Manrope',
       brightness: c.brightness,
       colorScheme: scheme,
       scaffoldBackgroundColor: c.background,
@@ -113,8 +114,8 @@ abstract final class FinnTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: c.primary,
-        contentTextStyle: type.bodyStrong.copyWith(color: c.onPrimary),
+        backgroundColor: c.textPrimary,
+        contentTextStyle: type.bodyStrong.copyWith(color: c.background),
         shape: const RoundedRectangleBorder(borderRadius: Radii.rXl),
       ),
       switchTheme: SwitchThemeData(
@@ -136,8 +137,8 @@ abstract final class FinnTheme {
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(color: c.primary),
       tooltipTheme: TooltipThemeData(
-        decoration: BoxDecoration(color: c.primary, borderRadius: Radii.rMd),
-        textStyle: type.caption.copyWith(color: c.onPrimary),
+        decoration: BoxDecoration(color: c.textPrimary, borderRadius: Radii.rMd),
+        textStyle: type.caption.copyWith(color: c.background),
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {

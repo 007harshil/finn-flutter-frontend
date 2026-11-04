@@ -9,14 +9,16 @@ import '../../kit/tokens.dart';
 import '../motion/motion.dart';
 import '../tokens/tokens.dart' show Durations2;
 
-/// Quiet success mark: a check in a soft green circle. Static (no
-/// bounce or drawing animation); [onCompleted] fires after the first frame.
+/// Success mark, stamped like an entry in a ledger: a tilted teal seal
+/// with a check lands from slightly larger (220 ms, no bounce) with a firm
+/// haptic. Under reduced motion it simply appears. [onCompleted] fires once
+/// it has landed.
 class SuccessCheck extends StatefulWidget {
-  const SuccessCheck({super.key, this.size = 56, this.color, this.onCompleted});
+  const SuccessCheck({super.key, this.size = 64, this.color, this.onCompleted});
 
   final double size;
 
-  /// Defaults to the ledger green.
+  /// Defaults to the brand teal.
   final Color? color;
   final VoidCallback? onCompleted;
 
@@ -24,26 +26,68 @@ class SuccessCheck extends StatefulWidget {
   State<SuccessCheck> createState() => _SuccessCheckState();
 }
 
-class _SuccessCheckState extends State<SuccessCheck> {
+class _SuccessCheckState extends State<SuccessCheck> with SingleTickerProviderStateMixin {
+  late final AnimationController _stamp = AnimationController(vsync: this, duration: const Duration(milliseconds: 220));
+  bool _started = false;
+
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
     final done = widget.onCompleted;
-    if (done != null) WidgetsBinding.instance.addPostFrameCallback((_) => done());
+    if (context.reduceMotion) {
+      _stamp.value = 1;
+      if (done != null) WidgetsBinding.instance.addPostFrameCallback((_) => done());
+      return;
+    }
+    _stamp.forward().whenComplete(() {
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      done?.call();
+    });
+  }
+
+  @override
+  void dispose() {
+    _stamp.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.ink;
-    final color = widget.color ?? c.green;
+    final color = widget.color ?? c.brand;
+    final size = widget.size;
+    final seal = Transform.rotate(
+      angle: -0.14,
+      child: Container(
+        width: size,
+        height: size,
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: color.withValues(alpha: 0.9), width: 2.5),
+        ),
+        child: Container(
+          decoration: BoxDecoration(color: c.brandSoft, shape: BoxShape.circle),
+          child: Icon(LucideIcons.check, size: size * 0.42, color: color),
+        ),
+      ),
+    );
     return Semantics(
       label: 'Success',
       image: true,
-      child: Container(
-        width: widget.size,
-        height: widget.size,
-        decoration: BoxDecoration(color: c.greenSoft, shape: BoxShape.circle),
-        child: Icon(LucideIcons.check, size: widget.size * 0.46, color: color),
+      child: AnimatedBuilder(
+        animation: _stamp,
+        builder: (context, child) {
+          final v = Curves.easeOutCubic.transform(_stamp.value);
+          return Opacity(
+            opacity: (_stamp.value * 2).clamp(0.0, 1.0),
+            child: Transform.scale(scale: 1.6 - 0.6 * v, child: child),
+          );
+        },
+        child: seal,
       ),
     );
   }

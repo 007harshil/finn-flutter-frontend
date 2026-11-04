@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/core_providers.dart';
 import '../../../../app/di/data_providers.dart';
 import '../../../../app/router/routes.dart';
+import '../../../../app/shell/app_drawer.dart' show AppAgentButton;
 import '../../../../core/time/dates.dart';
 import '../../../../kit/kit.dart';
 
@@ -47,16 +48,14 @@ class HomeHeader extends ConsumerWidget {
                   ref.read(settingsProvider.notifier).update((s) => s.copyWith(hideBalances: !s.hideBalances));
                 },
               ),
-              Transform.translate(
-                offset: const Offset(8, 0),
-                child: LedgerIconButton(
-                  icon: LucideIcons.bell,
-                  tooltip: unread > 0 ? 'Alerts, $unread unread' : 'Alerts',
-                  badge: unread,
-                  badgeLabel: '$unread unread alerts',
-                  onPressed: () => context.push(AppRoutes.alerts),
-                ),
+              LedgerIconButton(
+                icon: LucideIcons.bell,
+                tooltip: unread > 0 ? 'Alerts, $unread unread' : 'Alerts',
+                badge: unread,
+                badgeLabel: '$unread unread alerts',
+                onPressed: () => context.push(AppRoutes.alerts),
               ),
+              Transform.translate(offset: const Offset(6, 0), child: const AppAgentButton()),
             ],
           ),
         ),

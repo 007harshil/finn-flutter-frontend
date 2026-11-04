@@ -4,7 +4,7 @@ Resume in a new chat with: "Continue the FiNN build. Read docs/PROGRESS.md first
 
 Flutter SDK (not on PATH): `C:\Users\Hasrhil\Downloads\flutter\bin\flutter.bat` (3.47.7 / Dart 3.13.5).
 Original spec = the long FiNN prompt (production Flutter fintech app, frontend only, mock data, agent-ready actions). Visual reference: `design.md`.
-User prefs: command-line-only subagents → model `haiku`, effort `low`. Stop and hand off when context gets large.
+User prefs: NO subagents of any kind (strictly prohibited). Stop and hand off when context gets large.
 
 ## Architecture decisions (done)
 - State: flutter_riverpod 3.4.3 (no codegen). Routing: go_router 18 (StatefulShellRoute). Charts: fl_chart 1.2. Icons: lucide_icons_flutter (`LucideIcons`).
@@ -54,3 +54,40 @@ If an agent's work is missing when resuming: check `git`-less state by looking w
 - [ ] remaining actions: categories, budgets, subscriptions, emergency fund, assets, profile + catalog
 - [ ] router/shell, feature UIs (home, transactions, budgets, goals+EF, loans, subscriptions, pending, analytics/net worth, alerts, timeline, settings/export/onboarding)
 - [ ] tests (unit/widget/journeys), docs (README, ARCHITECTURE, FINANCIAL_MODEL, BACKEND_INTEGRATION), analyze clean
+
+## UI redesign (started 2026-11-03) — stage 1 research done
+- Rule from user: NO subagents of any kind (strictly prohibited). Use Chrome debug port 127.0.0.1:9222 only if highly needed.
+- Before screenshots: `tool/screenshots/capture_test.dart` (outside test/, not in normal suite). Run:
+  `flutter test tool/screenshots/capture_test.dart --dart-define=SHOT_THEME=light` (and `=dark`); optional `--dart-define=SHOT_DIR=...`.
+  Output: `docs/redesign/screens/before/{light,dark}/*.png` (40 screens each, 412x915 @2x, real fonts loaded from FontManifest).
+- Research report: `docs/redesign/research.html` → artifact https://claude.ai/artifact/AnwjWisadkjkY6LYTiqGFX
+- Directions + mockups: `docs/redesign/directions.html` → artifact https://claude.ai/artifact/M5qHr4K1WM5x1mDeAkHg8A
+  (Current = Schibsted Grotesk, deep teal from logo; Bahi = Anek Latin/Devanagari, indigo + marigold ledger; Monsoon = Bricolage + Geist, dark-first, scrub chart).
+- Audit facts: two theme systems — `lib/design_system/` (FinnColors, builds ThemeData in finn_theme.dart) and `lib/kit/` (LedgerColors/LedgerType via brightness lookup, 99 importers). Atkinson font: slashed zero, no `→` glyph (transfer rows show tofu). FAB overlaps bottom nav.
+- Fonts verified for ₹ (U+20B9): see research.html table. No ₹ in Instrument Sans/Serif, Sora, Onest, Hanken, Outfit, Red Hat, Funnel, JetBrains Mono.
+- NEXT (after user picks): tokens + ThemeExtension single source of truth, components preview screen, then screens one by one, small commits per screen.
+
+## UI redesign stage 2 (2026-11-04) — hybrid "Current+" chosen and being built
+Decision (user asked me to pick the most comfortable for everyday use, hybrid allowed):
+- Base = **Current**: light default, shore ground F4F7F6, white panels, ink 0F1F21, one deep teal 0B6E69 (brand), deep slab 0B3B44→0D4F55 for the hero, flat cards, eased motion (no bounce).
+- Dark mode = **Monsoon-style** teal-tinted slate (night 0D1416, panel 162023, raised 1F2B2E), panels separated by tone (no borders), luminous meaning colours; multi-hue chart palette (`Hue.chartLight/chartDark`).
+- From **Bahi**: ledger Activity day headers (date numeral in the margin over the icon column, weekday/month, day net + entry count) and stamp-on-save (`SuccessCheck`: tilted teal seal, scale 1.6→1 in 220 ms, medium haptic; static under reduced motion).
+- Font = **Manrope** variable (assets/fonts/Manrope.ttf, OFL.txt replaced; Atkinson removed). Has ₹, →, tnum, plain 0 distinct from O, x-height .54. Anek rejected (0 and O look the same).
+- Nav: solid bottom bar Home · Activity · [teal Add] · Budgets · Goals (labels always on, never hides; long-press Add = Add transaction / Transfer / Ask FiNN). Agent moved to the FiNN mark (`AppAgentButton`, tooltip "FiNN Agent") at the right of every tab header (`PageHeader`, `HomeHeader`); `AppDrawerScope` now carries `openAgent`. Rail keeps agent orb + an Add FAB on wide screens.
+- Category icons tinted per category (`CategoryTints` in palette.dart, `LedgerColors.tint(colorIndex)`, used by `CategoryMark`).
+
+Done so far:
+- Single raw palette `Hue` in `lib/design_system/tokens/palette.dart`; both `LedgerColors` (kit) and `FinnColors` (Material) read it. New kit tokens: brand, brandSoft, onBrand, deep, deepEnd, flow, info, infoSoft, `deepGradient`, `Rad.xl`/`rXl`; Rad.md 14, Rad.lg 18.
+- Kit: primary button teal 50 px + press squeeze (0.97), quiet button teal, selected chip/icon button teal, segmented selected = raised surface w/ soft shadow, panels borderless in dark.
+- Home hero = deep teal slab (`hero_balance_card.dart`, `_Slab` colours, `_FlowMarks` arcs). `bottomClearance` = inset + 32 (solid bar).
+- Tests updated: `agent_mode_journey_test` (Add at centre slot, agent via header), `home_money_glance_journey_test` (scroll to "This month"). Journeys pass; analyze clean (only old curly-brace infos).
+- After screenshots: `flutter test tool/screenshots/capture_test.dart --dart-define=SHOT_THEME=light --dart-define=SHOT_DIR=docs/redesign/screens/after`.
+
+- Activity: ledger day header (`_DayHeader` in transactions_screen.dart: numeral over the icon column, Today/Yesterday/weekday + month, net + entry count). "Where it went" bar + legend use each category's tint. Dark panel slices drop borders.
+- Add/edit transaction (`transaction_form_sheet.dart`): Expense/Income → amount → one-tap recent category chips (`quick-cat:<id>`, recency from transactionsStreamProvider, then usual order, max 6) + full picker ("Choose a category") → Paid to → Paid from → Date → "More details: channel, note" (`tx-more-details`, auto-open when editing a tx with channel/note). Every field kept. Kept the system numeric keyboard (no custom keypad: tests + accessibility).
+- Insights → Daily spend: `SpendPulseCard` (`analytics/presentation/spend_pulse.dart`, `spendPulseProvider` family by month): running spend this month (teal + wash) vs last month (dashed), drag or long-press to scrub, reading pinned above, selection haptic ≤ 1 per 60 ms, 700 ms draw-in (instant under reduced motion). Unit tests `test/features/analytics/spend_pulse_test.dart`.
+- Agent mark disc = deep teal. Emphasis bars in insight/budget charts, date picker, switches, slider, icon picker = teal.
+- Tests: full suite green (808) after updating `account_forms_ui_test` (open More details before channel).
+- Capture tool also shoots `63b_insights_spending`.
+
+NEXT: review remaining screens in after/ screenshots (goals, loans, pending, settings, onboarding, assistant) for leftover ink-heavy fills; consider "Today/Yesterday/Pick" date chips in add form; README/ARCHITECTURE design notes; commit when the user asks.

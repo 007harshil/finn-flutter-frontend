@@ -14,10 +14,16 @@ import '../../../features/transactions/domain/transaction.dart';
 import '../../accounts/presentation/widgets/account_picker_field.dart';
 import '../../accounts/presentation/widgets/channel_field.dart';
 import '../../../shared/presentation/action_runner.dart';
+import '../../../shared/presentation/category_icons.dart';
+import '../../categories/domain/category.dart';
 import '../application/transaction_actions.dart';
 import '../application/transaction_form_support.dart';
 
 /// Create or edit a manual transaction.
+///
+/// Amount first, then one tap on a recent category, then save: payee,
+/// account and date are up front; channel and note wait under
+/// "More details" so logging an expense never takes extra taps.
 ///
 /// Editing loads the transaction first; linked transactions (created by
 /// loans, subscriptions or settlements) cannot be edited here.
@@ -122,6 +128,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
   String? _retiredCategoryName;
   Map<String, String> _errors = const {};
   bool _submitting = false;
+  bool _moreDetails = false;
 
   bool get _editing => widget.initial != null;
 
@@ -139,6 +146,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       _channel = t.channel;
       _counterparty.text = t.counterparty ?? '';
       _note.text = t.note ?? '';
+      _moreDetails = t.channel != null || (t.note?.isNotEmpty ?? false);
       final pickable = ref.read(pickableCategoriesProvider(t.type)).value;
       final usable =
           pickable == null || pickable.any((c) => c.id == t.categoryId);
@@ -169,6 +177,26 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       if (current != null && current.type != type) _categoryId = null;
       _errors = Map.of(_errors)..remove('categoryId');
     });
+  }
+
+  void _pickCategory(String id) => setState(() {
+    _categoryId = id;
+    _errors = Map.of(_errors)..remove('categoryId');
+  });
+
+  /// Up to [count] categories for one-tap picking: the ones used most
+  /// recently for this type first, then the rest in their usual order.
+  List<TransactionCategory> _quickCategories(List<TransactionCategory> pickable, {int count = 6}) {
+    final byId = {for (final c in pickable) c.id: c};
+    final txs = [...?ref.watch(transactionsStreamProvider).value?.where((t) => t.type == _type)]
+      ..sort((a, b) => b.date.compareTo(a.date));
+    final out = <TransactionCategory>[];
+    for (final t in txs) {
+      final cat = byId.remove(t.categoryId);
+      if (cat != null) out.add(cat);
+      if (out.length == count) return out;
+    }
+    return [...out, ...byId.values.take(count - out.length)];
   }
 
   void _clearError(String field) {
@@ -302,16 +330,6 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
             onChanged: (_) => _clearError('amount'),
           ),
           const SizedBox(height: LedgerForm.gap),
-          AccountPickerField(
-            label: income ? 'Received in' : 'Paid from',
-            value: _accountId ?? ref.watch(defaultAccountProvider).value?.id,
-            errorText: _errors['accountId'],
-            onChanged: (id) => setState(() {
-              _accountId = id;
-              _errors = Map.of(_errors)..remove('accountId');
-            }),
-          ),
-          const SizedBox(height: LedgerForm.gap),
           if (_retiredCategoryName != null && _categoryId == null) ...[
             LedgerNote(
               tone: NoteTone.caution,
@@ -321,25 +339,45 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
             const SizedBox(height: Sp.sm),
           ],
           switch (categories) {
-            AsyncValue(:final value?) => LedgerPickerField<String>(
-              label: 'Category',
-              hint: 'Choose a category',
-              searchHint: 'Search categories',
-              value: _categoryId,
-              errorText: _errors['categoryId'],
-              options: [
-                for (final cat in value)
-                  LedgerOption(
-                    cat.id,
-                    cat.name,
-                    key: ValueKey(cat.id),
-                    leading: CategoryMark(category: cat),
+            AsyncValue(:final value?) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (value.length > 1) ...[
+                  const LedgerFieldLabel('Category'),
+                  Wrap(
+                    spacing: Sp.sm,
+                    runSpacing: Sp.sm,
+                    children: [
+                      for (final cat in _quickCategories(value))
+                        LedgerChip(
+                          key: ValueKey('quick-cat:${cat.id}'),
+                          label: cat.name,
+                          icon: CategoryIcons.of(cat.iconKey),
+                          selected: cat.id == _categoryId,
+                          onTap: _submitting ? null : () => _pickCategory(cat.id),
+                        ),
+                    ],
                   ),
+                  const SizedBox(height: Sp.sm + 2),
+                ],
+                LedgerPickerField<String>(
+                  label: value.length > 1 ? null : 'Category',
+                  hint: 'Choose a category',
+                  searchHint: 'Search categories',
+                  value: _categoryId,
+                  errorText: _errors['categoryId'],
+                  options: [
+                    for (final cat in value)
+                      LedgerOption(
+                        cat.id,
+                        cat.name,
+                        key: ValueKey(cat.id),
+                        leading: CategoryMark(category: cat),
+                      ),
+                  ],
+                  onChanged: _pickCategory,
+                ),
               ],
-              onChanged: (id) => setState(() {
-                _categoryId = id;
-                _errors = Map.of(_errors)..remove('categoryId');
-              }),
             ),
             AsyncValue(hasError: true) => Text(
               'Categories could not be loaded.',
@@ -358,6 +396,28 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
             ),
           ),
           const SizedBox(height: Sp.sm),
+          LedgerTextField(
+            label: income ? 'Received from' : 'Paid to',
+            hint: income
+                ? 'e.g. Employer, client, Priya'
+                : 'e.g. Swiggy, DMart, landlord',
+            controller: _counterparty,
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.done,
+            errorText: _errors['counterparty'],
+            onChanged: (_) => _clearError('counterparty'),
+          ),
+          const SizedBox(height: LedgerForm.gap),
+          AccountPickerField(
+            label: income ? 'Received in' : 'Paid from',
+            value: _accountId ?? ref.watch(defaultAccountProvider).value?.id,
+            errorText: _errors['accountId'],
+            onChanged: (id) => setState(() {
+              _accountId = id;
+              _errors = Map.of(_errors)..remove('accountId');
+            }),
+          ),
+          const SizedBox(height: LedgerForm.gap),
           LedgerDateField(
             label: 'Date',
             value: _date,
@@ -369,36 +429,46 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
               _errors = Map.of(_errors)..remove('date');
             }),
           ),
-          const SizedBox(height: LedgerForm.gap),
-          ChannelField(
-            value: _channel,
-            errorText: _errors['channel'],
-            onChanged: (v) {
-              _channel = v;
-              _clearError('channel');
-            },
+          const SizedBox(height: Sp.sm),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: LedgerButton(
+              key: const ValueKey('tx-more-details'),
+              label: _moreDetails ? 'Fewer details' : 'More details: channel, note',
+              icon: _moreDetails ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+              variant: LedgerButtonVariant.quiet,
+              small: true,
+              onPressed: () => setState(() => _moreDetails = !_moreDetails),
+            ),
           ),
-          const SizedBox(height: LedgerForm.gap),
-          LedgerTextField(
-            label: income ? 'Received from' : 'Paid to',
-            hint: income
-                ? 'e.g. Employer, client, Priya'
-                : 'e.g. Swiggy, DMart, landlord',
-            controller: _counterparty,
-            textCapitalization: TextCapitalization.words,
-            textInputAction: TextInputAction.next,
-            errorText: _errors['counterparty'],
-            onChanged: (_) => _clearError('counterparty'),
-          ),
-          const SizedBox(height: LedgerForm.gap),
-          LedgerTextField(
-            label: 'Note (optional)',
-            controller: _note,
-            minLines: 2,
-            maxLines: 4,
-            textCapitalization: TextCapitalization.sentences,
-            errorText: _errors['note'],
-            onChanged: (_) => _clearError('note'),
+          MotionAnimatedSize(
+            alignment: Alignment.topCenter,
+            child: !_moreDetails
+                ? const SizedBox(width: double.infinity)
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: Sp.sm),
+                      ChannelField(
+                        value: _channel,
+                        errorText: _errors['channel'],
+                        onChanged: (v) {
+                          _channel = v;
+                          _clearError('channel');
+                        },
+                      ),
+                      const SizedBox(height: LedgerForm.gap),
+                      LedgerTextField(
+                        label: 'Note (optional)',
+                        controller: _note,
+                        minLines: 2,
+                        maxLines: 4,
+                        textCapitalization: TextCapitalization.sentences,
+                        errorText: _errors['note'],
+                        onChanged: (_) => _clearError('note'),
+                      ),
+                    ],
+                  ),
           ),
         ],
       ),

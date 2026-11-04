@@ -71,6 +71,119 @@ abstract final class Palette {
   static const yellow300 = Color(0xFFFDE047);
 }
 
+/// The FiNN "Current" palette: the raw values behind both the kit tokens
+/// (`LedgerColors`) and the Material theme (`FinnColors`), so the two can
+/// never drift apart. Deep teal comes from the logo's flowing arrows.
+/// Every text pair is at least 4.5:1 on its ground.
+abstract final class Hue {
+  // Light: quiet shore ground, white panels, ink text, one deep teal.
+  static const shore = Color(0xFFF4F7F6);
+  static const shoreBackdrop = Color(0xFFE6ECEB);
+  static const panel = Color(0xFFFFFFFF);
+  static const mist = Color(0xFFEAF0EF);
+  static const hair = Color(0xFFDEE6E5);
+  static const hairStrong = Color(0xFFC6D1D0);
+  static const ink = Color(0xFF0F1F21);
+  static const inkSoft = Color(0xFF4D5D60);
+  static const inkFaint = Color(0xFF879497);
+  static const current = Color(0xFF0B6E69);
+  static const currentSoft = Color(0xFFDDEFEC);
+  static const deep = Color(0xFF0B3B44);
+  static const deepEnd = Color(0xFF0D4F55);
+  static const flow = Color(0xFF3FC1B4);
+  static const moneyIn = Color(0xFF157347);
+  static const moneyInSoft = Color(0xFFE1F1E7);
+  static const near = Color(0xFF8F5300);
+  static const nearSoft = Color(0xFFF8EDDC);
+  static const over = Color(0xFFB3261E);
+  static const overSoft = Color(0xFFFAE6E4);
+  static const info = Color(0xFF1F5FBF);
+  static const infoSoft = Color(0xFFE3EDFB);
+
+  // Dark: teal-tinted slate. Panels are separated by tone, not borders,
+  // and colours glow a little so meaning still reads at night.
+  static const night = Color(0xFF0D1416);
+  static const nightBackdrop = Color(0xFF080D0E);
+  static const nightPanel = Color(0xFF162023);
+  static const nightRaised = Color(0xFF1F2B2E);
+  static const nightHair = Color(0xFF263336);
+  static const nightHairStrong = Color(0xFF37474A);
+  static const nightInk = Color(0xFFE7EEED);
+  static const nightInkSoft = Color(0xFFA0AFB1);
+  static const nightInkFaint = Color(0xFF6C7B7E);
+  static const nightCurrent = Color(0xFF4FC4B8);
+  static const nightCurrentSoft = Color(0xFF143533);
+  static const nightOnCurrent = Color(0xFF04201E);
+  static const nightDeep = Color(0xFF103C42);
+  static const nightDeepEnd = Color(0xFF0E2C31);
+  static const nightFlow = Color(0xFF6FE0D2);
+  static const nightIn = Color(0xFF5FC290);
+  static const nightInSoft = Color(0xFF15302A);
+  static const nightNear = Color(0xFFE9B160);
+  static const nightNearSoft = Color(0xFF33291A);
+  static const nightOver = Color(0xFFF2836F);
+  static const nightOverSoft = Color(0xFF3A201C);
+  static const nightInfo = Color(0xFF8DB8F5);
+  static const nightInfoSoft = Color(0xFF15253D);
+
+  /// Chart hues, one per meaning (light / dark).
+  static const chartLight = [
+    current,
+    Color(0xFF1F6BCB),
+    Color(0xFFC77A06),
+    Color(0xFFC8456E),
+    Color(0xFF6A44C2),
+    Color(0xFF0A7A57),
+    Color(0xFF0F6F9E),
+    Color(0xFF6B7A7D),
+  ];
+  static const chartDark = [
+    nightCurrent,
+    Color(0xFF6DB3FF),
+    Color(0xFFFFB547),
+    Color(0xFFFF7D9C),
+    Color(0xFFB9A1F3),
+    Color(0xFF45D4A4),
+    Color(0xFF7FC6E8),
+    Color(0xFFAEB8BB),
+  ];
+}
+
+/// Category tints for icon wells: a deep hue on a soft wash in light mode,
+/// a bright hue on a dim wash in dark mode. Index-aligned with
+/// [AccentSwatches] (blue, purple, green, yellow, red, indigo, gray, lime,
+/// fuchsia, sky, amber, emerald, rose, violet).
+abstract final class CategoryTints {
+  static const _lightFg = [
+    Color(0xFF1F5FBF), Color(0xFF7A3DB8), Color(0xFF1E7A4C), Color(0xFF7D5B00),
+    Color(0xFFB23A3A), Color(0xFF4547B8), Color(0xFF4F5A5E), Color(0xFF4A7311),
+    Color(0xFFA1308F), Color(0xFF0F6F9E), Color(0xFF945600), Color(0xFF0B7466),
+    Color(0xFFB5345A), Color(0xFF6A44C2),
+  ];
+  static const _lightBg = [
+    Color(0xFFE3EDFB), Color(0xFFF0E7FA), Color(0xFFE2F2E8), Color(0xFFF8EFD2),
+    Color(0xFFFBE6E6), Color(0xFFE8E8FA), Color(0xFFECEFEF), Color(0xFFEBF3DC),
+    Color(0xFFF8E4F4), Color(0xFFE0F0F8), Color(0xFFFAEBD6), Color(0xFFDDF1ED),
+    Color(0xFFFBE5EC), Color(0xFFEDE7FB),
+  ];
+  static const _darkFg = [
+    Color(0xFF8DB8F5), Color(0xFFC39BEF), Color(0xFF7FCFA0), Color(0xFFE5C46A),
+    Color(0xFFF09A9A), Color(0xFFA3A5F2), Color(0xFFAEB8BB), Color(0xFFB2D77A),
+    Color(0xFFE596D6), Color(0xFF7FC6E8), Color(0xFFEDB66B), Color(0xFF6FD3C2),
+    Color(0xFFF39AB4), Color(0xFFB9A1F3),
+  ];
+
+  static int _i(int index) => index.clamp(0, _lightFg.length - 1);
+
+  /// (icon colour, well colour) for [index].
+  static (Color, Color) of(int index, {required bool dark}) {
+    final i = _i(index);
+    if (!dark) return (_lightFg[i], _lightBg[i]);
+    final fg = _darkFg[i];
+    return (fg, Color.alphaBlend(fg.withValues(alpha: 0.16), Hue.nightPanel));
+  }
+}
+
 /// Swatches users can pick for categories, goals and assets. Index-stable:
 /// persisted records store the index, so only append new entries.
 abstract final class AccentSwatches {

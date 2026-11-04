@@ -547,8 +547,8 @@ Future<DateTime?> showLedgerDatePicker(
       return Theme(
         data: theme.copyWith(
           colorScheme: theme.colorScheme.copyWith(
-            primary: c.ink,
-            onPrimary: c.onInk,
+            primary: c.brand,
+            onPrimary: c.onBrand,
             surface: c.surface,
             onSurface: c.ink,
             surfaceTint: Colors.transparent,
@@ -920,10 +920,10 @@ class LedgerSwitchRow extends StatelessWidget {
                   value: value,
                   onChanged: enabled ? onChanged : null,
                   thumbColor: WidgetStateProperty.resolveWith(
-                    (s) => s.contains(WidgetState.selected) ? c.onInk : c.inkSoft,
+                    (s) => s.contains(WidgetState.selected) ? c.onBrand : c.inkSoft,
                   ),
                   trackColor: WidgetStateProperty.resolveWith(
-                    (s) => s.contains(WidgetState.selected) ? c.ink : c.sunken,
+                    (s) => s.contains(WidgetState.selected) ? c.brand : c.sunken,
                   ),
                   trackOutlineColor: WidgetStateProperty.resolveWith(
                     (s) => s.contains(WidgetState.selected) ? Colors.transparent : c.lineStrong,

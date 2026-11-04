@@ -12,9 +12,10 @@ import '../../../../finance/ledger.dart';
 import '../../../../kit/kit.dart';
 import '../../../../shared/presentation/async_view.dart';
 
-/// "Available to spend": the one number Home exists for, set straight on
-/// the page. Under it, a bar of your cash with the set-aside part in a
-/// lighter tone, and the two amounts that explain the gap. Tapping
+/// "Available to spend": the one number Home exists for, on the deep teal
+/// slab. Under it, a bar of your cash with the free part in bright teal
+/// and the set-aside part in a lighter tone, and the two amounts that
+/// explain the gap. Tapping
 /// "Set aside" splits it into goals and emergency fund; tapping the number
 /// opens the full maths.
 class HeroBalanceCard extends ConsumerWidget {
@@ -60,97 +61,136 @@ class _BalanceState extends State<_Balance> {
     double share(Money m) => base <= 0 ? 0 : (m.paise / base).clamp(0.0, 1.0);
     final free = over ? 0.0 : share(b.available);
     final parts = _split
-        ? [BarPart(free, c.ink), BarPart(share(b.earmarkedGoals), c.green), BarPart(share(b.earmarkedEmergency), c.inkSoft)]
-        : [BarPart(free, c.ink), BarPart(share(b.earmarked), c.lineStrong)];
+        ? [
+            BarPart(free, c.flow),
+            BarPart(share(b.earmarkedGoals), _Slab.goals),
+            BarPart(share(b.earmarkedEmergency), _Slab.faint),
+          ]
+        : [BarPart(free, c.flow), BarPart(share(b.earmarked), _Slab.faint)];
+
+    final slab = Container(
+      decoration: BoxDecoration(gradient: c.deepGradient, borderRadius: Rad.rXl),
+      clipBehavior: Clip.antiAlias,
+      child: CustomPaint(
+        painter: const _FlowMarks(),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Sp.lg + 4, Sp.lg + 2, Sp.lg + 4, Sp.lg + 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Semantics(
+                button: true,
+                label: 'Available to spend. Double tap for how it adds up.',
+                child: InkWell(
+                  borderRadius: Rad.rMd,
+                  splashColor: Colors.white.withValues(alpha: 0.08),
+                  highlightColor: Colors.white.withValues(alpha: 0.04),
+                  onTap: () => showFinnSheet<void>(context, builder: (_) => BalanceBreakdownSheet(balance: b)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'Available to spend',
+                              style: t.label.copyWith(color: _Slab.soft),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: Sp.xs + 2),
+                          const Icon(LucideIcons.info, size: 15, color: _Slab.soft),
+                        ],
+                      ),
+                      const SizedBox(height: Sp.xs),
+                      AnimatedAmount(
+                        b.available,
+                        style: t.figureXL.copyWith(color: over && !hidden ? _Slab.over : _Slab.ink),
+                        decimals: DecimalDisplay.none,
+                        fit: true,
+                        animateOnMount: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: Sp.lg),
+              LedgerStackBar(
+                parts: parts,
+                gapColor: c.deep,
+                semanticLabel: hidden ? null : '${(free * 100).round()} percent of your cash is free to spend',
+              ),
+              const SizedBox(height: Sp.md),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _split
+                    ? [
+                        Expanded(
+                          child: _Legend(label: 'For goals', amount: b.earmarkedGoals, dot: _Slab.goals, onTap: _toggle),
+                        ),
+                        const SizedBox(width: Sp.lg),
+                        Expanded(
+                          child: _Legend(
+                            label: 'Emergency fund',
+                            amount: b.earmarkedEmergency,
+                            dot: _Slab.faint,
+                            end: true,
+                            onTap: _toggle,
+                            toggle: LucideIcons.chevronUp,
+                          ),
+                        ),
+                      ]
+                    : [
+                        Expanded(child: _Legend(label: 'Cash', amount: b.cash, dot: c.flow)),
+                        const SizedBox(width: Sp.lg),
+                        Expanded(
+                          child: _Legend(
+                            label: 'Set aside',
+                            amount: b.earmarked,
+                            dot: _Slab.faint,
+                            end: true,
+                            onTap: b.earmarked.isPositive ? _toggle : null,
+                            toggle: b.earmarked.isPositive ? LucideIcons.chevronDown : null,
+                          ),
+                        ),
+                      ],
+              ),
+              if (b.creditOwed.isPositive) ...[
+                const SizedBox(height: Sp.md),
+                Container(height: 1, color: Colors.white.withValues(alpha: 0.12)),
+                const SizedBox(height: Sp.md - 2),
+                MergeSemantics(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Credit card owed',
+                          style: t.label.copyWith(color: _Slab.soft),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: Sp.sm),
+                      AmountText(
+                        b.creditOwed,
+                        style: t.figureSmall.copyWith(color: _Slab.over),
+                        decimals: DecimalDisplay.none,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Semantics(
-          button: true,
-          label: 'Available to spend. Double tap for how it adds up.',
-          child: InkWell(
-            borderRadius: Rad.rMd,
-            onTap: () => showFinnSheet<void>(context, builder: (_) => BalanceBreakdownSheet(balance: b)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text('Available to spend', style: t.label),
-                    const SizedBox(width: Sp.xs + 2),
-                    Icon(LucideIcons.info, size: 15, color: c.inkSoft),
-                  ],
-                ),
-                const SizedBox(height: Sp.xs),
-                AnimatedAmount(
-                  b.available,
-                  style: t.figureXL.copyWith(color: over && !hidden ? c.red : c.ink),
-                  decimals: DecimalDisplay.none,
-                  fit: true,
-                  animateOnMount: true,
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: Sp.lg),
-        LedgerStackBar(
-          parts: parts,
-          gapColor: c.paper,
-          semanticLabel: hidden ? null : '${(free * 100).round()} percent of your cash is free to spend',
-        ),
-        const SizedBox(height: Sp.md),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: _split
-              ? [
-                  Expanded(child: _Legend(label: 'For goals', amount: b.earmarkedGoals, dot: c.green, onTap: _toggle)),
-                  const SizedBox(width: Sp.lg),
-                  Expanded(
-                    child: _Legend(
-                      label: 'Emergency fund',
-                      amount: b.earmarkedEmergency,
-                      dot: c.inkSoft,
-                      end: true,
-                      onTap: _toggle,
-                      toggle: LucideIcons.chevronUp,
-                    ),
-                  ),
-                ]
-              : [
-                  Expanded(child: _Legend(label: 'Cash', amount: b.cash, dot: c.ink)),
-                  const SizedBox(width: Sp.lg),
-                  Expanded(
-                    child: _Legend(
-                      label: 'Set aside',
-                      amount: b.earmarked,
-                      dot: c.lineStrong,
-                      end: true,
-                      onTap: b.earmarked.isPositive ? _toggle : null,
-                      toggle: b.earmarked.isPositive ? LucideIcons.chevronDown : null,
-                    ),
-                  ),
-                ],
-        ),
-        if (b.creditOwed.isPositive) ...[
-          const SizedBox(height: Sp.sm),
-          MergeSemantics(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text('Credit card owed', style: t.label, maxLines: 1, overflow: TextOverflow.ellipsis),
-                ),
-                const SizedBox(width: Sp.sm),
-                AmountText(
-                  b.creditOwed,
-                  style: t.figureSmall.copyWith(color: c.red),
-                  decimals: DecimalDisplay.none,
-                ),
-              ],
-            ),
-          ),
-        ],
+        slab,
         if (over && !hidden) ...[
           const SizedBox(height: Sp.md),
           LedgerNote(
@@ -184,7 +224,6 @@ class _Legend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.ink;
     final t = context.type;
     final ic = toggle;
     final body = Column(
@@ -195,14 +234,16 @@ class _Legend extends StatelessWidget {
           children: [
             Container(width: 8, height: 8, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
             const SizedBox(width: Sp.xs + 2),
-            Flexible(child: Text(label, style: t.label, maxLines: 1, overflow: TextOverflow.ellipsis)),
-            if (ic != null) ...[const SizedBox(width: 2), Icon(ic, size: 15, color: c.inkSoft)],
+            Flexible(
+              child: Text(label, style: t.label.copyWith(color: _Slab.soft), maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            if (ic != null) ...[const SizedBox(width: 2), Icon(ic, size: 15, color: _Slab.soft)],
           ],
         ),
         const SizedBox(height: 2),
         AmountText(
           amount,
-          style: t.figure.copyWith(fontSize: 17),
+          style: t.figure.copyWith(fontSize: 17, color: _Slab.ink),
           decimals: DecimalDisplay.none,
           fit: true,
           textAlign: end ? TextAlign.end : null,
@@ -219,23 +260,42 @@ class _Legend extends StatelessWidget {
   }
 }
 
+/// Text and marks on the deep slab (the same in light and dark mode).
+abstract final class _Slab {
+  static const ink = Color(0xFFFFFFFF);
+  static const soft = Color(0xD9FFFFFF);
+  static const faint = Color(0x52FFFFFF);
+  static const goals = Color(0xFFB9EBE4);
+  static const over = Color(0xFFFFA494);
+}
+
+/// Two faint arcs in the slab's corner, after the flowing arrows of the
+/// FiNN mark.
+class _FlowMarks extends CustomPainter {
+  const _FlowMarks();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0x14FFFFFF);
+    final r = size.height * 0.9;
+    final centre = Offset(size.width + r * 0.18, -r * 0.1);
+    canvas.drawCircle(centre, r * 0.62, paint..strokeWidth = 18);
+    canvas.drawCircle(centre, r * 0.92, paint..strokeWidth = 10);
+  }
+
+  @override
+  bool shouldRepaint(_FlowMarks old) => false;
+}
+
 class _BalanceSkeleton extends StatelessWidget {
   const _BalanceSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        LedgerSkeleton(width: 120, height: 14),
-        SizedBox(height: Sp.sm),
-        LedgerSkeleton(width: 220, height: 42),
-        SizedBox(height: Sp.lg),
-        LedgerSkeleton(height: 8, radius: 4),
-        SizedBox(height: Sp.md),
-        LedgerSkeleton(width: 160, height: 36),
-      ],
-    );
+    return const LedgerSkeleton(height: 186, radius: Rad.xl);
   }
 }
 

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'finn_colors.dart';
 
-/// Type scale. Uses the platform system font (Roboto / SF Pro) per the
-/// FiNN design reference. Money uses tabular figures so columns align.
+/// Type scale in Manrope, the app font (see `LedgerType`). Money uses
+/// tabular figures so columns align.
 @immutable
 class FinnTypography extends ThemeExtension<FinnTypography> {
   const FinnTypography({
@@ -27,6 +27,7 @@ class FinnTypography extends ThemeExtension<FinnTypography> {
   factory FinnTypography.from(FinnColors c) {
     const tabular = [FontFeature.tabularFigures(), FontFeature.liningFigures()];
     TextStyle s(double size, FontWeight w, {double? ls, double? h, Color? color}) => TextStyle(
+          fontFamily: 'Manrope',
           fontSize: size,
           fontWeight: w,
           letterSpacing: ls,

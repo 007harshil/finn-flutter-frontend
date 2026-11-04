@@ -22,7 +22,8 @@ final DateFormat goalMonth = DateFormat('MMM yyyy');
 /// "about a month" / "about 3 months".
 String aboutMonths(int n) => n == 1 ? 'about a month' : 'about $n months';
 
-/// A goal's category icon in a monochrome well.
+/// A goal's category icon in a well tinted per goal category (stable by
+/// enum order); neutral when [dimmed] (completed or archived).
 class GoalMark extends StatelessWidget {
   const GoalMark({super.key, required this.category, this.dimmed = false, this.size = 40});
 
@@ -31,6 +32,10 @@ class GoalMark extends StatelessWidget {
   final double size;
 
   @override
-  Widget build(BuildContext context) =>
-      IconWell(icon: CategoryIcons.of(category.iconKey), color: dimmed ? context.ink.inkSoft : null, size: size);
+  Widget build(BuildContext context) {
+    final icon = CategoryIcons.of(category.iconKey);
+    if (dimmed) return IconWell(icon: icon, color: context.ink.inkSoft, size: size);
+    final (fg, bg) = context.ink.tint(category.index % 14);
+    return IconWell(icon: icon, color: fg, background: bg, size: size);
+  }
 }

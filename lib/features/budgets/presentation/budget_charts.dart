@@ -365,7 +365,7 @@ class HistoryBars extends StatelessWidget {
                                         decoration: BoxDecoration(
                                           color: points[i].isOver
                                               ? c.red
-                                              : (points[i].isCurrent || selected == i ? c.ink : c.lineStrong),
+                                              : (points[i].isCurrent || selected == i ? c.brand : c.lineStrong),
                                           borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                                         ),
                                       ),
@@ -380,7 +380,7 @@ class HistoryBars extends StatelessWidget {
                                   child: Text(
                                     label(points[i]),
                                     style: t.small.copyWith(
-                                      color: points[i].isCurrent || selected == i ? c.ink : c.inkSoft,
+                                      color: points[i].isCurrent || selected == i ? c.brand : c.inkSoft,
                                     ),
                                   ),
                                 ),

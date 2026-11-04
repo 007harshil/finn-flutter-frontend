@@ -6,9 +6,10 @@ import '../motion/motion.dart';
 import '../tokens/tokens.dart';
 
 extension BottomClearanceX on BuildContext {
-  /// Bottom scroll padding that clears the floating navigation bar (the
-  /// shell reports its height through `MediaQuery.padding`) and the FAB.
-  double get bottomClearance => MediaQuery.paddingOf(this).bottom + Space.bottomClearance - Space.x6;
+  /// Bottom scroll padding below the last item. The shell's navigation bar
+  /// is solid (the body ends above it), so only the system inset and a
+  /// little breathing room are needed.
+  double get bottomClearance => MediaQuery.paddingOf(this).bottom + Space.x8;
 }
 
 /// Fades and slides its child up once, delayed by `index * stagger`.

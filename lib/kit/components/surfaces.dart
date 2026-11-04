@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../app/shell/app_drawer.dart' show AppAgentButton;
 import '../../design_system/components/layout.dart' show BottomClearanceX;
 import '../tokens.dart';
 import 'controls.dart';
@@ -115,7 +116,8 @@ class PageColumn extends StatelessWidget {
   }
 }
 
-/// Tab header: menu, page title, then up to two actions on the right.
+/// Tab header: menu, page title, up to two actions, then the FiNN agent
+/// mark on the far right (inside the app shell).
 class PageHeader extends StatelessWidget {
   const PageHeader({super.key, required this.title, this.actions = const [], this.subtitle});
 
@@ -146,6 +148,7 @@ class PageHeader extends StatelessWidget {
             ),
           ),
           for (final a in actions) ...[const SizedBox(width: Sp.xs), a],
+          Transform.translate(offset: const Offset(6, 0), child: const AppAgentButton()),
         ],
       ),
     );
@@ -214,7 +217,8 @@ class LedgerSection extends StatelessWidget {
   }
 }
 
-/// White panel with a hairline edge. Holds rows; never nested.
+/// White panel with a hairline edge (dark mode: a raised tone, no edge).
+/// Holds rows; never nested.
 class LedgerPanel extends StatelessWidget {
   const LedgerPanel({super.key, required this.children, this.dividerIndent = Sp.lg, this.padding});
 
@@ -232,7 +236,7 @@ class LedgerPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: c.surface,
         borderRadius: Rad.rLg,
-        border: Border.all(color: c.line),
+        border: c.isDark ? null : Border.all(color: c.line),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(

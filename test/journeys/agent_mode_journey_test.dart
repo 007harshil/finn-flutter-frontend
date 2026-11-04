@@ -5,19 +5,19 @@ import '../helpers/test_app.dart';
 import 'journey_helpers.dart';
 
 void main() {
-  testWidgets('five equal slots with the agent orb at the centre; agent mode locks the app', (tester) async {
+  testWidgets('five equal slots with "add" at the centre; the header agent mark locks the app', (tester) async {
     final env = await TestEnv.create();
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
 
-    // Home, Activity, Agent, Budgets, Goals: no "More" tab, equal spacing.
+    // Home, Activity, Add, Budgets, Goals: no "More" tab, equal spacing.
     expect(navTab('More'), findsNothing);
-    final orb = find.byTooltip('FiNN Agent');
-    expect(orb, findsOneWidget);
+    final add = find.byTooltip('Add transaction');
+    expect(add, findsOneWidget);
     final xs = [
       tester.getCenter(navTab('Home')).dx,
       tester.getCenter(navTab('Activity')).dx,
-      tester.getCenter(orb).dx,
+      tester.getCenter(add).dx,
       tester.getCenter(navTab('Budgets')).dx,
       tester.getCenter(navTab('Goals')).dx,
     ];
@@ -26,14 +26,20 @@ void main() {
       expect(xs[i] - xs[i - 1], closeTo(step, 1), reason: 'slot $i is evenly spaced');
     }
     expect(xs[2], closeTo(tester.view.physicalSize.width / tester.view.devicePixelRatio / 2, 1));
-    expect(find.byTooltip('Add transaction'), findsOneWidget);
 
-    // Agent mode on: the full-screen agent opens, the FAB goes and tabs stop responding.
+    // The agent lives on the FiNN mark in the tab header.
+    final orb = find.byTooltip('FiNN Agent');
+    expect(orb, findsOneWidget);
+
+    // Agent mode on: the full-screen agent opens; add and tabs stop responding.
     await tester.tap(orb);
     await tester.pumpAndSettle();
     expect(find.text('FiNN Agent'), findsOneWidget);
     expect(find.text('Agent mode · app paused'), findsOneWidget);
-    expect(find.byTooltip('Add transaction'), findsNothing);
+
+    await tester.tap(add, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(find.text('Agent mode · app paused'), findsOneWidget, reason: 'add is disabled');
 
     await tester.tap(navTab('Goals'), warnIfMissed: false);
     await tester.pumpAndSettle();

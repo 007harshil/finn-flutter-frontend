@@ -159,6 +159,8 @@ class DateFormats {
   static final DateFormat monthYear = DateFormat('MMMM yyyy');
   static final DateFormat shortMonthYear = DateFormat('MMM yy');
   static final DateFormat shortMonth = DateFormat('MMM');
+  static final DateFormat monthName = DateFormat('MMMM');
+  static final DateFormat weekday = DateFormat('EEEE');
   static final DateFormat iso = DateFormat('yyyy-MM-dd');
   static final DateFormat timestamp = DateFormat('d MMM yyyy, h:mm a');
 

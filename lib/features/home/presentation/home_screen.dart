@@ -38,7 +38,7 @@ class HomeScreen extends ConsumerWidget {
               ]
             : const [
                 PageBlock(child: HomeHeader()),
-                PageBlock(top: Sp.xxl, child: HeroBalanceCard()),
+                PageBlock(top: Sp.xl, child: HeroBalanceCard()),
                 PageBlock(child: HomeAccountsSection()),
                 PageBlock(top: Sp.section, child: PeriodOverview()),
                 PageBlock(child: AttentionSection()),

@@ -8,7 +8,7 @@ import '../../design_system/motion/motion.dart';
 import '../tokens.dart';
 
 enum LedgerButtonVariant {
-  /// Ink fill. One per view: the main thing to do.
+  /// Teal fill. One per view: the main thing to do.
   primary,
 
   /// Outlined. Everything else that is a button.
@@ -55,6 +55,7 @@ class LedgerButton extends StatefulWidget {
 
 class _LedgerButtonState extends State<LedgerButton> {
   bool _busy = false;
+  bool _down = false;
 
   void _press() {
     HapticFeedback.selectionClick();
@@ -80,15 +81,15 @@ class _LedgerButtonState extends State<LedgerButton> {
     final loading = widget.loading;
     final enabled = widget.onPressed != null && !loading && !_busy;
     final (Color bg, Color fg, BorderSide side) = switch (variant) {
-      LedgerButtonVariant.primary => (color ?? c.ink, c.onInk, BorderSide.none),
+      LedgerButtonVariant.primary => (color ?? c.brand, c.onBrand, BorderSide.none),
       LedgerButtonVariant.secondary => (
           c.surface,
           color ?? c.ink,
           BorderSide(color: color?.withValues(alpha: 0.55) ?? c.lineStrong),
         ),
-      LedgerButtonVariant.quiet => (Colors.transparent, color ?? c.ink, BorderSide.none),
+      LedgerButtonVariant.quiet => (Colors.transparent, color ?? c.brand, BorderSide.none),
     };
-    final height = small ? 36.0 : 48.0;
+    final height = small ? 38.0 : 50.0;
     final pad = variant == LedgerButtonVariant.quiet ? Sp.sm : (small ? Sp.md : Sp.lg + Sp.xs);
     final ic = icon;
     final content = Row(
@@ -115,15 +116,22 @@ class _LedgerButtonState extends State<LedgerButton> {
       enabled: enabled,
       child: Opacity(
         opacity: enabled ? 1 : (loading || _busy ? 0.6 : 0.4),
-        child: Material(
-          color: bg,
-          shape: RoundedRectangleBorder(borderRadius: Rad.rMd, side: side),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: enabled ? _press : null,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: height, minWidth: small ? 0 : 48),
-              child: Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: content),
+        // A short squeeze on press: the button feels pushed, never bouncy.
+        child: AnimatedScale(
+          scale: _down && !context.reduceMotion ? 0.97 : 1,
+          duration: const Duration(milliseconds: 90),
+          curve: Curves.easeOut,
+          child: Material(
+            color: bg,
+            shape: RoundedRectangleBorder(borderRadius: Rad.rMd, side: side),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: enabled ? _press : null,
+              onHighlightChanged: (v) => setState(() => _down = v),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: height, minWidth: small ? 0 : 48),
+                child: Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: content),
+              ),
             ),
           ),
         ),
@@ -132,7 +140,7 @@ class _LedgerButtonState extends State<LedgerButton> {
   }
 }
 
-/// 44pt round icon button. [selected] fills it with ink (an active toggle
+/// 44pt round icon button. [selected] fills it with teal (an active toggle
 /// or a filter that is on); [badge] shows a count in the corner.
 class LedgerIconButton extends StatelessWidget {
   const LedgerIconButton({
@@ -164,14 +172,14 @@ class LedgerIconButton extends StatelessWidget {
         button: true,
         selected: selected,
         child: Material(
-          color: selected ? c.ink : Colors.transparent,
+          color: selected ? c.brand : Colors.transparent,
           shape: const CircleBorder(),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onPressed,
             child: SizedBox.square(
               dimension: 44,
-              child: Icon(icon, size: 21, color: selected ? c.onInk : c.ink),
+              child: Icon(icon, size: 21, color: selected ? c.onBrand : c.ink),
             ),
           ),
         ),
@@ -229,7 +237,7 @@ class LedgerMenuButton extends StatelessWidget {
   }
 }
 
-/// Pill used for filters and quick choices. Selected = ink fill.
+/// Pill used for filters and quick choices. Selected = teal fill.
 class LedgerChip extends StatelessWidget {
   const LedgerChip({
     super.key,
@@ -262,8 +270,8 @@ class LedgerChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ink;
     final t = context.type;
-    final fg = selected ? c.onInk : c.ink;
-    final soft = selected ? c.onInk.withValues(alpha: 0.72) : c.inkSoft;
+    final fg = selected ? c.onBrand : c.ink;
+    final soft = selected ? c.onBrand.withValues(alpha: 0.78) : c.inkSoft;
     final d = dot;
     final ic = icon;
     final n = count;
@@ -273,8 +281,8 @@ class LedgerChip extends StatelessWidget {
       label: semanticLabel,
       excludeSemantics: semanticLabel != null,
       child: Material(
-        color: selected ? c.ink : c.surface,
-        shape: StadiumBorder(side: BorderSide(color: selected ? c.ink : c.line)),
+        color: selected ? c.brand : c.surface,
+        shape: StadiumBorder(side: BorderSide(color: selected ? c.brand : c.lineStrong.withValues(alpha: 0.7))),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap == null
@@ -369,9 +377,11 @@ class LedgerSegmented<T> extends StatelessWidget {
                     alignment: Alignment.center,
                     padding: const EdgeInsets.symmetric(horizontal: Sp.xs),
                     decoration: BoxDecoration(
-                      color: s.value == selected ? c.surface : Colors.transparent,
+                      color: s.value == selected ? (c.isDark ? c.lineStrong : c.surface) : Colors.transparent,
                       borderRadius: const BorderRadius.all(Radius.circular(Rad.md - 3)),
-                      border: s.value == selected ? Border.all(color: c.line) : null,
+                      boxShadow: s.value == selected && !c.isDark
+                          ? const [BoxShadow(color: Color(0x1A0F1F21), blurRadius: 6, offset: Offset(0, 1))]
+                          : null,
                     ),
                     child: Text.rich(
                       TextSpan(
@@ -525,7 +535,7 @@ class _LedgerSearchFieldState extends State<LedgerSearchField> {
                 widget.onChanged(v);
               },
               style: t.body,
-              cursorColor: c.ink,
+              cursorColor: c.brand,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: widget.hint,

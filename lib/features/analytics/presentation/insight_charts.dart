@@ -518,7 +518,7 @@ class DailySpendChart extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: days[i].amount.toDouble() * t,
-                        color: avg > 0 && days[i].amount.toDouble() > avg ? c.ink : c.lineStrong,
+                        color: avg > 0 && days[i].amount.toDouble() > avg ? c.brand : c.lineStrong,
                         width: 5,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
                         backDrawRodData: BackgroundBarChartRodData(
@@ -588,7 +588,7 @@ class MonthlySpendChart extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: months[i].expense.toDouble() * t,
-                        color: avg > 0 && months[i].expense.toDouble() > avg * 1.1 ? c.ink : c.lineStrong,
+                        color: avg > 0 && months[i].expense.toDouble() > avg * 1.1 ? c.brand : c.lineStrong,
                         width: months.length > 6 ? 12 : 20,
                         borderRadius: _top,
                       ),
@@ -657,7 +657,7 @@ class WeekdayChart extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: values[i] * t,
-                        color: i == peak ? c.ink : c.lineStrong,
+                        color: i == peak ? c.brand : c.lineStrong,
                         width: 18,
                         borderRadius: _top,
                       ),

@@ -415,13 +415,13 @@ class _IconPicker extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: key == selected ? c.ink : c.sunken,
+                  color: key == selected ? c.brand : c.sunken,
                   borderRadius: Rad.rMd,
                 ),
                 child: Icon(
                   CategoryIcons.of(key),
                   size: 20,
-                  color: key == selected ? c.onInk : c.inkSoft,
+                  color: key == selected ? c.onBrand : c.inkSoft,
                 ),
               ),
             ),

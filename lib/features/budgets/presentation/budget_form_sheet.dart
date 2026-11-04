@@ -234,12 +234,12 @@ class _BudgetFormSheetState extends ConsumerState<BudgetFormSheet> {
         ),
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
-            activeTrackColor: c.ink,
+            activeTrackColor: c.brand,
             inactiveTrackColor: c.sunken,
-            thumbColor: c.ink,
-            overlayColor: c.ink.withValues(alpha: 0.08),
-            valueIndicatorColor: c.ink,
-            valueIndicatorTextStyle: t.label.copyWith(color: c.onInk),
+            thumbColor: c.brand,
+            overlayColor: c.brand.withValues(alpha: 0.1),
+            valueIndicatorColor: c.brand,
+            valueIndicatorTextStyle: t.label.copyWith(color: c.onBrand),
           ),
           child: Slider(
             value: _warningBps / 100,

@@ -1,0 +1,499 @@
+<title>FiNN Design Directions</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400..800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Latin:wdth,wght@75..125,300..800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Devanagari:wdth,wght@75..125,400..700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,300..800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&display=swap">
+<style>
+/* Layout: page chrome is a quiet reading column; each direction is a band with its spec on top and three phone mockups in a row (scrolls sideways on phones). */
+:root{
+  --bg:#f6f7f7; --surface:#ffffff; --ink:#151b1c; --muted:#525d5f; --line:#dce2e2; --accent:#0b6e69;
+  --ui:"Schibsted Grotesk",ui-sans-serif,system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1213;--surface:#141b1c;--ink:#e6eceb;--muted:#9fabaa;--line:#273133;--accent:#4fc4b8;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0d1213;--surface:#141b1c;--ink:#e6eceb;--muted:#9fabaa;--line:#273133;--accent:#4fc4b8;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.55 var(--ui);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.page{max-width:1180px;margin:0 auto;padding-block:40px 96px;display:flex;flex-direction:column;gap:56px}
+h1,h2,h3{margin:0;line-height:1.12;text-wrap:balance}
+h1{font-size:clamp(2rem,4vw,3rem);font-weight:800;letter-spacing:-.025em}
+h2{font-size:clamp(1.6rem,3vw,2.2rem);font-weight:750;letter-spacing:-.02em}
+h3{font-size:1rem;font-weight:650}
+p{margin:0;max-width:68ch}
+a{color:var(--accent)}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.intro{display:flex;flex-direction:column;gap:14px}
+.intro .lede{font-size:1.15rem;color:var(--muted)}
+.band{display:flex;flex-direction:column;gap:24px;border-top:1px solid var(--line);padding-top:40px}
+.band-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:16px}
+.band-head .mood{color:var(--muted);font-size:1.05rem;margin-top:8px}
+.controls{display:flex;gap:8px;flex-wrap:wrap}
+.controls button{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 14px;font-weight:600;min-height:40px}
+.controls button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.spec{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
+.cell{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.cell h3{color:var(--muted);font-size:.82rem;font-weight:650;letter-spacing:.02em}
+.cell p,.cell li{font-size:.92rem}
+.cell ul{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:4px}
+.sw{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.sw div{border-radius:8px;height:44px;display:flex;align-items:end;padding:4px 6px;font:600 10px/1.1 var(--ui);font-variant-numeric:tabular-nums;border:1px solid rgba(127,127,127,.18)}
+.sw-label{font-size:.78rem;color:var(--muted)}
+.phones{display:flex;gap:28px;overflow-x:auto;padding:4px 4px 16px;scroll-snap-type:x mandatory}
+.phones figure{margin:0;display:flex;flex-direction:column;gap:10px;scroll-snap-align:start;flex:0 0 auto}
+.phones figcaption{font-weight:650;font-size:.9rem;color:var(--muted)}
+.before img{width:300px;border-radius:28px;border:1px solid var(--line);display:block}
+.frame{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:.92rem}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}
+th{background:rgba(127,127,127,.08)}
+tr:last-child td{border-bottom:0}
+.ask{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:10px}
+.ask ol{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:6px}
+
+/* ---------- phone shell (shared) ---------- */
+.ph{width:340px;height:736px;border-radius:40px;padding:10px;background:#0c0d0f;box-shadow:0 18px 40px rgba(0,0,0,.18)}
+.scr{position:relative;width:100%;height:100%;border-radius:31px;overflow:hidden;background:var(--p-bg);color:var(--p-ink);font-family:var(--p-ui);font-size:14px;line-height:1.35;display:flex;flex-direction:column}
+.status{height:30px;flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;padding:0 22px;font:600 12px/1 var(--p-ui);color:var(--p-ink)}
+.body{flex:1;overflow:hidden;padding:4px 16px 0;display:flex;flex-direction:column;gap:14px}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.ico.sm{width:16px;height:16px}
+.fig{font-family:var(--p-fig);font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.row{display:flex;align-items:center;gap:12px;min-width:0}
+.row .grow{flex:1;min-width:0}
+.row .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .s{color:var(--p-soft);font-size:12.5px}
+.row .a{font-weight:600;white-space:nowrap}
+.tile{width:38px;height:38px;border-radius:var(--p-tile-r);display:grid;place-items:center;background:var(--p-sunken);color:var(--p-ink)}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.topbar .acts{display:flex;gap:6px}
+.ib{width:40px;height:40px;border-radius:999px;display:grid;place-items:center;color:var(--p-ink);background:transparent;border:0}
+.mark{width:40px;height:40px;border-radius:999px;display:grid;place-items:center;background:var(--p-mark-bg)}
+.mark img{width:24px;height:24px}
+.nav{flex:0 0 auto;display:flex;justify-content:space-around;align-items:center;padding:8px 8px 14px;background:var(--p-nav);border-top:1px solid var(--p-line)}
+.nav .it{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;font-weight:600;color:var(--p-soft);min-width:52px}
+.nav .it.on{color:var(--p-ink)}
+.nav .add{width:52px;height:52px;border-radius:var(--p-add-r);display:grid;place-items:center;background:var(--p-primary);color:var(--p-on-primary);margin-top:-18px;box-shadow:var(--p-add-shadow)}
+.nav .add .ico{width:24px;height:24px;stroke-width:2.2}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--p-line-strong);border-radius:var(--p-chip-r);padding:6px 11px;font-size:12.5px;font-weight:600;white-space:nowrap;display:inline-flex;gap:6px;align-items:center;color:var(--p-ink);background:transparent}
+.chip.on{background:var(--p-chip-on);color:var(--p-chip-on-ink);border-color:var(--p-chip-on)}
+.btn{border:0;border-radius:var(--p-btn-r);min-height:50px;font-weight:700;font-size:15px;background:var(--p-primary);color:var(--p-on-primary);width:100%;font-family:var(--p-ui)}
+.btn.ghost{background:transparent;color:var(--p-ink);border:1px solid var(--p-line-strong)}
+.lbl{font-size:12.5px;color:var(--p-soft);font-weight:500}
+.sec{display:flex;justify-content:space-between;align-items:baseline}
+.sec h4{margin:0;font-size:15px;font-weight:700}
+.sec span{font-size:12.5px;color:var(--p-soft);font-weight:600}
+.pos{color:var(--p-in)}.neg{color:var(--p-over)}.warn{color:var(--p-near)}
+.bar{height:6px;border-radius:99px;background:var(--p-sunken);position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;border-radius:99px;transform-origin:left center}
+.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.key{height:46px;border-radius:var(--p-key-r);display:grid;place-items:center;font:600 20px/1 var(--p-fig);background:var(--p-key);color:var(--p-ink);border:0;transition:transform 70ms ease-out}
+.key:active{transform:scale(.94)}
+.sheet-grab{width:36px;height:4px;border-radius:9px;background:var(--p-line-strong);margin:2px auto 0}
+/* odometer */
+.odo{display:inline-flex;overflow:hidden;height:1.08em;line-height:1.08em;vertical-align:bottom}
+.odo .d{display:inline-block;height:1.08em;overflow:hidden}
+.odo .d span{display:flex;flex-direction:column}
+.odo .d span b{height:1.08em;font-weight:inherit}
+.odo .ch{display:inline-block}
+
+/* ---------- Direction 1: Current ---------- */
+.d-current{--p-ui:"Schibsted Grotesk",system-ui,sans-serif;--p-fig:"Schibsted Grotesk",system-ui,sans-serif;
+  --p-bg:#F4F7F6;--p-surface:#FFFFFF;--p-sunken:#E7EEEC;--p-line:#D8E2DF;--p-line-strong:#C3D0CD;--p-ink:#0F1F21;--p-soft:#4A5B5E;
+  --p-brand:#0B6E69;--p-brand-soft:#DCEFEB;--p-deep:#0B3B44;--p-on-deep:#F2FBF9;--p-on-deep-soft:#A9CFCB;--p-flow:#3FC1B4;--p-flow2:#1F8F86;
+  --p-in:#157347;--p-over:#B3261E;--p-near:#8F5300;--p-primary:#0B3B44;--p-on-primary:#FFFFFF;--p-nav:#FFFFFF;--p-mark-bg:#E7EEEC;
+  --p-chip-on:#0B3B44;--p-chip-on-ink:#FFFFFF;--p-key:#FFFFFF;--p-tile-r:12px;--p-chip-r:10px;--p-btn-r:14px;--p-key-r:12px;--p-add-r:18px;--p-add-shadow:0 6px 16px rgba(11,59,68,.28)}
+.d-current[data-mode="dark"]{--p-bg:#0B1315;--p-surface:#121C1F;--p-sunken:#1A272A;--p-line:#243336;--p-line-strong:#33464A;--p-ink:#E4EEEC;--p-soft:#9DB1B0;
+  --p-brand:#4FC4B8;--p-brand-soft:#12302E;--p-deep:#0F2E35;--p-on-deep:#EAF7F5;--p-on-deep-soft:#9CC5C0;--p-flow:#4FD1C2;--p-flow2:#2A8F86;
+  --p-in:#5FC290;--p-over:#F2836F;--p-near:#E2A954;--p-primary:#4FC4B8;--p-on-primary:#0B1315;--p-nav:#121C1F;--p-mark-bg:#1A272A;
+  --p-chip-on:#4FC4B8;--p-chip-on-ink:#0B1315;--p-key:#121C1F;--p-add-shadow:0 6px 16px rgba(0,0,0,.4)}
+.d-current .hero{background:var(--p-deep);color:var(--p-on-deep);border-radius:22px;padding:16px 16px 14px;display:flex;flex-direction:column;gap:10px}
+.d-current .hero .k{font-size:12.5px;color:var(--p-on-deep-soft);font-weight:500}
+.d-current .hero .big{font-size:40px;font-weight:650;letter-spacing:-.02em;line-height:1.05}
+.d-current .ribbon{width:100%;height:46px;display:block}
+.d-current .legend{display:flex;justify-content:space-between;font-size:12px;color:var(--p-on-deep-soft)}
+.d-current .legend b{display:block;color:var(--p-on-deep);font-size:14px;font-weight:600}
+.d-current .panel{background:var(--p-surface);border-radius:16px;border:1px solid var(--p-line);padding:4px 12px}
+.d-current .panel .row{padding:9px 0;border-bottom:1px solid var(--p-line)}
+.d-current .panel .row:last-child{border-bottom:0}
+.d-current .attn{background:var(--p-surface);border-radius:16px;border:1px solid var(--p-line);padding:12px;display:flex;gap:12px;align-items:center}
+.d-current .daygroup{display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;color:var(--p-soft);padding:2px 2px 0}
+.d-current .amt-display{font-size:52px;font-weight:650;letter-spacing:-.03em;text-align:center}
+
+/* ---------- Direction 2: Bahi ---------- */
+.d-bahi{--p-ui:"Anek Latin",system-ui,sans-serif;--p-fig:"Anek Latin",system-ui,sans-serif;
+  --p-bg:#F7F7FA;--p-surface:#FFFFFF;--p-ledger:#FFF7E0;--p-ledger-line:#F0DFAF;--p-sunken:#ECEEF6;--p-line:#DEE1EE;--p-line-strong:#C7CBE0;--p-ink:#191B3F;--p-soft:#50547A;
+  --p-indigo:#2C3192;--p-edge:#1B1F66;--p-marigold:#F4A51C;--p-mari-ink:#6E4300;--p-mari-soft:#FFEBC2;--p-hero:#23286F;--p-on-hero:#FFFFFF;--p-on-hero-soft:#C5C8F0;--p-hero-fig:#FFC24B;
+  --p-in:#11734A;--p-over:#BE2A2F;--p-near:#9A5500;--p-primary:#2C3192;--p-on-primary:#FFFFFF;--p-nav:#FFFFFF;--p-mark-bg:#ECEEF6;
+  --p-chip-on:#FFEBC2;--p-chip-on-ink:#6E4300;--p-key:#FFFFFF;--p-tile-r:10px;--p-chip-r:8px;--p-btn-r:12px;--p-key-r:10px;--p-add-r:16px;--p-add-shadow:0 4px 0 #1B1F66}
+.d-bahi[data-mode="dark"]{--p-bg:#0F1029;--p-surface:#181A3A;--p-ledger:#211E33;--p-ledger-line:#3A3550;--p-sunken:#20234A;--p-line:#2C2F5A;--p-line-strong:#3D4170;--p-ink:#EDEDF8;--p-soft:#A9ACCF;
+  --p-indigo:#A3A9FF;--p-edge:#C98A12;--p-mari-ink:#FFD98A;--p-mari-soft:#3A2E12;--p-hero:#1D2063;--p-on-hero-soft:#C5C8F0;
+  --p-in:#63C995;--p-over:#FF8A80;--p-near:#F0B45A;--p-primary:#FFC24B;--p-on-primary:#1A1300;--p-nav:#181A3A;--p-mark-bg:#20234A;
+  --p-chip-on:#3A2E12;--p-chip-on-ink:#FFD98A;--p-key:#181A3A;--p-add-shadow:0 4px 0 #C98A12}
+.d-bahi .btn{box-shadow:0 3px 0 var(--p-edge);transition:transform 70ms,box-shadow 70ms}
+.d-bahi .btn:active{transform:translateY(3px);box-shadow:0 0 0 var(--p-edge)}
+.d-bahi h5{margin:0;font:650 22px/1.1 var(--p-ui);font-stretch:112%;letter-spacing:-.01em}
+.d-bahi .hero{background:var(--p-hero);color:var(--p-on-hero);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:8px;position:relative;overflow:hidden}
+.d-bahi .hero::after{content:"";position:absolute;right:-18px;top:-18px;width:92px;height:92px;border-radius:50%;border:10px solid rgba(255,194,75,.16)}
+.d-bahi .hero .k{font-size:13px;color:var(--p-on-hero-soft);font-weight:500}
+.d-bahi .hero .big{font-size:58px;font-weight:700;font-stretch:78%;line-height:.95;color:var(--p-hero-fig);letter-spacing:-.01em}
+.d-bahi .hero .split{display:flex;gap:16px;font-size:12.5px;color:var(--p-on-hero-soft)}
+.d-bahi .hero .split b{display:block;color:var(--p-on-hero);font-size:16px;font-weight:600;font-stretch:90%}
+.d-bahi .khata{background:var(--p-ledger);border-radius:14px;border:1px solid var(--p-ledger-line);overflow:hidden}
+.d-bahi .khata .kh{display:grid;grid-template-columns:46px 1fr;border-bottom:1px solid var(--p-ledger-line)}
+.d-bahi .khata .kh:last-child{border-bottom:0}
+.d-bahi .khata .day{border-right:2px solid var(--p-over);opacity:.95;display:flex;flex-direction:column;align-items:center;justify-content:start;padding:8px 0;font-weight:700;font-stretch:80%;font-size:22px;line-height:1}
+.d-bahi .khata .day small{font-size:10.5px;font-weight:600;color:var(--p-soft);font-stretch:100%;margin-top:2px}
+.d-bahi .khata .en{padding:6px 10px;display:flex;flex-direction:column}
+.d-bahi .khata .en .row{padding:5px 0}
+.d-bahi .khata .tot{font-size:11.5px;color:var(--p-soft);font-weight:600;text-align:right;padding-top:2px}
+.d-bahi .tag{font-size:11.5px;font-weight:600;color:var(--p-mari-ink);background:var(--p-mari-soft);border-radius:6px;padding:2px 6px}
+.d-bahi .budget{background:var(--p-surface);border:1px solid var(--p-line);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:7px}
+.d-bahi .amt-display{font-size:64px;font-weight:700;font-stretch:78%;text-align:center;line-height:1}
+.d-bahi .stamp{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%) rotate(-6deg);border:3px solid var(--p-in);color:var(--p-in);border-radius:10px;padding:8px 14px;font:700 20px/1.1 var(--p-ui);font-stretch:90%;background:color-mix(in srgb,var(--p-bg) 85%,transparent);opacity:0;pointer-events:none;text-align:center}
+.d-bahi .stamp.go{animation:stamp 900ms cubic-bezier(.2,1.4,.4,1) forwards}
+@keyframes stamp{0%{opacity:0;transform:translate(-50%,-50%) rotate(-14deg) scale(1.6)}22%{opacity:1;transform:translate(-50%,-50%) rotate(-6deg) scale(1)}78%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) rotate(-6deg) scale(1)}}
+.hindi{font-family:"Anek Devanagari","Anek Latin",sans-serif}
+
+/* ---------- Direction 3: Monsoon ---------- */
+.d-monsoon{--p-ui:"Geist",system-ui,sans-serif;--p-fig:"Bricolage Grotesque","Geist",sans-serif;
+  --p-bg:#0F141B;--p-surface:#161D26;--p-raised:#1E2732;--p-sunken:#1E2732;--p-line:#27313D;--p-line-strong:#36414F;--p-ink:#EEF2F6;--p-soft:#9AA8B6;
+  --p-rain:#6DB3FF;--p-jade:#45D4A4;--p-saffron:#FFB547;--p-rose:#FF7D9C;--p-lilac:#B7A2FF;
+  --p-in:#45D4A4;--p-over:#FF6B6B;--p-near:#FFB547;--p-primary:#EEF2F6;--p-on-primary:#0F141B;--p-nav:#161D26;--p-mark-bg:#1E2732;
+  --p-chip-on:#EEF2F6;--p-chip-on-ink:#0F141B;--p-key:#161D26;--p-tile-r:14px;--p-chip-r:999px;--p-btn-r:999px;--p-key-r:16px;--p-add-r:999px;--p-add-shadow:0 0 0 6px rgba(109,179,255,.12)}
+.d-monsoon[data-mode="light"]{--p-bg:#F2F5F8;--p-surface:#FFFFFF;--p-raised:#E9EEF3;--p-sunken:#E9EEF3;--p-line:#DAE1E8;--p-line-strong:#C6D0DA;--p-ink:#0E1620;--p-soft:#4F5D6B;
+  --p-rain:#1F6BCB;--p-jade:#0A7A57;--p-saffron:#A86400;--p-rose:#C2335A;--p-lilac:#6847D6;
+  --p-in:#0A7A57;--p-over:#C0302B;--p-near:#A86400;--p-primary:#0E1620;--p-on-primary:#FFFFFF;--p-nav:#FFFFFF;--p-mark-bg:#E9EEF3;
+  --p-chip-on:#0E1620;--p-chip-on-ink:#FFFFFF;--p-key:#FFFFFF;--p-add-shadow:0 0 0 6px rgba(31,107,203,.12)}
+.d-monsoon .card{background:var(--p-surface);border-radius:24px;padding:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.d-monsoon .big{font:650 46px/1 var(--p-fig);font-variation-settings:"opsz" 96,"wdth" 88;letter-spacing:-.02em}
+.d-monsoon .pulse{width:100%;height:150px;display:block;touch-action:none;cursor:crosshair}
+.d-monsoon .pulse text{font:600 10px var(--p-ui);fill:var(--p-soft)}
+.d-monsoon .readout{display:flex;justify-content:space-between;font-size:12.5px;color:var(--p-soft)}
+.d-monsoon .readout b{color:var(--p-ink);font-weight:600}
+.d-monsoon .seg{display:flex;background:var(--p-raised);border-radius:999px;padding:3px}
+.d-monsoon .seg span{flex:1;text-align:center;padding:6px 0;border-radius:999px;font-size:12.5px;font-weight:600;color:var(--p-soft)}
+.d-monsoon .seg span.on{background:var(--p-surface);color:var(--p-ink)}
+.d-monsoon .catbars{display:flex;flex-direction:column;gap:9px}
+.d-monsoon .amt-display{font:650 60px/1 var(--p-fig);font-variation-settings:"opsz" 96,"wdth" 85;text-align:center;letter-spacing:-.02em}
+.d-monsoon .dot{width:8px;height:8px;border-radius:9px;display:inline-block}
+.d-monsoon h5{margin:0;font:600 20px/1.1 var(--p-fig);font-variation-settings:"opsz" 48,"wdth" 95}
+
+@media (prefers-reduced-motion:reduce){.key,.d-bahi .btn{transition:none}.d-bahi .stamp.go{animation:none;opacity:1}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-act" viewBox="0 0 24 24"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-pie" viewBox="0 0 24 24"><path d="M21 12c.55 0 1-.45.95-1A10 10 0 0 0 13 2.05c-.55-.05-1 .4-1 .95v8a1 1 0 0 0 1 1z"/><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-chevl" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></symbol>
+  <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 22h18"/><path d="M6 18v-7"/><path d="M10 18v-7"/><path d="M14 18v-7"/><path d="M18 18v-7"/><path d="M12 2 20 7H4z"/></symbol>
+  <symbol id="i-fuel" viewBox="0 0 24 24"><path d="M3 22h12"/><path d="M4 9h10"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 4 0V9.83a2 2 0 0 0-.59-1.42L18 5"/></symbol>
+  <symbol id="i-food" viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></symbol>
+  <symbol id="i-car" viewBox="0 0 24 24"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></symbol>
+  <symbol id="i-bag" viewBox="0 0 24 24"><path d="M16 10a4 4 0 0 1-8 0"/><path d="M3.1 6h17.8"/><path d="M3.4 5.47a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.67a2 2 0 0 0-.4-1.2l-2-2.67A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"/></symbol>
+  <symbol id="i-cart" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></symbol>
+  <symbol id="i-film" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 12h18"/><path d="M17 3v18"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/></symbol>
+  <symbol id="i-del" viewBox="0 0 24 24"><path d="M10 5a2 2 0 0 0-1.34.52l-6.33 5.74a1 1 0 0 0 0 1.48l6.33 5.74A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/><path d="m12 9 6 6"/><path d="m18 9-6 6"/></symbol>
+  <symbol id="i-in" viewBox="0 0 24 24"><path d="M17 7 7 17"/><path d="M17 17H7V7"/></symbol>
+</svg>
+
+<div class="page">
+  <header class="intro">
+    <h1>Three ways FiNN could look and move</h1>
+    <p class="lede">Each direction is built from the research (<a href="https://claude.ai/artifact/AnwjWisadkjkY6LYTiqGFX">FiNN Design Research</a>) and FiNN's own data: Aarav's accounts, October budgets and real transactions from the demo seed. All three keep every existing feature and number; they change presentation, layout and motion.</p>
+    <p class="lede">Use Light / Dark on each direction, and Play motion to see its signature moments. On a phone, swipe the mockups sideways.</p>
+  </header>
+
+  <section class="band" aria-labelledby="before-h">
+    <div class="band-head"><div><h2 id="before-h">FiNN today</h2><p class="mood">Captured from the running app on the demo seed, light theme. Solid information, a utility look: one green, ink everywhere, a nav bar that collides with the add button, and a typeface whose zero reads as Ø in money.</p></div></div>
+    <div class="phones before">
+      <figure><img src="before/home.png" alt="Current FiNN home screen: greeting, available to spend ₹72,932, cash bar, accounts list, floating add button over the bottom navigation"><figcaption>Home</figcaption></figure>
+      <figure><img src="before/activity.png" alt="Current Activity screen: month switcher, search, money in and out, where it went bar, transactions grouped by day"><figcaption>Activity</figcaption></figure>
+      <figure><img src="before/add.png" alt="Current Record transaction sheet: expense or income tabs, amount, paid from, category, date, channel chips"><figcaption>Add expense</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="band" id="current" aria-labelledby="current-h">
+    <div class="band-head">
+      <div><h2 id="current-h">Current</h2><p class="mood">Calm precision, drawn from the two flowing arrows in FiNN's logo. Money is shown as a current that comes in and divides. Quiet surfaces, one deep teal, nothing shouts.</p></div>
+      <div class="controls" data-for="current"><button aria-pressed="true" data-mode="light">Light</button><button aria-pressed="false" data-mode="dark">Dark</button><button data-play>Play motion</button></div>
+    </div>
+    <div class="spec">
+      <div class="cell"><h3>Palette</h3><div class="sw">
+        <div style="background:#F4F7F6;color:#0F1F21">Shore F4F7F6</div><div style="background:#0F1F21;color:#fff">Ink 0F1F21</div><div style="background:#0B3B44;color:#fff">Deep 0B3B44</div><div style="background:#0B6E69;color:#fff">Current 0B6E69</div>
+        <div style="background:#3FC1B4;color:#0B3B44">Flow 3FC1B4</div><div style="background:#157347;color:#fff">In 157347</div><div style="background:#8F5300;color:#fff">Near 8F5300</div><div style="background:#B3261E;color:#fff">Over B3261E</div></div>
+        <p class="sw-label">Dark: ground 0B1315, surface 121C1F, current 4FC4B8, in 5FC290, over F2836F. Every text pair checked at 4.5:1 or more.</p></div>
+      <div class="cell"><h3>Type</h3><p style="font:650 30px/1 'Schibsted Grotesk';letter-spacing:-.02em;font-variant-numeric:tabular-nums">₹72,932.00</p><p style="font-family:'Schibsted Grotesk'">Schibsted Grotesk for everything: 650 for figures with tabular digits, 700 for titles, 400 for text. A newsroom grotesk that keeps long Indian numbers tight and has a plain zero.</p></div>
+      <div class="cell d-current" style="background:var(--p-bg);color:var(--p-ink)"><h3>Buttons and cards</h3><button class="btn">Save expense</button><button class="btn ghost">Cancel</button><p class="lbl">Buttons 50 px, 14 px radius, deep teal. Cards are flat: 16 px radius, hairline border, no shadow; only the hero gets the deep slab (22 px).</p></div>
+      <div class="cell"><h3>Motion personality: fluid, never bouncy</h3><ul><li>Data: ease-out (0.2, 0, 0, 1), 320 ms; ribbon draws in 700 ms.</li><li>Sheets: critically damped spring (stiffness 320, damping ratio 1.0).</li><li>Hero figure rolls digit by digit, 420 ms.</li><li>Reduced motion: values swap, fades 120 ms.</li></ul></div>
+      <div class="cell"><h3>Signature moment</h3><p>The cash-flow ribbon on Home: income arrives from the left and splits into set aside, spent and free, echoing the logo's arrows. Tap a band to open it.</p><h3>Fits because</h3><p>Matches the calm, accurate apps users rate highest (Monarch, Copilot) and the patterns for a single honest number. Risk: can read as reserved; personality lives in the assistant.</p></div>
+    </div>
+    <div class="phones" id="phones-current"></div>
+  </section>
+
+  <section class="band" id="bahi" aria-labelledby="bahi-h">
+    <div class="band-head">
+      <div><h2 id="bahi-h">Bahi</h2><p class="mood">Warm, Indian and tactile, after the bahi-khata: the red-bound ledger shopkeepers still keep, with ruled columns, a red margin line and a stamp when an entry is done. Indigo ink, marigold highlights, buttons you can feel.</p></div>
+      <div class="controls" data-for="bahi"><button aria-pressed="true" data-mode="light">Light</button><button aria-pressed="false" data-mode="dark">Dark</button><button data-play>Play motion</button></div>
+    </div>
+    <div class="spec">
+      <div class="cell"><h3>Palette</h3><div class="sw">
+        <div style="background:#F7F7FA;color:#191B3F">Page F7F7FA</div><div style="background:#FFF7E0;color:#191B3F">Khata FFF7E0</div><div style="background:#191B3F;color:#fff">Ink 191B3F</div><div style="background:#2C3192;color:#fff">Indigo 2C3192</div>
+        <div style="background:#F4A51C;color:#191B3F">Marigold F4A51C</div><div style="background:#11734A;color:#fff">In 11734A</div><div style="background:#9A5500;color:#fff">Near 9A5500</div><div style="background:#BE2A2F;color:#fff">Over BE2A2F</div></div>
+        <p class="sw-label">Dark: night indigo 0F1029, surface 181A3A, khata 211E33, marigold FFC24B as the primary fill. Red stays reserved for over-limit and the ledger margin.</p></div>
+      <div class="cell"><h3>Type</h3><p style="font:700 40px/1 'Anek Latin';font-stretch:78%;font-variant-numeric:tabular-nums">₹72,932</p><p class="hindi" style="font-size:18px">आज ₹480 खाने पर खर्च हुए</p><p style="font-family:'Anek Latin'">Anek Latin and Anek Devanagari, by Ek Type (India). One variable family: condensed for big figures, wide for headings, and a Devanagari sibling for the Hinglish assistant.</p></div>
+      <div class="cell d-bahi" style="background:var(--p-bg);color:var(--p-ink)"><h3>Buttons and cards</h3><button class="btn">Save expense</button><button class="btn ghost" style="box-shadow:none">Cancel</button><p class="lbl">Primary buttons have a 3 px pressable edge that sinks on tap. Ledger panels on khata paper with ruled rows; 14 px radius, no shadows.</p></div>
+      <div class="cell"><h3>Motion personality: springy and tactile</h3><ul><li>Presses: spring with slight overshoot (stiffness 420, damping ratio 0.72).</li><li>Save: the entry is stamped (scale 1.6 to 1, 220 ms) with a medium haptic.</li><li>Goal reached: a short marigold-petal burst, under 700 ms.</li><li>Reduced motion: stamp appears without movement.</li></ul></div>
+      <div class="cell"><h3>Signature moment</h3><p>The ledger itself: Activity reads like a khata page, day numbers in the margin, entries in the middle, the day's total on the right. Saving an expense stamps it.</p><h3>Fits because</h3><p>Original, India-native and warm where every competitor is a neutral western dashboard; tactile feedback borrows what users like in CRED without its slow flows. Risk: more decoration to keep disciplined.</p></div>
+    </div>
+    <div class="phones" id="phones-bahi"></div>
+  </section>
+
+  <section class="band" id="monsoon" aria-labelledby="monsoon-h">
+    <div class="band-head">
+      <div><h2 id="monsoon-h">Monsoon</h2><p class="mood">Dark-first and data-forward, like a city street after rain: deep slate, luminous colours that mean something. The month is a living chart you can drag your finger across.</p></div>
+      <div class="controls" data-for="monsoon"><button aria-pressed="false" data-mode="light">Light</button><button aria-pressed="true" data-mode="dark">Dark</button><button data-play>Play motion</button></div>
+    </div>
+    <div class="spec">
+      <div class="cell"><h3>Palette</h3><div class="sw">
+        <div style="background:#0F141B;color:#EEF2F6">Slate 0F141B</div><div style="background:#1E2732;color:#EEF2F6">Raised 1E2732</div><div style="background:#EEF2F6;color:#0F141B">Pearl EEF2F6</div><div style="background:#6DB3FF;color:#0F141B">Rain 6DB3FF</div>
+        <div style="background:#45D4A4;color:#0F141B">Jade 45D4A4</div><div style="background:#FFB547;color:#0F141B">Saffron FFB547</div><div style="background:#FF7D9C;color:#0F141B">Rose FF7D9C</div><div style="background:#FF6B6B;color:#0F141B">Over FF6B6B</div></div>
+        <p class="sw-label">Light: F2F5F8 ground, ink 0E1620, data hues deepened (rain 1F6BCB, jade 0A7A57) to pass 4.5:1 on white.</p></div>
+      <div class="cell"><h3>Type</h3><p style="font:650 40px/1 'Bricolage Grotesque';font-variation-settings:'opsz' 96,'wdth' 88;font-variant-numeric:tabular-nums">₹72,932</p><p style="font-family:Geist">Bricolage Grotesque for figures and headings (optical size and width axes give big numbers character), Geist for interface text.</p></div>
+      <div class="cell d-monsoon" style="background:var(--p-bg);color:var(--p-ink)"><h3>Buttons and cards</h3><button class="btn">Save expense</button><button class="btn ghost">Cancel</button><p class="lbl" style="color:var(--p-soft)">Pill buttons, pearl on slate. Cards 24 px radius separated by tone, not borders. Multi-hue data, one hue per meaning.</p></div>
+      <div class="cell"><h3>Motion personality: cinematic</h3><ul><li>Charts draw in 900 ms with 24 ms stagger.</li><li>Scrub: cursor follows the finger, a selection haptic per day, never faster than 60 ms.</li><li>Row to detail: shared-element morph, 320 ms.</li><li>Sheets: spring (stiffness 300, damping ratio 0.82).</li></ul></div>
+      <div class="cell"><h3>Signature moment</h3><p>The Pulse: Home opens on this month's cumulative spend against your plan and last month. Drag across it to read any day.</p><h3>Fits because</h3><p>Brings Copilot-level chart interaction to Android and India, where none of the polished trackers exist. Risk: dark-first is a strong taste; charts must stay simple for new users.</p></div>
+    </div>
+    <div class="phones" id="phones-monsoon"></div>
+  </section>
+
+  <section class="band" aria-labelledby="cmp-h">
+    <div class="band-head"><div><h2 id="cmp-h">Side by side</h2></div></div>
+    <div class="frame"><table>
+      <thead><tr><th></th><th>Current</th><th>Bahi</th><th>Monsoon</th></tr></thead>
+      <tbody>
+        <tr><td>Feels</td><td>Trustworthy, calm, premium</td><td>Warm, playful, local</td><td>Premium, focused, a little dramatic</td></tr>
+        <tr><td>Default theme</td><td>Light</td><td>Light</td><td>Dark</td></tr>
+        <tr><td>Typeface</td><td>Schibsted Grotesk</td><td>Anek Latin + Anek Devanagari</td><td>Bricolage Grotesque + Geist</td></tr>
+        <tr><td>Signature</td><td>Cash-flow ribbon</td><td>Khata ledger + stamp on save</td><td>Scrub-able Pulse chart</td></tr>
+        <tr><td>Motion</td><td>Eased, no overshoot</td><td>Springy, pressable</td><td>Cinematic, chart-led</td></tr>
+        <tr><td>Build effort</td><td>Lowest; closest to today's structure</td><td>Medium; ledger layout and stamp</td><td>Highest; interactive charts on every main screen</td></tr>
+        <tr><td>Biggest risk</td><td>Could feel reserved</td><td>Decoration creep</td><td>Charts overwhelm new users</td></tr>
+      </tbody>
+    </table></div>
+    <p>Mixes that work: Current's structure with Bahi's typeface and stamp-on-save; Bahi's ledger list with Monsoon's scrub-able chart on Insights; Monsoon's dark theme as the dark mode of Current.</p>
+  </section>
+
+  <section class="ask" aria-labelledby="ask-h">
+    <h2 id="ask-h" style="font-size:1.4rem">Decisions needed before any code changes</h2>
+    <ol>
+      <li>Which direction, or which mix?</li>
+      <li>Bottom navigation: today the centre slot is the assistant and Add floats over content. All three mockups move Add into the centre slot and put the assistant on the FiNN mark in the top bar (long-press Add starts voice). Keep that, or keep today's layout?</li>
+      <li>Add expense: amount-first keypad sheet with category, account and date up front and channel, payee and note under "More details". Every field stays; only the order and grouping change.</li>
+    </ol>
+  </section>
+</div>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ic = (id, cls = '') => `<svg class="ico ${cls}" aria-hidden="true"><use href="#i-${id}"/></svg>`;
+  // Indian grouping: 6,26,932
+  const inr = (n) => { const s = Math.round(Math.abs(n)).toString(); const last = s.slice(-3), rest = s.slice(0, -3);
+    return (rest ? rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' : '') + last; };
+  const odo = (n) => `<span class="odo" data-val="${n}" aria-label="₹${inr(n)}">₹${[...inr(n)].map(c => /\d/.test(c)
+      ? `<span class="d" aria-hidden="true"><span style="transform:translateY(calc(-${c} * 1.08em))">${[...'0123456789'].map(x => `<b>${x}</b>`).join('')}</span></span>`
+      : `<span class="ch" aria-hidden="true">${c}</span>`).join('')}</span>`;
+  const status = `<div class="status"><span>9:41</span><span>5G ▮▮▮</span></div>`;
+  const nav = (on) => `<nav class="nav">${[['home','Home'],['act','Activity']].map(([i,l]) => `<span class="it ${on===i?'on':''}">${ic(i)}${l}</span>`).join('')}
+    <span class="add" aria-label="Add">${ic('plus')}</span>
+    ${[['pie','Budgets'],['target','Goals']].map(([i,l]) => `<span class="it ${on===i?'on':''}">${ic(i)}${l}</span>`).join('')}</nav>`;
+  const mark = `<span class="mark" aria-label="Ask FiNN"><img src="finn_logo.png" alt=""></span>`;
+  const topHome = `<div class="topbar">${mark}<div class="acts"><span class="ib">${ic('eye')}</span><span class="ib">${ic('bell')}</span></div></div>`;
+  const tx = [
+    { day: 'Today', d: '10', w: 'Sat', total: 2397, items: [
+      { i: 'fuel', t: 'Indian Oil', s: 'Transport · UPI', a: -2397 },
+      { i: 'act', t: 'Axis to HDFC Millennia', s: 'Transfer · Net banking', a: 13456, transfer: true } ] },
+    { day: 'Yesterday', d: '09', w: 'Fri', total: 478, items: [ { i: 'food', t: 'Truffles', s: 'Food & Dining · Card', a: -478 } ] },
+    { day: 'Thu, 8 Oct', d: '08', w: 'Thu', total: 953, items: [
+      { i: 'car', t: 'Uber', s: 'Transport · UPI', a: -311 },
+      { i: 'cart', t: 'Swiggy Instamart', s: 'Groceries · UPI', a: -642 } ] },
+  ];
+  const amt = (x) => x.transfer ? `<span class="a fig">₹${inr(x.a)}</span>` : x.a > 0 ? `<span class="a fig pos">+₹${inr(x.a)}</span>` : `<span class="a fig">−₹${inr(x.a)}</span>`;
+  const cats = [['food','Food'],['cart','Groceries'],['car','Transport'],['bag','Shopping'],['film','Fun']];
+  const keypad = `<div class="keys">${['1','2','3','4','5','6','7','8','9','.','0'].map(k => `<button class="key">${k}</button>`).join('')}<button class="key" aria-label="Delete">${ic('del')}</button></div>`;
+  const phone = (cls, mode, inner, cap) => `<figure><div class="ph"><div class="scr ${cls}" data-mode="${mode}">${status}${inner}</div></div><figcaption>${cap}</figcaption></figure>`;
+
+  /* ---------------- Current ---------------- */
+  const ribbon = () => { // income 1,26,200 split: set aside 30,000 · spent 69,469 · free 26,731 (illustrative split of Oct)
+    const W = 276, segs = [[30000,'var(--p-on-deep-soft)',.9],[69469,'var(--p-flow2)',1],[26731,'var(--p-flow)',1]], tot = 126200;
+    let x = 0; const paths = segs.map(([v, c, o], k) => { const w = v / tot * W, y0 = 8 + k * 2;
+      const p = `M${x.toFixed(1)} 23 C ${(x + w * .35).toFixed(1)} ${y0} ${(x + w * .65).toFixed(1)} ${46 - y0} ${(x + w).toFixed(1)} 23`;
+      const r = `<rect class="rb" x="${x.toFixed(1)}" y="12" width="${(w - 3).toFixed(1)}" height="22" rx="11" fill="${c}" opacity="${o}"/>`; x += w; return r; }).join('');
+    return `<svg class="ribbon" viewBox="0 0 ${W} 46" role="img" aria-label="October income ₹1,26,200: set aside ₹30,000, spent ₹69,469, free ₹26,731"><path d="M0 23 C 40 4 70 42 110 23 S 190 4 ${W} 23" stroke="var(--p-on-deep-soft)" stroke-opacity=".25" fill="none" stroke-width="1.5"/>${paths}</svg>`;
+  };
+  const currentHome = `<div class="body">${topHome}
+    <div><div class="lbl">Saturday, 10 Oct</div><div style="font-size:22px;font-weight:700;letter-spacing:-.01em">Good morning, Aarav</div></div>
+    <div class="hero"><div class="k">Available to spend</div><div class="big fig">${odo(72932)}</div>${ribbon()}
+      <div class="legend"><span>Set aside<b class="fig">₹30,000</b></span><span>Spent<b class="fig">₹69,469</b></span><span>Free<b class="fig">₹26,731</b></span></div></div>
+    <div class="attn"><span class="tile" style="background:var(--p-brand-soft);color:var(--p-over)">${ic('film')}</span><div class="grow"><div style="font-weight:600">Entertainment is over by <span class="fig neg">₹350</span></div><div class="lbl">₹2,350 of ₹2,000 · 22 days left</div></div>${ic('chev','sm')}</div>
+    <div class="sec"><h4>Coming up</h4><span>7 days</span></div>
+    <div class="panel">
+      <div class="row"><span class="tile">${ic('car')}</span><div class="grow"><div class="t">Car loan EMI</div><div class="s">Tue, 13 Oct · Axis</div></div><span class="a fig">₹18,450</span></div>
+      <div class="row"><span class="tile">${ic('film')}</span><div class="grow"><div class="t">Netflix</div><div class="s">Fri, 16 Oct · HDFC Millennia</div></div><span class="a fig">₹649</span></div>
+    </div></div>${nav('home')}`;
+  const currentAct = `<div class="body">
+    <div class="topbar"><div style="font-size:22px;font-weight:700">Activity</div><div class="acts"><span class="ib">${ic('search')}</span><span class="ib">${ic('sliders')}</span></div></div>
+    <div class="row" style="justify-content:space-between"><span class="ib">${ic('chevl')}</span><b>October 2026</b><span class="ib" style="opacity:.35">${ic('chev')}</span></div>
+    <div class="panel" style="padding:12px"><div style="display:flex;gap:16px"><div class="grow"><div class="lbl">In</div><div class="fig pos" style="font-size:20px;font-weight:650">+₹1,26,200</div></div><div class="grow"><div class="lbl">Out</div><div class="fig" style="font-size:20px;font-weight:650">₹69,469</div></div></div>
+      <div class="bar" style="margin-top:10px;height:8px"><i class="grow-bar" style="width:55%;background:var(--p-ink)"></i><i class="grow-bar" style="left:55%;width:45%;background:var(--p-flow)"></i></div>
+      <div class="lbl" style="margin-top:6px">Kept <b class="fig" style="color:var(--p-ink)">₹56,731</b>, 45% of what came in</div></div>
+    ${tx.map(g => `<div class="daygroup"><span>${g.day}</span><span class="fig">−₹${inr(g.total)}</span></div><div class="panel">${g.items.map(x => `<div class="row"><span class="tile">${ic(x.i)}</span><div class="grow"><div class="t">${x.t}</div><div class="s">${x.s}</div></div>${amt(x)}</div>`).join('')}</div>`).join('')}
+    </div>${nav('act')}`;
+  const currentAdd = `<div class="body" style="background:var(--p-surface);border-radius:24px 24px 0 0;margin-top:20px;padding-top:8px;gap:12px">
+    <div class="sheet-grab"></div>
+    <div class="topbar"><div class="chips"><span class="chip on">Expense</span><span class="chip">Income</span></div><span class="ib">${ic('x')}</span></div>
+    <div class="amt-display fig">₹480</div>
+    <div class="chips" style="justify-content:center">${cats.map(([i,l],k) => `<span class="chip ${k===0?'on':''}">${ic(i,'sm')}${l}</span>`).join('')}</div>
+    <div class="panel" style="padding:2px 12px"><div class="row" style="padding:8px 0;border-bottom:1px solid var(--p-line)"><span class="tile" style="width:30px;height:30px">${ic('card','sm')}</span><div class="grow"><div class="t">SBI ••4821</div></div><span class="lbl">Today</span>${ic('chev','sm')}</div>
+      <div class="row" style="padding:8px 0"><div class="grow lbl">More details: channel, paid to, note</div>${ic('chev','sm')}</div></div>
+    ${keypad}<button class="btn">Save expense</button><div style="height:6px"></div></div>`;
+
+  /* ---------------- Bahi ---------------- */
+  const bahiHome = `<div class="body">${topHome}
+    <h5>Namaste, Aarav</h5>
+    <div class="hero"><div class="k">Available to spend · Sat 10 Oct</div><div class="big fig">${odo(72932)}</div>
+      <div class="split"><span>In accounts<b class="fig">₹6,26,932</b></span><span>Set aside<b class="fig">₹5,54,000</b></span><span>Card owed<b class="fig">₹8,116</b></span></div></div>
+    <div class="sec"><h4>This month's budgets</h4><span>₹37,110 left</span></div>
+    ${[['film','Entertainment',2350,2000,'over'],['bag','Shopping',5420,6000,'near'],['food','Food & Dining',2685,7000,'ok']].map(([i,l,s,m,st]) => `<div class="budget"><div class="row"><span class="tile">${ic(i,'sm')}</span><div class="grow"><div class="t">${l}</div></div><span class="a fig ${st==='over'?'neg':''}">₹${inr(s)}</span><span class="lbl fig">/ ₹${inr(m)}</span></div>
+      <div class="bar"><i class="grow-bar" style="width:${Math.min(100,s/m*100)}%;background:${st==='over'?'var(--p-over)':st==='near'?'var(--p-marigold)':'var(--p-indigo)'}"></i></div></div>`).join('')}
+    <div class="row" style="background:var(--p-mari-soft);border-radius:12px;padding:10px 12px"><div class="grow"><div class="t" style="color:var(--p-mari-ink)">Ramesh has your ₹1,000</div><div class="s" style="color:var(--p-mari-ink)">40 days so far</div></div>${ic('chev','sm')}</div>
+    </div>${nav('home')}`;
+  const bahiAct = `<div class="body">
+    <div class="topbar"><h5>Hisaab</h5><div class="acts"><span class="ib">${ic('search')}</span><span class="ib">${ic('sliders')}</span></div></div>
+    <div class="chips"><span class="chip on">October</span><span class="chip">Expenses</span><span class="chip">Income</span><span class="chip">UPI</span></div>
+    <div class="row" style="gap:10px"><div class="grow budget" style="gap:2px"><span class="lbl">Aaya (in)</span><span class="fig pos" style="font-size:22px;font-weight:700;font-stretch:85%">+₹1,26,200</span></div><div class="grow budget" style="gap:2px"><span class="lbl">Gaya (out)</span><span class="fig" style="font-size:22px;font-weight:700;font-stretch:85%">₹69,469</span></div></div>
+    <div class="khata">${tx.map(g => `<div class="kh"><div class="day">${g.d}<small>${g.w}</small></div><div class="en"><div class="tot fig">Spent ₹${inr(g.total)}</div>${g.items.map(x => `<div class="row"><div class="grow"><div class="t">${x.t}</div><div class="s">${x.s}</div></div>${amt(x)}</div>`).join('')}</div></div>`).join('')}</div>
+    <div class="lbl" style="text-align:center">Kept <b class="fig" style="color:var(--p-ink)">₹56,731</b> · <span class="tag">45% saved</span></div>
+    </div>${nav('act')}`;
+  const bahiAdd = `<div class="body" style="background:var(--p-surface);border-radius:24px 24px 0 0;margin-top:20px;padding-top:8px;gap:12px;position:relative">
+    <div class="sheet-grab"></div>
+    <div class="topbar"><h5>Kharcha</h5><span class="ib">${ic('x')}</span></div>
+    <div class="amt-display fig">₹480</div>
+    <div class="hindi lbl" style="text-align:center">“Truffles pe 480 diye” — or just type</div>
+    <div class="chips" style="justify-content:center">${cats.map(([i,l],k) => `<span class="chip ${k===0?'on':''}">${ic(i,'sm')}${l}</span>`).join('')}</div>
+    <div class="row" style="border:1px dashed var(--p-line-strong);border-radius:12px;padding:8px 10px"><span>${ic('card','sm')}</span><div class="grow t">SBI ••4821</div><span class="lbl">Today · UPI</span>${ic('chev','sm')}</div>
+    ${keypad}<button class="btn" data-stamp>Save expense</button><div style="height:6px"></div>
+    <div class="stamp" aria-hidden="true">Recorded<br><span class="fig">₹480</span></div></div>`;
+
+  /* ---------------- Monsoon ---------------- */
+  // cumulative daily spend for Oct 1-10 (₹), last month same days, plan pace
+  const thisM = [21000, 21480, 23900, 25210, 27300, 49800, 51650, 52603, 53081, 55478];
+  const lastM = [19500, 20800, 22100, 24900, 26200, 47300, 48900, 50200, 52800, 54100, 55900, 57200, 58400, 60100, 61800, 63000, 64200, 65900, 66800, 68300, 69900, 71000, 72600, 73800, 74900, 76300, 77400, 78900, 80100, 81200, 82500];
+  const pulse = () => { const W = 300, H = 150, max = 90000, X = (d) => 8 + d / 30 * (W - 16), Y = (v) => H - 18 - v / max * (H - 34);
+    const line = (arr) => arr.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(' ');
+    const area = line(thisM) + ` L${X(9).toFixed(1)} ${H - 18} L${X(0)} ${H - 18} Z`;
+    return `<svg class="pulse" viewBox="0 0 ${W} ${H}" role="img" aria-label="October spend so far ₹55,478 against last month ₹54,100 by the same day; plan ₹86,000">
+      <defs><linearGradient id="pg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--p-rain)" stop-opacity=".35"/><stop offset="1" stop-color="var(--p-rain)" stop-opacity="0"/></linearGradient></defs>
+      <line x1="8" x2="${W - 8}" y1="${H - 18}" y2="${H - 18}" stroke="var(--p-line)"/>
+      <line x1="${X(0)}" y1="${Y(0)}" x2="${X(30)}" y2="${Y(86000)}" stroke="var(--p-saffron)" stroke-dasharray="3 4" stroke-width="1.5"/>
+      <path d="${line(lastM)}" fill="none" stroke="var(--p-soft)" stroke-opacity=".55" stroke-width="1.5"/>
+      <path d="${area}" fill="url(#pg)" class="pa"/>
+      <path d="${line(thisM)}" fill="none" stroke="var(--p-rain)" stroke-width="2.5" stroke-linecap="round" class="pl"/>
+      <circle cx="${X(9)}" cy="${Y(thisM[9])}" r="4" fill="var(--p-rain)" class="pd"/>
+      <line class="cur" x1="0" x2="0" y1="10" y2="${H - 18}" stroke="var(--p-ink)" stroke-opacity=".5" visibility="hidden"/>
+      <text x="8" y="${H - 4}">1 Oct</text><text x="${X(9) - 10}" y="${H - 4}">Today</text><text x="${W - 36}" y="${H - 4}">31 Oct</text></svg>`;
+  };
+  const monsoonHome = `<div class="body">${topHome}
+    <div class="card" style="display:flex;flex-direction:column;gap:6px"><div class="lbl">Available to spend</div><div class="big fig">${odo(72932)}</div>
+      <div class="readout"><span><span class="dot" style="background:var(--p-rain)"></span> Spent <b class="fig rd-v">₹55,478</b></span><span class="rd-d">by 10 Oct</span></div>
+      ${pulse()}
+      <div class="readout"><span><span class="dot" style="background:var(--p-soft)"></span> Sept <b class="fig">₹54,100</b></span><span><span class="dot" style="background:var(--p-saffron)"></span> Plan <b class="fig">₹86,000</b></span></div></div>
+    <div class="sec"><h4>Needs a look</h4><span>2</span></div>
+    <div class="card row" style="padding:12px"><span class="tile" style="color:var(--p-over)">${ic('film')}</span><div class="grow"><div class="t">Entertainment over by <span class="fig neg">₹350</span></div><div class="s">₹2,350 of ₹2,000</div></div>${ic('chev','sm')}</div>
+    <div class="card row" style="padding:12px"><span class="tile" style="color:var(--p-near)">${ic('bag')}</span><div class="grow"><div class="t">Shopping runs out around 12 Oct</div><div class="s">₹580 left of ₹6,000</div></div>${ic('chev','sm')}</div>
+    </div>${nav('home')}`;
+  const monsoonAct = `<div class="body">
+    <div class="topbar"><h5>Activity</h5><div class="acts"><span class="ib">${ic('search')}</span><span class="ib">${ic('sliders')}</span></div></div>
+    <div class="seg"><span>Week</span><span class="on">October</span><span>Year</span></div>
+    <div class="card"><div class="catbars">${[['Rent & Housing',27788,'var(--p-lilac)'],['EMI & Loans',12504,'var(--p-rain)'],['Groceries',3969,'var(--p-jade)'],['Transport',2966,'var(--p-saffron)'],['Food & Dining',2685,'var(--p-rose)']].map(([l,v,c]) => `<div><div class="readout" style="margin-bottom:4px"><span style="color:var(--p-ink);font-weight:600">${l}</span><b class="fig">₹${inr(v)}</b></div><div class="bar"><i class="grow-bar" style="width:${(v/27788*100).toFixed(0)}%;background:${c}"></i></div></div>`).join('')}</div></div>
+    ${tx.slice(0,2).map(g => `<div class="readout" style="padding:0 4px"><span>${g.day}</span><span class="fig">−₹${inr(g.total)}</span></div><div class="card" style="padding:6px 12px">${g.items.map(x => `<div class="row" style="padding:7px 0"><span class="tile">${ic(x.i)}</span><div class="grow"><div class="t">${x.t}</div><div class="s">${x.s}</div></div>${amt(x)}</div>`).join('')}</div>`).join('')}
+    </div>${nav('act')}`;
+  const monsoonAdd = `<div class="body" style="background:var(--p-surface);border-radius:28px 28px 0 0;margin-top:20px;padding-top:8px;gap:12px">
+    <div class="sheet-grab"></div>
+    <div class="seg"><span class="on">Expense</span><span>Income</span><span>Transfer</span></div>
+    <div class="amt-display fig">₹480</div>
+    <div class="chips" style="justify-content:center">${cats.map(([i,l],k) => `<span class="chip ${k===0?'on':''}">${ic(i,'sm')}${l}</span>`).join('')}</div>
+    <div class="row" style="background:var(--p-raised);border-radius:16px;padding:10px 12px"><span>${ic('card','sm')}</span><div class="grow t">SBI ••4821</div><span class="lbl">Today</span><span class="lbl">More</span></div>
+    ${keypad}<div class="row" style="gap:8px"><button class="btn ghost" style="width:56px;flex:0 0 56px" aria-label="Speak instead">${ic('mic')}</button><button class="btn">Save expense</button></div><div style="height:6px"></div></div>`;
+
+  const dirs = {
+    current: ['d-current', 'light', [currentHome, currentAct, currentAdd]],
+    bahi: ['d-bahi', 'light', [bahiHome, bahiAct, bahiAdd]],
+    monsoon: ['d-monsoon', 'dark', [monsoonHome, monsoonAct, monsoonAdd]],
+  };
+  for (const [id, [cls, mode, screens]] of Object.entries(dirs)) {
+    document.getElementById('phones-' + id).innerHTML =
+      screens.map((s, k) => phone(cls, mode, s, ['Home', 'Activity', 'Add expense'][k])).join('');
+  }
+
+  // Theme toggles per direction
+  document.querySelectorAll('.controls').forEach((ctl) => {
+    const id = ctl.dataset.for, band = document.getElementById(id);
+    ctl.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => {
+      ctl.querySelectorAll('[data-mode]').forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+      band.querySelectorAll('.scr').forEach((s) => (s.dataset.mode = b.dataset.mode));
+    }));
+    ctl.querySelector('[data-play]').addEventListener('click', () => play(band));
+  });
+
+  // Motion demos: odometer roll, bar grow, chart draw-in, stamp
+  const spring = 'cubic-bezier(.2,.9,.25,1.06)';
+  function play(band) {
+    if (reduce) return;
+    band.querySelectorAll('.odo').forEach((o) => {
+      const cols = [...o.querySelectorAll('.d > span')];
+      cols.forEach((c) => { c.style.transition = 'none'; c.style.transform = 'translateY(0)'; });
+      void o.offsetWidth;
+      cols.forEach((c, k) => {
+        c.style.transition = `transform 620ms ${spring} ${(cols.length - k) * 45}ms`; c.style.transform = c.dataset.to; });
+    });
+    band.querySelectorAll('.grow-bar').forEach((b, k) => { b.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: 600, delay: k * 24, easing: 'cubic-bezier(.2,0,0,1)', fill: 'backwards' }); });
+    band.querySelectorAll('.rb').forEach((r, k) => { r.animate([{ transform: 'scaleX(0)', opacity: 0 }, { transform: 'scaleX(1)', opacity: 1 }], { duration: 700, delay: k * 160, easing: 'cubic-bezier(.2,0,0,1)', fill: 'backwards' }); r.style.transformOrigin = `${r.getAttribute('x')}px 23px`; });
+    band.querySelectorAll('.pl').forEach((p) => { const L = p.getTotalLength(); p.animate([{ strokeDasharray: L, strokeDashoffset: L }, { strokeDasharray: L, strokeDashoffset: 0 }], { duration: 900, easing: 'cubic-bezier(.2,0,0,1)' }); });
+    band.querySelectorAll('.pa,.pd').forEach((p) => p.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 500, delay: 700, fill: 'backwards' }));
+    band.querySelectorAll('.stamp').forEach((s) => { s.classList.remove('go'); void s.offsetWidth; s.classList.add('go'); });
+  }
+  // remember each odometer column's resting transform for replays
+  document.querySelectorAll('.odo .d > span').forEach((c) => { c.dataset.to = c.style.transform; });
+  document.querySelectorAll('[data-stamp]').forEach((b) => b.addEventListener('click', () => {
+    const s = b.parentElement.querySelector('.stamp'); s.classList.remove('go'); void s.offsetWidth; s.classList.add('go'); }));
+
+  // Monsoon pulse scrubbing
+  document.querySelectorAll('.pulse').forEach((svg) => {
+    const card = svg.closest('.card'), v = card.querySelector('.rd-v'), d = card.querySelector('.rd-d'), cur = svg.querySelector('.cur');
+    const move = (e) => { const r = svg.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * 300;
+      const day = Math.max(0, Math.min(9, Math.round((x - 8) / (284 / 30))));
+      const px = 8 + day / 30 * 284; cur.setAttribute('x1', px); cur.setAttribute('x2', px); cur.setAttribute('visibility', 'visible');
+      v.textContent = '₹' + inr(thisM[day]); d.textContent = `by ${day + 1} Oct`; };
+    svg.addEventListener('pointermove', move); svg.addEventListener('pointerdown', move);
+    svg.addEventListener('pointerleave', () => { cur.setAttribute('visibility', 'hidden'); v.textContent = '₹55,478'; d.textContent = 'by 10 Oct'; });
+  });
+})();
+</script>

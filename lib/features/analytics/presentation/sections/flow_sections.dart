@@ -10,6 +10,7 @@ import '../../../../shared/presentation/transaction_row.dart';
 import '../../application/analytics_providers.dart';
 import '../insight_charts.dart';
 import '../insight_widgets.dart';
+import '../spend_pulse.dart';
 
 String _window(InsightsData d) => d.windowMonths == 1 ? 'this month' : 'the last ${d.windowMonths} months';
 
@@ -68,6 +69,7 @@ List<Widget> spendingSection(BuildContext context, InsightsData data) {
         ]),
       ],
     ),
+    if (single) SpendPulseCard(month: data.filter.month),
     if (single) _DayByDay(data: data) else _MonthByMonth(data: data),
     _Weekdays(data: data),
     if (data.topExpenses.isNotEmpty) _BiggestExpenses(data: data),
@@ -93,7 +95,7 @@ class _DayByDay extends StatelessWidget {
           : 'Each bar is one day. You had $noSpend no-spend day${noSpend == 1 ? '' : 's'}.',
       legend: [
         LegendEntry('Normal day', c.lineStrong),
-        LegendEntry('Above average', c.ink),
+        LegendEntry('Above average', c.brand),
         LegendEntry('Your average', c.inkSoft, dashed: true),
       ],
       howCalculated: 'Each bar adds up the completed expenses on that day, including EMIs and settlements. '
@@ -122,7 +124,7 @@ class _MonthByMonth extends StatelessWidget {
       subtitle: 'Spending each month, ${_window(data)}. Touch a bar for the amount.',
       legend: [
         LegendEntry('Usual month', c.lineStrong),
-        LegendEntry('Pricier month', c.ink),
+        LegendEntry('Pricier month', c.brand),
         LegendEntry('Your average', c.inkSoft, dashed: true),
       ],
       howCalculated: 'Each bar is the total of completed expenses in that month. The average uses months that '

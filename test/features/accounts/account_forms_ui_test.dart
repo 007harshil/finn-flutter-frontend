@@ -91,6 +91,10 @@ void main() {
       await tester.pumpAndSettle();
 
       await _pickAccount(tester, 'Paid from', SeedAccountIds.cash);
+      // Channel lives under "More details".
+      await tester.ensureVisible(find.byKey(const ValueKey('tx-more-details')));
+      await tester.tap(find.byKey(const ValueKey('tx-more-details')));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const ValueKey('channel-Tap / swipe')));
       await tester.tap(find.byKey(const ValueKey('channel-Tap / swipe')));
       await tester.pumpAndSettle();
@@ -113,6 +117,10 @@ void main() {
       await tester.tap(find.byKey(const ValueKey(SeedCategoryIds.food)));
       await tester.pumpAndSettle();
 
+      // Channel lives under "More details".
+      await tester.ensureVisible(find.byKey(const ValueKey('tx-more-details')));
+      await tester.tap(find.byKey(const ValueKey('tx-more-details')));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const ValueKey('channel-other')));
       await tester.tap(find.byKey(const ValueKey('channel-other')));
       await tester.pumpAndSettle();
@@ -128,6 +136,10 @@ void main() {
     testWidgets('a channel over 30 characters is flagged', (tester) async {
       await _sized(tester);
       await env.pumpWidget(tester, const TransactionFormSheet());
+      await tester.pumpAndSettle();
+      // Channel lives under "More details".
+      await tester.ensureVisible(find.byKey(const ValueKey('tx-more-details')));
+      await tester.tap(find.byKey(const ValueKey('tx-more-details')));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const ValueKey('channel-other')));
       await tester.tap(find.byKey(const ValueKey('channel-other')));

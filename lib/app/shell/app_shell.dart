@@ -1,6 +1,3 @@
-import 'dart:math' as math;
-import 'dart:ui' show ImageFilter, lerpDouble;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,38 +8,39 @@ import '../../agent/agent.dart' show AgentModePanel, AgentOrb, agentModeProvider
 import '../../design_system/design_system.dart';
 import '../../features/accounts/presentation/transfer_form_sheet.dart';
 import '../../features/more/presentation/more_drawer.dart';
-import '../../kit/kit.dart' show FinnMenuItem, showFinnActionMenu;
+import '../../kit/kit.dart' show FinnMenuItem, LedgerContext, Rad, showFinnActionMenu;
 import '../di/core_providers.dart';
 import '../di/data_providers.dart';
 import '../router/routes.dart';
 import 'app_drawer.dart';
 
 class _Tab {
-  const _Tab(this.label, this.icon, this.activeIcon);
+  const _Tab(this.label, this.icon);
   final String label;
   final IconData icon;
-  final IconData activeIcon;
 }
 
 /// Tabs, by shell branch index. Branch 4 (`/more`: profile, loans,
 /// settings…) has no tab: it opens from the side drawer.
 const _tabs = [
-  _Tab('Home', LucideIcons.layoutDashboard, LucideIcons.layoutDashboard),
-  _Tab('Activity', LucideIcons.arrowLeftRight, LucideIcons.arrowLeftRight),
-  _Tab('Budgets', LucideIcons.chartPie, LucideIcons.chartPie),
-  _Tab('Goals', LucideIcons.target, LucideIcons.target),
+  _Tab('Home', LucideIcons.house),
+  _Tab('Activity', LucideIcons.receiptText),
+  _Tab('Budgets', LucideIcons.chartPie),
+  _Tab('Goals', LucideIcons.target),
 ];
 
-/// The bar has five equal slots: Home, Activity, Agent, Budgets, Goals.
+/// The bar has five equal slots: Home, Activity, Add, Budgets, Goals.
 const _slotCount = 5;
-const _agentSlot = 2;
+const _addSlot = 2;
 
-/// Bar slot of tab (branch) [i]; the agent takes the centre slot.
-int _slotOf(int i) => i < _agentSlot ? i : i + 1;
+/// Tab (branch) shown in bar slot [s]; the add button takes the centre.
+int _tabOf(int s) => s < _addSlot ? s : s - 1;
 
-/// Application shell: floating bottom navigation on phones, a navigation rail on
-/// wide screens, the side drawer (menu), the persistent "add transaction"
-/// action and the full-screen agent experience above everything.
+/// Application shell: a solid bottom navigation bar on phones (with "add"
+/// at its centre, always one thumb-tap away), a navigation rail on wide
+/// screens, the side drawer (menu) and the full-screen agent experience
+/// above everything. The agent opens from the FiNN mark in each tab's
+/// header (and from the rail).
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.shell});
 
@@ -53,63 +51,54 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
-  final _chromeVisible = ValueNotifier<bool>(true);
   final _scaffold = GlobalKey<ScaffoldState>();
+
+  bool get _haptics => ref.read(settingsProvider).hapticsEnabled;
 
   void _openDrawer() {
     if (ref.read(agentModeProvider)) return;
-    if (ref.read(settingsProvider).hapticsEnabled) HapticFeedback.selectionClick();
+    if (_haptics) HapticFeedback.selectionClick();
     FocusManager.instance.primaryFocus?.unfocus();
     _scaffold.currentState?.openDrawer();
   }
 
-  @override
-  void dispose() {
-    _chromeVisible.dispose();
-    super.dispose();
-  }
-
   void _select(int index) {
     if (ref.read(agentModeProvider)) return;
-    if (ref.read(settingsProvider).hapticsEnabled) HapticFeedback.selectionClick();
-    _chromeVisible.value = true;
+    if (_haptics) HapticFeedback.selectionClick();
     widget.shell.goBranch(index, initialLocation: index == widget.shell.currentIndex);
   }
 
   void _toggleAgent() {
-    if (ref.read(settingsProvider).hapticsEnabled) HapticFeedback.mediumImpact();
-    _chromeVisible.value = true;
+    if (_haptics) HapticFeedback.mediumImpact();
     FocusManager.instance.primaryFocus?.unfocus();
     ref.read(agentModeProvider.notifier).toggle();
   }
 
-  /// Scroll distance travelled in the current direction (+ down, - up).
-  double _scrollRun = 0;
+  void _add() {
+    if (ref.read(agentModeProvider)) return;
+    context.push(AppRoutes.newTransaction());
+  }
 
-  /// Distance in one direction that toggles the bar; small enough to feel
-  /// instant, large enough to ignore jitter.
-  static const _toggleDistance = 8.0;
-
-  bool _onScroll(ScrollUpdateNotification n) {
-    final m = n.metrics;
-    if (n.depth != 0 || m.axis != Axis.vertical) return false;
-    if (m.pixels <= m.minScrollExtent) {
-      _scrollRun = 0;
-      _chromeVisible.value = true;
-      return false;
+  Future<void> _addMenu() async {
+    if (ref.read(agentModeProvider)) return;
+    final pick = await showFinnActionMenu<String>(
+      context,
+      title: 'Add',
+      items: const [
+        FinnMenuItem(value: 'transaction', label: 'Add transaction', icon: LucideIcons.plus),
+        FinnMenuItem(value: 'transfer', label: 'Transfer', icon: LucideIcons.arrowLeftRight),
+        FinnMenuItem(value: 'agent', label: 'Ask FiNN', icon: LucideIcons.sparkles),
+      ],
+    );
+    if (!mounted) return;
+    switch (pick) {
+      case 'transaction':
+        _add();
+      case 'transfer':
+        showTransferSheet(context);
+      case 'agent':
+        _toggleAgent();
     }
-    // Ignore bottom overscroll bounce, which reports upward deltas.
-    if (m.pixels >= m.maxScrollExtent) return false;
-    final delta = n.scrollDelta ?? 0;
-    if (delta == 0) return false;
-    if (delta.sign != _scrollRun.sign) _scrollRun = 0;
-    _scrollRun += delta;
-    if (_scrollRun > _toggleDistance) {
-      _chromeVisible.value = false;
-    } else if (_scrollRun < -_toggleDistance) {
-      _chromeVisible.value = true;
-    }
-    return false;
   }
 
   @override
@@ -119,26 +108,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     final wide = MediaQuery.sizeOf(context).width >= 840;
     final agentMode = ref.watch(agentModeProvider);
     final listening = ref.watch(voiceInputProvider.select((v) => v.phase == VoicePhase.listening));
-    final showFab = (index == 0 || index == 1) && !agentMode;
     final unread = ref.watch(unreadAlertCountProvider);
-
-    final body = NotificationListener<ScrollUpdateNotification>(onNotification: _onScroll, child: widget.shell);
-
-    final fab = showFab
-        ? ValueListenableBuilder<bool>(
-            valueListenable: _chromeVisible,
-            builder: (context, visible, _) => AnimatedSlide(
-              offset: visible ? Offset.zero : const Offset(0, 2),
-              duration: context.motion.normal,
-              curve: Curves2.standard,
-              child: AnimatedOpacity(
-                opacity: visible ? 1 : 0,
-                duration: context.motion.fast,
-                child: _AddFab(enabled: visible),
-              ),
-            ),
-          )
-        : null;
 
     return PopScope(
       canPop: index == 0 && !agentMode,
@@ -152,6 +122,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       },
       child: AppDrawerScope(
         open: _openDrawer,
+        openAgent: _toggleAgent,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -163,7 +134,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                 drawer: const MoreDrawer(),
                 drawerEnableOpenDragGesture: !agentMode,
                 drawerScrimColor: c.scrim,
-                floatingActionButton: fab,
+                floatingActionButton: wide ? _RailAddButton(onTap: _add, onLongPress: _addMenu) : null,
                 body: wide
                     ? Row(
                         children: [
@@ -189,14 +160,14 @@ class _AppShellState extends ConsumerState<AppShell> {
                             ),
                             labelType: NavigationRailLabelType.all,
                             backgroundColor: c.surface,
-                            indicatorColor: c.surfaceMuted,
+                            indicatorColor: context.ink.brandSoft,
                             selectedIconTheme: IconThemeData(color: c.primary),
                             unselectedIconTheme: IconThemeData(color: c.textSecondary),
-                            selectedLabelTextStyle: context.text.micro.copyWith(
+                            selectedLabelTextStyle: context.type.small.copyWith(
                               color: c.primary,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
-                            unselectedLabelTextStyle: context.text.micro.copyWith(color: c.textSecondary),
+                            unselectedLabelTextStyle: context.type.small,
                             destinations: [
                               for (var i = 0; i < _tabs.length; i++)
                                 NavigationRailDestination(
@@ -207,26 +178,18 @@ class _AppShellState extends ConsumerState<AppShell> {
                             ],
                           ),
                           VerticalDivider(width: 1, color: c.border),
-                          Expanded(child: ResponsiveCenter(child: body)),
+                          Expanded(child: ResponsiveCenter(child: widget.shell)),
                         ],
                       )
-                    : body,
-                // Content scrolls behind the floating, translucent bar.
-                extendBody: !wide,
+                    : widget.shell,
                 bottomNavigationBar: wide
                     ? null
-                    : ValueListenableBuilder<bool>(
-                        valueListenable: _chromeVisible,
-                        builder: (context, visible, _) => _FloatingNavBar(
-                          index: index,
-                          onSelect: _select,
-                          unread: unread,
-                          collapsed: !visible && !agentMode,
-                          onExpand: () => _chromeVisible.value = true,
-                          agentMode: agentMode,
-                          listening: listening,
-                          onAgent: _toggleAgent,
-                        ),
+                    : _BottomBar(
+                        index: index,
+                        unread: unread,
+                        onSelect: _select,
+                        onAdd: _add,
+                        onAddLongPress: _addMenu,
                       ),
               ),
             ),
@@ -240,270 +203,190 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget _badged(Widget icon, int count) => count == 0 ? icon : CountBadge(count: count, child: icon);
 }
 
-/// Geometry of the floating bar at a given collapse progress
-/// (0 = expanded, 1 = compact). The active tab sits in a raised bubble
-/// that the bar's outline flows around with smooth fillets.
-class _NavMetrics {
-  _NavMetrics(double t)
-    : barTop = lerpDouble(20, 12, t)!,
-      barHeight = lerpDouble(64, 48, t)!,
-      bubble = lerpDouble(50, 38, t)!,
-      ring = lerpDouble(6, 4, t)!,
-      fillet = lerpDouble(10, 8, t)!;
-
-  /// Distance from the top of the raised bump to the top of the bar body.
-  final double barTop;
-  final double barHeight;
-  final double bubble;
-
-  /// Gap between the bubble and the bump outline around it.
-  final double ring;
-  final double fillet;
-
-  static final expanded = _NavMetrics(0);
-
-  double get height => barTop + barHeight;
-  double get bumpRadius => bubble / 2 + ring;
-
-  /// Pill-shaped bar unioned with a bump of radius r (top at y = 0) for
-  /// each `(cx, r)` in [bumps], joined by concave fillets so the outline
-  /// reads as one continuous surface.
-  Path shape(double width, List<(double, double)> bumps) {
-    var path = Path()..addRRect(RRect.fromLTRBR(0, barTop, width, height, Radius.circular(barHeight / 2)));
-    for (final (cx, r) in bumps) {
-      path = Path.combine(PathOperation.union, path, _bump(cx, r));
-    }
-    return path;
-  }
-
-  Path _bump(double cx, double r) {
-    final cy = r;
-    final f = fillet;
-    final dy = cy - (barTop - f);
-    final dx = math.sqrt(math.pow(r + f, 2) - dy * dy);
-    final k = r / (r + f);
-    final left = Offset(cx - dx * k, cy - dy * k);
-    final right = Offset(cx + dx * k, cy - dy * k);
-    final bump = Path()
-      ..moveTo(cx - dx, barTop)
-      ..arcToPoint(left, radius: Radius.circular(f), clockwise: false)
-      ..arcToPoint(right, radius: Radius.circular(r))
-      ..arcToPoint(Offset(cx + dx, barTop), radius: Radius.circular(f), clockwise: false)
-      ..lineTo(cx + dx, barTop + barHeight / 2)
-      ..lineTo(cx - dx, barTop + barHeight / 2)
-      ..close();
-    return bump;
-  }
-}
-
-/// Floating, frosted bottom navigation with five equal slots: Home,
-/// Activity, the agent orb at the true centre, Budgets and Goals. While
-/// content scrolls down it shrinks into a compact pill (labels hidden) so
-/// it stays out of the way; scrolling up or tapping it restores the bar.
-class _FloatingNavBar extends StatelessWidget {
-  const _FloatingNavBar({
+/// Solid bottom navigation with five equal slots: Home, Activity, a teal
+/// "add" button at the true centre, Budgets and Goals. Labels are always
+/// shown and the bar never hides, so it is always where people expect it.
+class _BottomBar extends StatelessWidget {
+  const _BottomBar({
     required this.index,
-    required this.onSelect,
     required this.unread,
-    required this.collapsed,
-    required this.onExpand,
-    required this.agentMode,
-    required this.listening,
-    required this.onAgent,
+    required this.onSelect,
+    required this.onAdd,
+    required this.onAddLongPress,
   });
 
   /// Current shell branch; beyond the tabs (drawer pages) no tab is active.
   final int index;
-  final ValueChanged<int> onSelect;
   final int unread;
-  final bool collapsed;
-  final VoidCallback onExpand;
-  final bool agentMode;
-  final bool listening;
-  final VoidCallback onAgent;
+  final ValueChanged<int> onSelect;
+  final VoidCallback onAdd;
+  final VoidCallback onAddLongPress;
 
-  static const _maxWidth = 520.0;
-  static const _compactWidthFactor = 0.72;
-  static const _bottomGap = Space.x3;
-
-  /// Height reserved at the bottom of the screen for the bar.
-  static double slotHeight(double bottomInset) => _NavMetrics.expanded.height + _bottomGap + bottomInset;
-
-  bool get _hasActiveTab => index < _tabs.length;
+  static const height = 68.0;
 
   @override
   Widget build(BuildContext context) {
-    final motion = context.motion;
+    final c = context.ink;
     final inset = MediaQuery.paddingOf(context).bottom;
-    // Fixed slot height keeps the body's bottom padding stable while the
-    // bar animates, so scrolling content never relayouts mid-animation.
-    return SizedBox(
-      height: slotHeight(inset),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(Space.gutter, 0, Space.gutter, _bottomGap + inset),
-        child: LayoutBuilder(
-          builder: (context, box) {
-            final full = math.min(box.maxWidth, _maxWidth);
-            return TweenAnimationBuilder<double>(
-              tween: Tween(end: collapsed ? 1 : 0),
-              // Quick so the bar tracks the scroll direction immediately.
-              duration: motion.reduced ? Duration.zero : const Duration(milliseconds: 200),
-              curve: Curves2.standard,
-              builder: (context, t, _) => TweenAnimationBuilder<double>(
-                // With no active tab the bubble slides under the orb and fades.
-                tween: Tween(end: (_hasActiveTab ? _slotOf(index) : _agentSlot).toDouble()),
-                duration: motion.slow,
-                curve: Curves2.emphasized,
-                builder: (context, pos, _) => TweenAnimationBuilder<double>(
-                  tween: Tween(end: _hasActiveTab ? 1 : 0),
-                  duration: motion.normal,
-                  curve: Curves2.standard,
-                  builder: (context, presence, _) => Align(
-                    alignment: Alignment.bottomCenter,
-                    child: _bar(context, t, pos, presence, lerpDouble(full, full * _compactWidthFactor, t)!),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border(top: BorderSide(color: c.line)),
       ),
-    );
-  }
-
-  Widget _bar(BuildContext context, double t, double pos, double presence, double width) {
-    final c = context.colors;
-    final m = _NavMetrics(t);
-    final slot = width / _slotCount;
-    final cx = slot * (pos + 0.5);
-    final orbCx = slot * (_agentSlot + 0.5);
-    // The orb and the active bubble are the same size, in equal slots.
-    final shape = m.shape(width, [(cx, m.bumpRadius), (orbCx, m.bumpRadius)]);
-    final active = _hasActiveTab ? _tabs[index] : null;
-    return GestureDetector(
-      behavior: collapsed ? HitTestBehavior.opaque : HitTestBehavior.deferToChild,
-      onTap: collapsed ? onExpand : null,
-      child: IgnorePointer(
-        ignoring: collapsed,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: inset),
         child: SizedBox(
-          width: width,
-          height: m.height,
-          child: CustomPaint(
-            painter: _NavShadowPainter(shape, dark: c.isDark),
-            foregroundPainter: _NavOutlinePainter(shape, c.border),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(
-                  child: ClipPath(
-                    clipper: _PathClipper(shape),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                      child: ColoredBox(color: c.surface.withValues(alpha: c.isDark ? 0.7 : 0.76)),
+          height: height,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Row(
+                children: [
+                  for (var s = 0; s < _slotCount; s++)
+                    Expanded(
+                      child: s == _addSlot
+                          ? _AddButton(onTap: onAdd, onLongPress: onAddLongPress)
+                          : _NavTab(
+                              tab: _tabs[_tabOf(s)],
+                              selected: _tabOf(s) == index,
+                              badge: s == 0 ? unread : 0,
+                              onTap: () => onSelect(_tabOf(s)),
+                            ),
                     ),
-                  ),
-                ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: m.barTop,
-                  height: m.barHeight,
-                  child: Row(
-                    children: [
-                      for (var s = 0; s < _slotCount; s++)
-                        SizedBox(
-                          width: slot,
-                          child: s == _agentSlot
-                              ? _AgentNavLabel(collapse: t, active: agentMode)
-                              : _item(s < _agentSlot ? s : s - 1, t),
-                        ),
-                    ],
-                  ),
-                ),
-                if (active != null || presence > 0)
-                  Positioned(
-                    left: cx - m.bubble / 2,
-                    top: m.ring,
-                    width: m.bubble,
-                    height: m.bubble,
-                    child: IgnorePointer(
-                      ignoring: active == null,
-                      child: Opacity(
-                        opacity: presence.clamp(0.0, 1.0),
-                        child: _ActiveBubble(
-                          tab: active ?? _tabs.first,
-                          badge: index == 0 ? unread : 0,
-                          iconSize: lerpDouble(22, 18, t)!,
-                          onTap: () => onSelect(index),
-                        ),
-                      ),
-                    ),
-                  ),
-                // The agent orb, raised at the true centre.
-                Positioned(
-                  left: orbCx - m.bubble / 2,
-                  top: m.ring,
-                  width: m.bubble,
-                  height: m.bubble,
-                  child: _AgentNavButton(
-                    active: agentMode,
-                    listening: listening,
-                    size: m.bubble,
-                    onTap: onAgent,
-                    attentionKey: index,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
   }
-
-  Widget _item(int i, double t) =>
-      _NavItem(tab: _tabs[i], selected: i == index, badge: i == 0 ? unread : 0, collapse: t, onTap: () => onSelect(i));
 }
 
-/// The "Agent" caption under the raised orb, laid out exactly like a tab
-/// label so all five slots line up.
-class _AgentNavLabel extends StatelessWidget {
-  const _AgentNavLabel({required this.collapse, required this.active});
+/// One tab: icon in a soft teal pill when selected, label underneath.
+class _NavTab extends StatelessWidget {
+  const _NavTab({required this.tab, required this.selected, required this.onTap, this.badge = 0});
 
-  final double collapse;
-  final bool active;
+  final _Tab tab;
+  final bool selected;
+  final VoidCallback onTap;
+  final int badge;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final labelVisibility = 1 - collapse;
-    return IgnorePointer(
-      child: ExcludeSemantics(
-        child: Padding(
-          padding: EdgeInsets.only(top: Space.x1 * labelVisibility),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(height: lerpDouble(22, 20, collapse)),
-              ClipRect(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  heightFactor: labelVisibility,
-                  child: Opacity(
-                    opacity: labelVisibility,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 3),
-                      child: Text(
-                        active ? 'Close' : 'Agent',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.text.micro.copyWith(color: c.agentEnd, fontWeight: FontWeight.w900),
-                      ),
-                    ),
-                  ),
-                ),
+    final c = context.ink;
+    final t = context.type;
+    final motion = context.motion;
+    final color = selected ? c.brand : c.inkSoft;
+    Widget icon = Icon(tab.icon, size: 22, color: color);
+    if (badge > 0) icon = CountBadge(count: badge, child: icon);
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: badge > 0 ? '${tab.label}, $badge alerts' : tab.label,
+      excludeSemantics: true,
+      child: InkResponse(
+        onTap: onTap,
+        containedInkWell: true,
+        highlightShape: BoxShape.rectangle,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedContainer(
+              duration: motion.normal,
+              curve: motion.standard,
+              width: selected ? 56 : 40,
+              height: 30,
+              decoration: BoxDecoration(
+                color: selected ? c.brandSoft : Colors.transparent,
+                borderRadius: Rad.pill,
               ),
-            ],
+              alignment: Alignment.center,
+              child: icon,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              tab.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.small.copyWith(
+                fontSize: 12.5,
+                color: selected ? c.ink : c.inkSoft,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                fontVariations: [FontVariation.weight(selected ? 720 : 540)],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The centre "add" button: tap records a transaction, long-press offers
+/// a transfer or asking FiNN.
+class _AddButton extends ConsumerWidget {
+  const _AddButton({required this.onTap, required this.onLongPress});
+
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.ink;
+    return Center(
+      child: Tooltip(
+        message: 'Add transaction',
+        child: Semantics(
+          button: true,
+          label: 'Add transaction',
+          excludeSemantics: true,
+          child: PressableScale(
+            haptic: ref.watch(settingsProvider.select((s) => s.hapticsEnabled)),
+            onTap: onTap,
+            onLongPress: onLongPress,
+            child: Container(
+              width: 56,
+              height: 44,
+              decoration: BoxDecoration(
+                color: c.brand,
+                borderRadius: Rad.rMd,
+                boxShadow: c.isDark
+                    ? null
+                    : [BoxShadow(color: c.brand.withValues(alpha: 0.28), blurRadius: 10, offset: const Offset(0, 3))],
+              ),
+              child: Icon(LucideIcons.plus, color: c.onBrand, size: 26),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Add" on wide screens, where the rail replaces the bottom bar.
+class _RailAddButton extends StatelessWidget {
+  const _RailAddButton({required this.onTap, required this.onLongPress});
+
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ink;
+    return Tooltip(
+      message: 'Add transaction',
+      child: Semantics(
+        button: true,
+        label: 'Add transaction',
+        child: PressableScale(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Container(
+            width: Dimens.fabSize,
+            height: Dimens.fabSize,
+            decoration: BoxDecoration(color: c.brand, borderRadius: Rad.rLg, boxShadow: Elevation.md),
+            child: Icon(LucideIcons.plus, color: c.onBrand, size: 26),
           ),
         ),
       ),
@@ -528,23 +411,19 @@ class _AgentLock extends StatelessWidget {
   );
 }
 
-/// The animated agent orb button (navigation bar centre / rail).
+/// The animated agent orb button at the top of the rail (wide screens).
 class _AgentNavButton extends StatelessWidget {
   const _AgentNavButton({
     required this.active,
     required this.listening,
     required this.size,
     required this.onTap,
-    this.attentionKey,
   });
 
   final bool active;
   final bool listening;
   final double size;
   final VoidCallback onTap;
-
-  /// Replays the orb's attention burst when it changes (the current tab).
-  final Object? attentionKey;
 
   @override
   Widget build(BuildContext context) {
@@ -559,7 +438,7 @@ class _AgentNavButton extends StatelessWidget {
         child: PressableScale(
           onTap: onTap,
           scale: 0.9,
-          child: AgentOrb(size: size, active: active, listening: listening, attentionKey: attentionKey),
+          child: AgentOrb(size: size, active: active, listening: listening),
         ),
       ),
     );
@@ -624,212 +503,6 @@ class _AgentOverlayState extends State<_AgentOverlay> with SingleTickerProviderS
         );
       },
       child: const AgentModePanel(key: ValueKey('agent-panel')),
-    );
-  }
-}
-
-class _ActiveBubble extends StatelessWidget {
-  const _ActiveBubble({required this.tab, required this.badge, required this.iconSize, required this.onTap});
-
-  final _Tab tab;
-  final int badge;
-  final double iconSize;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    Widget icon = Icon(tab.activeIcon, size: iconSize, color: c.primary);
-    if (badge > 0) icon = CountBadge(count: badge, child: icon);
-    return PressableScale(
-      onTap: onTap,
-      scale: 0.92,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: c.surface,
-          shape: BoxShape.circle,
-          border: Border.all(color: c.border),
-          boxShadow: c.isDark ? Elevation.sm : Elevation.md,
-        ),
-        child: Center(
-          child: AnimatedSwitcher(
-            duration: context.motion.fast,
-            transitionBuilder: (child, a) => ScaleTransition(
-              scale: Tween(begin: 0.6, end: 1.0).animate(a),
-              child: FadeTransition(opacity: a, child: child),
-            ),
-            child: KeyedSubtree(key: ValueKey(tab.label), child: icon),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  const _NavItem({
-    required this.tab,
-    required this.selected,
-    required this.onTap,
-    required this.collapse,
-    this.badge = 0,
-  });
-
-  final _Tab tab;
-  final bool selected;
-  final VoidCallback onTap;
-  final int badge;
-
-  /// Collapse progress of the bar: labels fade and fold away as it nears 1.
-  final double collapse;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final color = selected ? c.primary : c.textSecondary;
-    final labelVisibility = 1 - collapse;
-    Widget icon = Icon(tab.icon, size: lerpDouble(22, 20, collapse), color: color);
-    if (badge > 0) icon = CountBadge(count: badge, child: icon);
-    return Semantics(
-      selected: selected,
-      button: true,
-      label: badge > 0 ? '${tab.label}, $badge alerts' : tab.label,
-      excludeSemantics: true,
-      child: PressableScale(
-        onTap: onTap,
-        scale: 0.94,
-        child: Padding(
-          padding: EdgeInsets.only(top: Space.x1 * labelVisibility),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // The active icon lives in the raised bubble instead.
-              AnimatedOpacity(opacity: selected ? 0 : 1, duration: context.motion.fast, child: icon),
-              ClipRect(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  heightFactor: labelVisibility,
-                  child: Opacity(
-                    opacity: labelVisibility,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 3),
-                      child: Text(
-                        tab.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.text.micro.copyWith(
-                          color: color,
-                          fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PathClipper extends CustomClipper<Path> {
-  const _PathClipper(this.path);
-  final Path path;
-
-  @override
-  Path getClip(Size size) => path;
-
-  @override
-  bool shouldReclip(_PathClipper oldClipper) => oldClipper.path != path;
-}
-
-/// Soft drop shadow outside the bar only, so it never muddies the
-/// translucent glass.
-class _NavShadowPainter extends CustomPainter {
-  const _NavShadowPainter(this.path, {required this.dark});
-  final Path path;
-  final bool dark;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final outside = Path.combine(PathOperation.difference, Path()..addRect((Offset.zero & size).inflate(64)), path);
-    canvas
-      ..save()
-      ..clipPath(outside)
-      ..drawShadow(path, dark ? const Color(0xFF000000) : const Color(0x660F172A), dark ? 6 : 12, false)
-      ..restore();
-  }
-
-  @override
-  bool shouldRepaint(_NavShadowPainter old) => old.path != path || old.dark != dark;
-}
-
-class _NavOutlinePainter extends CustomPainter {
-  const _NavOutlinePainter(this.path, this.color);
-  final Path path;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawPath(
-      path,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1
-        ..color = color.withValues(alpha: 0.8),
-    );
-  }
-
-  @override
-  bool shouldRepaint(_NavOutlinePainter old) => old.path != path || old.color != color;
-}
-
-class _AddFab extends ConsumerWidget {
-  const _AddFab({required this.enabled});
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
-    return Tooltip(
-      message: 'Add transaction',
-      child: Semantics(
-        button: true,
-        label: 'Add transaction',
-        child: PressableScale(
-          enabled: enabled,
-          haptic: ref.watch(settingsProvider.select((s) => s.hapticsEnabled)),
-          onTap: () => context.push(AppRoutes.newTransaction()),
-          onLongPress: () async {
-            final pick = await showFinnActionMenu<String>(
-              context,
-              title: 'Add',
-              items: const [
-                FinnMenuItem(value: 'transaction', label: 'Add transaction', icon: LucideIcons.plus),
-                FinnMenuItem(value: 'transfer', label: 'Transfer', icon: LucideIcons.arrowLeftRight),
-              ],
-            );
-            if (!context.mounted) return;
-            if (pick == 'transaction') {
-              context.push(AppRoutes.newTransaction());
-            } else if (pick == 'transfer') {
-              showTransferSheet(context);
-            }
-          },
-          child: Container(
-            width: Dimens.fabSize,
-            height: Dimens.fabSize,
-            decoration: BoxDecoration(
-              color: c.primary,
-              shape: BoxShape.circle,
-              boxShadow: c.isDark ? Elevation.md : Elevation.xl,
-            ),
-            child: Icon(LucideIcons.plus, color: c.onPrimary, size: 26),
-          ),
-        ),
-      ),
     );
   }
 }

@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 
-/// FiNN "calm ledger" design tokens.
+import '../design_system/tokens/palette.dart';
+
+export '../design_system/tokens/palette.dart' show CategoryTints;
+
+/// FiNN "Current" design tokens.
 ///
-/// Paper-toned page, white panels, ink text and a single green. Colour is
-/// reserved for meaning: green = money in / progress, red = over or
-/// overdue, amber = getting close. Everything else is ink.
+/// A quiet shore-toned page, white panels, ink text and one deep teal
+/// drawn from the logo. Colour is reserved for meaning: green = money in /
+/// progress, red = over a limit you set, amber = getting close, teal = the
+/// thing you can do next. Ordinary spending stays ink.
+///
+/// Raw values live in [Hue] so the Material theme (`FinnColors`) and these
+/// tokens always match.
 @immutable
 class LedgerColors {
   const LedgerColors._({
@@ -18,12 +26,20 @@ class LedgerColors {
     required this.inkSoft,
     required this.inkFaint,
     required this.onInk,
+    required this.brand,
+    required this.brandSoft,
+    required this.onBrand,
+    required this.deep,
+    required this.deepEnd,
+    required this.flow,
     required this.green,
     required this.greenSoft,
     required this.red,
     required this.redSoft,
     required this.amber,
     required this.amberSoft,
+    required this.info,
+    required this.infoSoft,
     required this.scrim,
   });
 
@@ -44,7 +60,7 @@ class LedgerColors {
   /// Outlines of secondary buttons and unselected chips.
   final Color lineStrong;
 
-  /// Primary text, expense amounts, primary buttons, selected chips.
+  /// Primary text and expense amounts.
   final Color ink;
 
   /// Secondary text (meets 4.5:1 on paper and surface).
@@ -56,11 +72,28 @@ class LedgerColors {
   /// Text on [ink] fills.
   final Color onInk;
 
+  /// Deep teal: primary buttons, selected chips and tabs, links, focus.
+  final Color brand;
+
+  /// Soft teal wash behind selected or branded content.
+  final Color brandSoft;
+
+  /// Text and icons on [brand] fills.
+  final Color onBrand;
+
+  /// The hero slab ("Available to spend"): a deep teal gradient
+  /// from [deep] to [deepEnd]. Text on it is white.
+  final Color deep;
+  final Color deepEnd;
+
+  /// Bright teal accent that reads on [deep] (free money, highlights).
+  final Color flow;
+
   /// Money in, progress, healthy.
   final Color green;
   final Color greenSoft;
 
-  /// Over the limit, overdue, overspent.
+  /// Over the limit, overspent.
   final Color red;
   final Color redSoft;
 
@@ -68,71 +101,98 @@ class LedgerColors {
   final Color amber;
   final Color amberSoft;
 
+  /// Neutral information (tips, "how it's calculated").
+  final Color info;
+  final Color infoSoft;
+
   /// Barrier behind sheets, dialogs and overlays.
   final Color scrim;
 
+  LinearGradient get deepGradient =>
+      LinearGradient(colors: [deep, deepEnd], begin: Alignment.topLeft, end: Alignment.bottomRight);
+
+  /// (icon colour, well colour) for a category or goal colour index.
+  (Color, Color) tint(int colorIndex) => CategoryTints.of(colorIndex, dark: isDark);
+
   static const light = LedgerColors._(
     isDark: false,
-    paper: Color(0xFFF4F4F0),
-    surface: Color(0xFFFFFFFF),
-    sunken: Color(0xFFEBEBE6),
-    line: Color(0xFFE3E2DC),
-    lineStrong: Color(0xFFCFCEC7),
-    ink: Color(0xFF17191C),
-    inkSoft: Color(0xFF5B6068),
-    inkFaint: Color(0xFF94979D),
-    onInk: Color(0xFFFFFFFF),
-    green: Color(0xFF1B6847),
-    greenSoft: Color(0xFFE3EFE8),
-    red: Color(0xFFB3261E),
-    redSoft: Color(0xFFF8E6E4),
-    amber: Color(0xFF8F5300),
-    amberSoft: Color(0xFFF6EBDA),
-    scrim: Color(0x6617191C),
+    paper: Hue.shore,
+    surface: Hue.panel,
+    sunken: Hue.mist,
+    line: Hue.hair,
+    lineStrong: Hue.hairStrong,
+    ink: Hue.ink,
+    inkSoft: Hue.inkSoft,
+    inkFaint: Hue.inkFaint,
+    onInk: Hue.panel,
+    brand: Hue.current,
+    brandSoft: Hue.currentSoft,
+    onBrand: Hue.panel,
+    deep: Hue.deep,
+    deepEnd: Hue.deepEnd,
+    flow: Hue.flow,
+    green: Hue.moneyIn,
+    greenSoft: Hue.moneyInSoft,
+    red: Hue.over,
+    redSoft: Hue.overSoft,
+    amber: Hue.near,
+    amberSoft: Hue.nearSoft,
+    info: Hue.info,
+    infoSoft: Hue.infoSoft,
+    scrim: Color(0x660F1F21),
   );
 
   static const dark = LedgerColors._(
     isDark: true,
-    paper: Color(0xFF111213),
-    surface: Color(0xFF1A1B1D),
-    sunken: Color(0xFF26272A),
-    line: Color(0xFF2C2D31),
-    lineStrong: Color(0xFF3D3F44),
-    ink: Color(0xFFEDECE8),
-    inkSoft: Color(0xFFA5A8AE),
-    inkFaint: Color(0xFF6F7279),
-    onInk: Color(0xFF111213),
-    green: Color(0xFF6CC196),
-    greenSoft: Color(0xFF1B2D24),
-    red: Color(0xFFF2836F),
-    redSoft: Color(0xFF3A1F1B),
-    amber: Color(0xFFE2A954),
-    amberSoft: Color(0xFF33281A),
+    paper: Hue.night,
+    surface: Hue.nightPanel,
+    sunken: Hue.nightRaised,
+    line: Hue.nightHair,
+    lineStrong: Hue.nightHairStrong,
+    ink: Hue.nightInk,
+    inkSoft: Hue.nightInkSoft,
+    inkFaint: Hue.nightInkFaint,
+    onInk: Hue.night,
+    brand: Hue.nightCurrent,
+    brandSoft: Hue.nightCurrentSoft,
+    onBrand: Hue.nightOnCurrent,
+    deep: Hue.nightDeep,
+    deepEnd: Hue.nightDeepEnd,
+    flow: Hue.nightFlow,
+    green: Hue.nightIn,
+    greenSoft: Hue.nightInSoft,
+    red: Hue.nightOver,
+    redSoft: Hue.nightOverSoft,
+    amber: Hue.nightNear,
+    amberSoft: Hue.nightNearSoft,
+    info: Hue.nightInfo,
+    infoSoft: Hue.nightInfoSoft,
     scrim: Color(0x99000000),
   );
 
   static LedgerColors of(BuildContext context) => Theme.of(context).brightness == Brightness.dark ? dark : light;
 }
 
-/// One family (Atkinson Hyperlegible Next), sentence case everywhere,
-/// tabular figures for money so columns line up.
+/// One family (Manrope), sentence case everywhere, tabular figures for
+/// money so columns line up. Manrope has the rupee sign, a plain zero that
+/// never reads as Ø, and a tall x-height that stays legible at 13.
 @immutable
 class LedgerType {
   LedgerType._(LedgerColors c)
-      : figureXL = _s(40, 640, c.ink, h: 1.05, ls: -1.2, figures: true),
-        figureL = _s(28, 620, c.ink, h: 1.1, ls: -0.6, figures: true),
-        figure = _s(16, 600, c.ink, h: 1.25, figures: true),
-        figureSmall = _s(14, 500, c.inkSoft, h: 1.3, figures: true),
-        title = _s(26, 700, c.ink, h: 1.15, ls: -0.5),
-        heading = _s(18, 650, c.ink, h: 1.25, ls: -0.2),
-        body = _s(16, 420, c.ink, h: 1.4),
-        bodyStrong = _s(16, 600, c.ink, h: 1.3),
-        label = _s(14, 500, c.inkSoft, h: 1.35),
-        labelStrong = _s(14, 600, c.ink, h: 1.3),
-        small = _s(13, 500, c.inkSoft, h: 1.3),
-        button = _s(15, 600, c.ink, h: 1.2);
+      : figureXL = _s(40, 760, c.ink, h: 1.05, ls: -1.4, figures: true),
+        figureL = _s(28, 740, c.ink, h: 1.1, ls: -0.8, figures: true),
+        figure = _s(16, 680, c.ink, h: 1.25, ls: -0.2, figures: true),
+        figureSmall = _s(14, 560, c.inkSoft, h: 1.3, figures: true),
+        title = _s(26, 760, c.ink, h: 1.15, ls: -0.7),
+        heading = _s(18, 720, c.ink, h: 1.25, ls: -0.3),
+        body = _s(16, 480, c.ink, h: 1.45),
+        bodyStrong = _s(16, 650, c.ink, h: 1.3, ls: -0.1),
+        label = _s(14, 520, c.inkSoft, h: 1.4),
+        labelStrong = _s(14, 650, c.ink, h: 1.3),
+        small = _s(13, 540, c.inkSoft, h: 1.3),
+        button = _s(15, 680, c.ink, h: 1.2);
 
-  static const family = 'Atkinson';
+  static const family = 'Manrope';
 
   /// Hero money ("Available to spend").
   final TextStyle figureXL;
@@ -194,7 +254,7 @@ abstract final class Sp {
   static const double gutter = 20;
 
   /// Space between page sections.
-  static const double section = 36;
+  static const double section = 32;
 
   /// Widest the content column grows on tablets.
   static const double maxWidth = 560;
@@ -202,11 +262,15 @@ abstract final class Sp {
 
 abstract final class Rad {
   static const double sm = 8;
-  static const double md = 12;
-  static const double lg = 16;
+  static const double md = 14;
+  static const double lg = 18;
+
+  /// Hero slab and sheets.
+  static const double xl = 24;
   static const BorderRadius rSm = BorderRadius.all(Radius.circular(sm));
   static const BorderRadius rMd = BorderRadius.all(Radius.circular(md));
   static const BorderRadius rLg = BorderRadius.all(Radius.circular(lg));
+  static const BorderRadius rXl = BorderRadius.all(Radius.circular(xl));
   static const BorderRadius pill = BorderRadius.all(Radius.circular(999));
 }
 

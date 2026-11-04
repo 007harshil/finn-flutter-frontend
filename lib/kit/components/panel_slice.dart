@@ -33,7 +33,8 @@ class LedgerPanelSlice extends StatelessWidget {
     const r = Radius.circular(Rad.lg);
     final radius = BorderRadius.vertical(top: first ? r : Radius.zero, bottom: last ? r : Radius.zero);
     return CustomPaint(
-      painter: _SlicePainter(first: first, last: last, fill: c.surface, line: c.line),
+      // Dark mode separates panels by tone alone, like [LedgerPanel].
+      painter: _SlicePainter(first: first, last: last, fill: c.surface, line: c.isDark ? null : c.line),
       child: ClipRRect(
         borderRadius: radius,
         child: Material(
@@ -52,12 +53,12 @@ class LedgerPanelSlice extends StatelessWidget {
 }
 
 class _SlicePainter extends CustomPainter {
-  _SlicePainter({required this.first, required this.last, required this.fill, required this.line});
+  _SlicePainter({required this.first, required this.last, required this.fill, this.line});
 
   final bool first;
   final bool last;
   final Color fill;
-  final Color line;
+  final Color? line;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -74,6 +75,8 @@ class _SlicePainter extends CustomPainter {
       ),
       Paint()..color = fill,
     );
+    final stroke = line;
+    if (stroke == null) return;
     // Stroke a rounded rect that runs past the open ends, clipped to this
     // slice, so only the edges this slice owns are drawn.
     canvas.save();
@@ -88,7 +91,7 @@ class _SlicePainter extends CustomPainter {
         bottomRight: last ? inner : Radius.zero,
       ),
       Paint()
-        ..color = line
+        ..color = stroke
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );

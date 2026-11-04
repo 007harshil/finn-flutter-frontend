@@ -29,7 +29,9 @@ class IconWell extends StatelessWidget {
   }
 }
 
-/// A category's icon in an [IconWell]. Handles deleted categories.
+/// A category's icon in an [IconWell], tinted with the category's own
+/// colour so a list can be scanned by colour as well as by name. Handles
+/// deleted categories (neutral well).
 class CategoryMark extends StatelessWidget {
   const CategoryMark({super.key, required this.category, this.size = 40});
 
@@ -37,8 +39,12 @@ class CategoryMark extends StatelessWidget {
   final double size;
 
   @override
-  Widget build(BuildContext context) =>
-      IconWell(icon: category == null ? LucideIcons.tag : CategoryIcons.of(category!.iconKey), size: size);
+  Widget build(BuildContext context) {
+    final cat = category;
+    if (cat == null) return IconWell(icon: LucideIcons.tag, size: size);
+    final (fg, bg) = context.ink.tint(cat.colorIndex);
+    return IconWell(icon: CategoryIcons.of(cat.iconKey), size: size, color: fg, background: bg);
+  }
 }
 
 /// The list row of the kit: leading well, title + subtitle, amount on the
