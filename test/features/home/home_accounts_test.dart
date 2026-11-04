@@ -1,13 +1,15 @@
 import 'package:finn/data/local/local_data_store.dart';
+import 'package:finn/features/home/presentation/widgets/hero_balance_card.dart';
 import 'package:finn/features/home/presentation/widgets/accounts_section.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../helpers/test_app.dart';
 
 void main() {
-  testWidgets('home accounts section lists accounts with owed on credit cards', (tester) async {
+  testWidgets('hero card lists accounts with owed on credit cards', (tester) async {
     final env = await TestEnv.create();
-    await env.pumpWidget(tester, const HomeAccountsSection());
+    await env.pumpWidget(tester, const HeroBalanceCard());
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Accounts'), findsOneWidget);
@@ -20,18 +22,29 @@ void main() {
 
   testWidgets('a fresh install shows its single Cash account', (tester) async {
     final env = await TestEnv.create(scenario: DataScenario.empty);
-    await env.pumpWidget(tester, const HomeAccountsSection());
+    await env.pumpWidget(tester, const HeroBalanceCard());
     await tester.pumpAndSettle();
-    expect(find.text('Cash'), findsOneWidget);
+    // "Cash" is also the hero legend; look inside the accounts strip.
+    expect(find.descendant(of: find.byType(HeroAccountsStrip), matching: find.text('Cash')), findsOneWidget);
   });
 
-  testWidgets('an account with money set aside shows a quiet available / set aside line', (tester) async {
+  testWidgets('an account with money set aside shows a quiet set aside line', (tester) async {
     final env = await TestEnv.create();
-    await env.pumpWidget(tester, const HomeAccountsSection());
+    await env.pumpWidget(tester, const HeroBalanceCard());
     await tester.pumpAndSettle();
     // The demo data sets savings aside on the Cash account.
-    expect(find.textContaining('· set aside'), findsWidgets);
-    expect(find.textContaining(RegExp('Available|Over-reserved')), findsWidgets);
+    expect(find.textContaining(RegExp('set aside|Over-reserved')), findsWidgets);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('more than two accounts scroll sideways', (tester) async {
+    final env = await TestEnv.create();
+    await env.pumpWidget(tester, const HeroBalanceCard());
+    await tester.pumpAndSettle();
+    final strip = find.descendant(
+      of: find.byType(HeroAccountsStrip),
+      matching: find.byWidgetPredicate((w) => w is SingleChildScrollView && w.scrollDirection == Axis.horizontal),
+    );
+    expect(strip, findsOneWidget);
   });
 }

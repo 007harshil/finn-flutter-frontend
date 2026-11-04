@@ -31,8 +31,9 @@ void main() {
     // Home: available, cash and set-aside are all masked.
     await tapTab(tester, 'Home');
     await showHero(tester);
-    // Available, cash, set aside, and the credit card owed line.
-    expect(inHero(MoneyFormatter.masked), findsNWidgets(4));
+    // Available, cash, set aside, the credit card owed line, and every
+    // account tile in the strip.
+    expect(inHero(MoneyFormatter.masked), findsAtLeastNWidgets(4));
     expect(inHero(rupees(b.available)), findsNothing);
     expect(inHero(rupees(b.cash)), findsNothing);
     expect(find.text(rupees(b.available)), findsNothing, reason: 'nowhere on home');

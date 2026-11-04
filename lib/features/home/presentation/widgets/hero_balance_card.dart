@@ -11,13 +11,15 @@ import '../../../../design_system/design_system.dart'
 import '../../../../finance/ledger.dart';
 import '../../../../kit/kit.dart';
 import '../../../../shared/presentation/async_view.dart';
+import 'accounts_section.dart';
 
 /// "Available to spend": the one number Home exists for, on the deep teal
 /// slab. Under it, a bar of your cash with the free part in bright teal
 /// and the set-aside part in a lighter tone, and the two amounts that
 /// explain the gap. Tapping
 /// "Set aside" splits it into goals and emergency fund; tapping the number
-/// opens the full maths.
+/// opens the full maths. Below that, the accounts the money sits in, as
+/// a sideways strip of tiles ([HeroAccountsStrip]).
 class HeroBalanceCard extends ConsumerWidget {
   const HeroBalanceCard({super.key});
 
@@ -41,6 +43,8 @@ class _Balance extends StatefulWidget {
 }
 
 class _BalanceState extends State<_Balance> {
+  static const _inset = Sp.lg + 4;
+
   bool _split = false;
 
   void _toggle() {
@@ -73,116 +77,129 @@ class _BalanceState extends State<_Balance> {
       clipBehavior: Clip.antiAlias,
       child: CustomPaint(
         painter: const _FlowMarks(),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(Sp.lg + 4, Sp.lg + 2, Sp.lg + 4, Sp.lg + 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Semantics(
-                button: true,
-                label: 'Available to spend. Double tap for how it adds up.',
-                child: InkWell(
-                  borderRadius: Rad.rMd,
-                  splashColor: Colors.white.withValues(alpha: 0.08),
-                  highlightColor: Colors.white.withValues(alpha: 0.04),
-                  onTap: () => showFinnSheet<void>(context, builder: (_) => BalanceBreakdownSheet(balance: b)),
-                  child: Column(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(_inset, Sp.lg + 2, _inset, Sp.lg + 2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Semantics(
+                    button: true,
+                    label: 'Available to spend. Double tap for how it adds up.',
+                    child: InkWell(
+                      borderRadius: Rad.rMd,
+                      splashColor: Colors.white.withValues(alpha: 0.08),
+                      highlightColor: Colors.white.withValues(alpha: 0.04),
+                      onTap: () => showFinnSheet<void>(context, builder: (_) => BalanceBreakdownSheet(balance: b)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  'Available to spend',
+                                  style: t.label.copyWith(color: _Slab.soft),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: Sp.xs + 2),
+                              const Icon(LucideIcons.info, size: 15, color: _Slab.soft),
+                            ],
+                          ),
+                          const SizedBox(height: Sp.xs),
+                          AnimatedAmount(
+                            b.available,
+                            style: t.figureXL.copyWith(color: over && !hidden ? _Slab.over : _Slab.ink),
+                            decimals: DecimalDisplay.none,
+                            fit: true,
+                            animateOnMount: true,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: Sp.lg),
+                  LedgerStackBar(
+                    parts: parts,
+                    gapColor: c.deep,
+                    semanticLabel: hidden ? null : '${(free * 100).round()} percent of your cash is free to spend',
+                  ),
+                  const SizedBox(height: Sp.md),
+                  Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                    children: _split
+                        ? [
+                            Expanded(
+                              child: _Legend(
+                                label: 'For goals',
+                                amount: b.earmarkedGoals,
+                                dot: _Slab.goals,
+                                onTap: _toggle,
+                              ),
+                            ),
+                            const SizedBox(width: Sp.lg),
+                            Expanded(
+                              child: _Legend(
+                                label: 'Emergency fund',
+                                amount: b.earmarkedEmergency,
+                                dot: _Slab.faint,
+                                end: true,
+                                onTap: _toggle,
+                                toggle: LucideIcons.chevronUp,
+                              ),
+                            ),
+                          ]
+                        : [
+                            Expanded(
+                              child: _Legend(label: 'Cash', amount: b.cash, dot: c.flow),
+                            ),
+                            const SizedBox(width: Sp.lg),
+                            Expanded(
+                              child: _Legend(
+                                label: 'Set aside',
+                                amount: b.earmarked,
+                                dot: _Slab.faint,
+                                end: true,
+                                onTap: b.earmarked.isPositive ? _toggle : null,
+                                toggle: b.earmarked.isPositive ? LucideIcons.chevronDown : null,
+                              ),
+                            ),
+                          ],
+                  ),
+                  if (b.creditOwed.isPositive) ...[
+                    const SizedBox(height: Sp.md),
+                    Container(height: 1, color: Colors.white.withValues(alpha: 0.12)),
+                    const SizedBox(height: Sp.md - 2),
+                    MergeSemantics(
+                      child: Row(
                         children: [
                           Flexible(
                             child: Text(
-                              'Available to spend',
+                              'Credit card owed',
                               style: t.label.copyWith(color: _Slab.soft),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const SizedBox(width: Sp.xs + 2),
-                          const Icon(LucideIcons.info, size: 15, color: _Slab.soft),
+                          const SizedBox(width: Sp.sm),
+                          AmountText(
+                            b.creditOwed,
+                            style: t.figureSmall.copyWith(color: _Slab.over),
+                            decimals: DecimalDisplay.none,
+                          ),
                         ],
                       ),
-                      const SizedBox(height: Sp.xs),
-                      AnimatedAmount(
-                        b.available,
-                        style: t.figureXL.copyWith(color: over && !hidden ? _Slab.over : _Slab.ink),
-                        decimals: DecimalDisplay.none,
-                        fit: true,
-                        animateOnMount: true,
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: Sp.lg),
-              LedgerStackBar(
-                parts: parts,
-                gapColor: c.deep,
-                semanticLabel: hidden ? null : '${(free * 100).round()} percent of your cash is free to spend',
-              ),
-              const SizedBox(height: Sp.md),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: _split
-                    ? [
-                        Expanded(
-                          child: _Legend(label: 'For goals', amount: b.earmarkedGoals, dot: _Slab.goals, onTap: _toggle),
-                        ),
-                        const SizedBox(width: Sp.lg),
-                        Expanded(
-                          child: _Legend(
-                            label: 'Emergency fund',
-                            amount: b.earmarkedEmergency,
-                            dot: _Slab.faint,
-                            end: true,
-                            onTap: _toggle,
-                            toggle: LucideIcons.chevronUp,
-                          ),
-                        ),
-                      ]
-                    : [
-                        Expanded(child: _Legend(label: 'Cash', amount: b.cash, dot: c.flow)),
-                        const SizedBox(width: Sp.lg),
-                        Expanded(
-                          child: _Legend(
-                            label: 'Set aside',
-                            amount: b.earmarked,
-                            dot: _Slab.faint,
-                            end: true,
-                            onTap: b.earmarked.isPositive ? _toggle : null,
-                            toggle: b.earmarked.isPositive ? LucideIcons.chevronDown : null,
-                          ),
-                        ),
-                      ],
-              ),
-              if (b.creditOwed.isPositive) ...[
-                const SizedBox(height: Sp.md),
-                Container(height: 1, color: Colors.white.withValues(alpha: 0.12)),
-                const SizedBox(height: Sp.md - 2),
-                MergeSemantics(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          'Credit card owed',
-                          style: t.label.copyWith(color: _Slab.soft),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: Sp.sm),
-                      AmountText(
-                        b.creditOwed,
-                        style: t.figureSmall.copyWith(color: _Slab.over),
-                        decimals: DecimalDisplay.none,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
+            ),
+            const HeroAccountsStrip(inset: _inset),
+          ],
         ),
       ),
     );
@@ -196,7 +213,8 @@ class _BalanceState extends State<_Balance> {
           LedgerNote(
             tone: NoteTone.alert,
             icon: LucideIcons.triangleAlert,
-            text: '${MoneyFormatter.format(-b.available, decimals: DecimalDisplay.none)} more is set aside than you have in cash.',
+            text:
+                '${MoneyFormatter.format(-b.available, decimals: DecimalDisplay.none)} more is set aside than you have in cash.',
           ),
         ],
       ],
@@ -232,10 +250,19 @@ class _Legend extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 8, height: 8, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+            ),
             const SizedBox(width: Sp.xs + 2),
             Flexible(
-              child: Text(label, style: t.label.copyWith(color: _Slab.soft), maxLines: 1, overflow: TextOverflow.ellipsis),
+              child: Text(
+                label,
+                style: t.label.copyWith(color: _Slab.soft),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             if (ic != null) ...[const SizedBox(width: 2), Icon(ic, size: 15, color: _Slab.soft)],
           ],
@@ -295,7 +322,7 @@ class _BalanceSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const LedgerSkeleton(height: 186, radius: Rad.xl);
+    return const LedgerSkeleton(height: 320, radius: Rad.xl);
   }
 }
 
@@ -312,7 +339,12 @@ class BalanceBreakdownSheet extends StatelessWidget {
     Widget line(String label, Money amount, {SignDisplay sign = SignDisplay.auto, bool strong = false, Color? color}) {
       return KeyValueRow(
         label: label,
-        valueWidget: AmountText(amount, sign: sign, color: color, style: strong ? t.figure : t.figureSmall.copyWith(color: c.ink)),
+        valueWidget: AmountText(
+          amount,
+          sign: sign,
+          color: color,
+          style: strong ? t.figure : t.figureSmall.copyWith(color: c.ink),
+        ),
       );
     }
 
@@ -334,7 +366,8 @@ class BalanceBreakdownSheet extends StatelessWidget {
           line('Available to spend', balance.available, strong: true),
           const SizedBox(height: Sp.lg),
           const InfoBanner(
-            message: 'Upcoming EMIs, subscriptions and pending payments are not deducted until you record them as paid.',
+            message:
+                'Upcoming EMIs, subscriptions and pending payments are not deducted until you record them as paid.',
           ),
         ],
       ),
