@@ -268,7 +268,6 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                   ? const LedgerEmpty(
                       icon: LucideIcons.users,
                       title: 'No friends yet',
-                      message: 'Share your FiNN ID, or add a friend with theirs. You can share pending items only with friends.',
                     )
                   : LedgerPanel(
                       dividerIndent: _indent,
@@ -456,18 +455,12 @@ class _MyId extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.type;
     return LedgerSection(
       title: 'Your FiNN ID',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           FinnIdCard(finnId: me?.finnId),
-          const SizedBox(height: Sp.sm),
-          Text(
-            'Share this ID so friends can add you. People can find you only with it.',
-            style: t.small,
-          ),
         ],
       ),
     );

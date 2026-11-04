@@ -81,7 +81,6 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
                     top: Sp.xxl,
                     child: LedgerEmpty(
                       title: 'This loan no longer exists',
-                      message: 'It may have been deleted.',
                       actionLabel: 'Back to loans',
                       onAction: () => context.go(AppRoutes.loans),
                     ),
@@ -109,7 +108,6 @@ class _BodyState extends State<_Body> {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.type;
     final s = widget.state;
     final l = s.loan;
     final next = s.nextDue;
@@ -171,8 +169,8 @@ class _BodyState extends State<_Body> {
             child: s.payments.isEmpty
                 ? LedgerNote(
                     text: l.isBorrowed
-                        ? 'No payments recorded yet. Record each EMI or repayment when you make it.'
-                        : 'Nothing received yet. Record repayments as they come in.',
+                        ? 'No payments yet'
+                        : 'Nothing received yet',
                   )
                 : LedgerPanel(
                     children: [for (final p in s.payments) _PaymentRow(key: ValueKey(p.id), payment: p, loan: l)],
@@ -183,14 +181,6 @@ class _BodyState extends State<_Body> {
           top: Sp.section,
           child: LedgerSection(title: 'Terms', child: LedgerPanel(children: _terms(context, s))),
         ),
-        if (s.payments.isNotEmpty)
-          PageColumn(
-            top: Sp.lg,
-            child: Text(
-              'Loans with payments cannot be deleted, and their terms are locked, so your history stays accurate.',
-              style: t.label,
-            ),
-          ),
       ],
     );
   }
@@ -251,6 +241,7 @@ class _Hero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ink;
     final t = context.type;
     final s = state;
     final l = s.loan;
@@ -259,33 +250,66 @@ class _Hero extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(l.direction.sentence(l.counterparty), style: t.label),
-        const SizedBox(height: Sp.xs),
-        AnimatedAmount(s.outstanding, style: t.figureXL, fit: true, animateOnMount: true),
-        const SizedBox(height: Sp.xs),
-        Text(s.isClosed ? 'Fully repaid' : 'Outstanding principal', style: t.label),
-        const SizedBox(height: Sp.lg),
-        LedgerBar(value: s.repaidBps / 10000, semanticLabel: '${l.direction.repaidVerb} $pct% of principal'),
-        const SizedBox(height: Sp.md),
-        Text('$pct% ${l.direction.repaidVerb.toLowerCase()} of ${maskedAmount(context, l.principal)}', style: t.label),
-        const SizedBox(height: Sp.xs),
-        Text(due.label, style: t.label.copyWith(color: due.color)),
-        const SizedBox(height: Sp.lg),
-        Row(
-          children: [
-            Expanded(
-              child: LedgerStat(
+        KhataPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  // Principal repaid, principal left and interest paid so far.
+                  KhataDonut(
+                    size: 112,
+                    stroke: 15,
+                    parts: [
+                      BarPart(s.principalRepaid.paise.toDouble(), c.green),
+                      BarPart(s.outstanding.paise.toDouble(), c.brand),
+                      BarPart(s.interestPaid.paise.toDouble(), c.marigold),
+                    ],
+                    semanticLabel: '${l.direction.repaidVerb} $pct% of principal',
+                    center: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('$pct%', style: t.figure.copyWith(fontSize: 20)),
+                        Text('repaid', style: t.small),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: Sp.lg),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(l.direction.sentence(l.counterparty), style: t.label, maxLines: 2, overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 2),
+                        AnimatedAmount(s.outstanding, style: t.figureL, fit: true, animateOnMount: true),
+                        Text(s.isClosed ? 'Fully repaid' : 'Outstanding principal', style: t.label),
+                        const SizedBox(height: Sp.sm),
+                        KhataStamp(
+                          label: s.isClosed ? 'Closed' : (due.overdue ? 'Overdue' : 'Running'),
+                          color: s.isClosed ? c.green : (due.overdue ? c.red : c.brand),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: Sp.md),
+              KhataKey(
+                color: c.green,
                 label: l.direction.repaidVerb,
-                value: AmountText(s.principalRepaid, style: t.figure, decimals: DecimalDisplay.none),
+                value: AmountText(s.principalRepaid, style: t.figureSmall.copyWith(color: c.ink), decimals: DecimalDisplay.none),
               ),
-            ),
-            Expanded(
-              child: LedgerStat(
+              KhataKey(
+                color: c.marigold,
                 label: 'Interest',
-                value: AmountText(s.interestPaid, style: t.figure, decimals: DecimalDisplay.none),
+                value: AmountText(s.interestPaid, style: t.figureSmall.copyWith(color: c.ink), decimals: DecimalDisplay.none),
               ),
-            ),
-          ],
+              const SizedBox(height: Sp.sm),
+              Text('$pct% ${l.direction.repaidVerb.toLowerCase()} of ${maskedAmount(context, l.principal)}', style: t.label),
+              const SizedBox(height: Sp.xs),
+              Text(due.label, style: t.label.copyWith(color: due.color)),
+            ],
+          ),
         ),
         if (!s.isClosed) ...[
           const SizedBox(height: Sp.xl),

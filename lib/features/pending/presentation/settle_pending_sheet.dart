@@ -6,7 +6,6 @@ import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
-import '../../../core/time/dates.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../accounts/presentation/widgets/account_picker_field.dart';
@@ -45,7 +44,6 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
   final _key = newIdempotencyKey();
   final _amount = TextEditingController();
   final _note = TextEditingController();
-  bool _full = true;
   DateTime? _date;
   // Null until picked: the form shows the default account and sends it.
   String? _accountId;
@@ -63,7 +61,6 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
   }
 
   void _setFull(PendingView v) => setState(() {
-    _full = true;
     _amount.text = MoneyFormatter.editable(v.outstanding);
     _errors = const {};
   });
@@ -144,16 +141,13 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
             controller: _amount,
             helper: entered.isPositive && leaves.isPositive
                 ? '${leaves.format()} will remain outstanding.'
-                : (_full
-                      ? 'This settles the item in full.'
-                      : 'Enter the amount that changed hands.'),
+                : null,
             errorText:
                 _errors['amount'] ??
                 (tooMuch
                     ? 'More than the ${v.outstanding.format()} outstanding.'
                     : null),
-            onChanged: (m) =>
-                setState(() => _full = m != null && m == v.outstanding),
+            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: Sp.md),
           _QuickAmounts(
@@ -164,7 +158,6 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
                 _setFull(v);
               } else {
                 setState(() {
-                  _full = false;
                   _amount.text = MoneyFormatter.editable(m);
                   _errors = const {};
                 });
@@ -366,9 +359,6 @@ class _Closed extends StatelessWidget {
       child: LedgerEmpty(
         icon: settled ? LucideIcons.circleCheck : LucideIcons.ban,
         title: settled ? 'Nothing left to settle' : 'This item was written off',
-        message: settled && view.settledOn != null
-            ? 'Settled on ${DateFormats.dayMonthYear.format(view.settledOn!)}.'
-            : 'No further settlements can be recorded.',
         actionLabel: 'Close',
         onAction: () => Navigator.of(context).maybePop(),
       ),

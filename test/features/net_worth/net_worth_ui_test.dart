@@ -24,7 +24,7 @@ void main() {
     await env.pumpWidget(tester, const NetWorthScreen());
     await tester.pumpAndSettle();
 
-    expect(find.text('What you own minus what you owe'), findsOneWidget);
+    expect(find.text('Net worth'), findsWidgets);
     expect(find.text('What you own'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Hyundai i20'), 200);
     expect(find.text('Hyundai i20'), findsOneWidget);

@@ -36,7 +36,6 @@ class CategoryFormSheet extends ConsumerWidget {
         child: all.hasError
             ? LedgerEmpty(
                 title: 'Could not load this category',
-                message: 'Please try again.',
                 actionLabel: 'Try again',
                 onAction: () => refreshFinanceData(ref),
               )
@@ -49,7 +48,6 @@ class CategoryFormSheet extends ConsumerWidget {
         title: 'Edit category',
         child: LedgerEmpty(
           title: 'Category not found',
-          message: 'It may have been deleted.',
         ),
       );
     }
@@ -312,7 +310,6 @@ class _CategoryFormState extends ConsumerState<_CategoryForm> {
             const SizedBox(height: Sp.sm),
             LedgerSwitchRow(
               title: 'Essential spending',
-              subtitle: 'Needs like rent and bills. Used to suggest your emergency fund.',
               value: _essential,
               enabled: !_system,
               onChanged: (v) => setState(() => _essential = v),

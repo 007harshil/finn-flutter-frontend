@@ -143,7 +143,6 @@ class _FinancialSection extends StatelessWidget {
                 LedgerRow(
                   leading: const IconWell(icon: LucideIcons.userRoundPlus),
                   title: 'Add your details',
-                  subtitle: 'Name, opening balance and start date',
                   chevron: true,
                   onTap: edit,
                 ),
@@ -212,7 +211,6 @@ class _AccountSection extends ConsumerWidget {
               key: const ValueKey('profile-finn-id'),
               leading: const IconWell(icon: LucideIcons.hash),
               title: 'FiNN ID',
-              subtitle: 'Friends add you with this',
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -231,21 +229,18 @@ class _AccountSection extends ConsumerWidget {
           LedgerRow(
             leading: const IconWell(icon: LucideIcons.users),
             title: 'Friends',
-            subtitle: 'Add friends and share pending items',
             chevron: true,
             onTap: () => context.push(AppRoutes.friends),
           ),
           LedgerRow(
             leading: const IconWell(icon: LucideIcons.settings),
             title: 'Settings',
-            subtitle: 'Privacy, alerts and appearance',
             chevron: true,
             onTap: () => context.push(AppRoutes.settings),
           ),
           LedgerRow(
             leading: const IconWell(icon: LucideIcons.download),
             title: 'Export my data',
-            subtitle: 'CSV, JSON or a PDF report',
             chevron: true,
             onTap: () => context.push(AppRoutes.export),
           ),
@@ -327,7 +322,6 @@ class _DeleteAccount extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ink;
-    final t = context.type;
     return Column(
       children: [
         LedgerButton(
@@ -336,12 +330,6 @@ class _DeleteAccount extends StatelessWidget {
           variant: LedgerButtonVariant.quiet,
           color: c.red,
           onPressed: () => startAccountDeletion(context),
-        ),
-        const SizedBox(height: Sp.xs),
-        Text(
-          'Deletes your account and all its records from FiNN.',
-          style: t.label.copyWith(color: c.inkFaint),
-          textAlign: TextAlign.center,
         ),
       ],
     );

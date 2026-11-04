@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/money/money_format.dart';
+import '../../../data/remote/remote_providers.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../domain/pending_payment.dart';
@@ -31,6 +34,27 @@ class _PendingScreenState extends ConsumerState<PendingScreen> {
 
   void _set(PendingFilter f) => setState(() => _filter = f);
 
+  @override
+  void initState() {
+    super.initState();
+    // Items a friend shared since the last sync show up on opening.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_refresh());
+    });
+  }
+
+  /// Pulls the latest records from the server (remote mode only), so items a
+  /// friend shared or settled appear without restarting the app.
+  Future<void> _refresh() async {
+    final engine = ref.read(remoteBackendProvider)?.engine;
+    if (engine == null) return;
+    try {
+      await engine.sync();
+    } catch (e) {
+      debugPrint('Pending refresh failed: $e');
+    }
+  }
+
   Future<void> _openOptions() async {
     final next = await showPendingViewOptions(context, _filter);
     if (next != null && mounted) _set(next);
@@ -45,75 +69,87 @@ class _PendingScreenState extends ConsumerState<PendingScreen> {
   }
 
   void _toggleSearch() => setState(() {
-        _searching = !_searching;
-        if (!_searching) _filter = _filter.copyWith(query: '');
-      });
+    _searching = !_searching;
+    if (!_searching) _filter = _filter.copyWith(query: '');
+  });
 
   @override
   Widget build(BuildContext context) {
-    return LedgerPage(
-      storageKey: 'pending-list',
-      appBar: LedgerAppBar(
-        title: 'Money owed',
-        actions: [
-          LedgerIconButton(
-            icon: LucideIcons.plus,
-            tooltip: 'Add money owed',
-            onPressed: () => context.push(AppRoutes.newPending(owedToMe: _filter.direction == PendingDirection.owedToMe)),
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: LedgerPage(
+        storageKey: 'pending-list',
+        appBar: LedgerAppBar(
+          title: 'Money owed',
+          actions: [
+            LedgerIconButton(
+              icon: LucideIcons.plus,
+              tooltip: 'Add money owed',
+              onPressed: () =>
+                  context.push(AppRoutes.newPending(owedToMe: _filter.direction == PendingDirection.owedToMe)),
+            ),
+          ],
+        ),
+        slivers: [
+          SliverToBoxAdapter(
+            child: AsyncView<PendingOverview>(
+              value: ref.watch(pendingOverviewProvider),
+              loading: const LedgerPageSkeleton(),
+              builder: (context, o) {
+                final entries = ref.watch(pendingEntriesProvider(_filter)).value ?? const <PendingEntry>[];
+                final shown = entries.fold<int>(0, (n, e) => n + pendingEntryCount(e));
+                final any = o.counts.values.any((n) => n > 0);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    PageColumn(
+                      top: Sp.lg,
+                      child: _Hero(overview: o),
+                    ),
+                    if (!any)
+                      PageColumn(
+                        top: Sp.xl,
+                        child: _Empty(filter: _filter),
+                      )
+                    else ...[
+                      PageColumn(
+                        top: Sp.section,
+                        child: _Controls(
+                          overview: o,
+                          filter: _filter,
+                          searching: _searching,
+                          onTab: (t) => _set(_filter.copyWith(tab: t)),
+                          onDirection: _toggleDirection,
+                          onLong: _toggleLong,
+                          onSearch: (q) => _set(_filter.copyWith(query: q)),
+                          onSearchToggle: _toggleSearch,
+                          onOptions: _openOptions,
+                        ),
+                      ),
+                      if (_filter.activeCount > 0 ||
+                          _filter.sort != PendingSort.waiting ||
+                          _filter.query.trim().isNotEmpty)
+                        PageColumn(
+                          top: Sp.md,
+                          child: _FilterSummary(
+                            filter: _filter,
+                            count: shown,
+                            onSort: _openOptions,
+                            onClear: () => _set(_filter.cleared()),
+                          ),
+                        ),
+                      PageColumn(
+                        top: Sp.md,
+                        child: entries.isEmpty ? _Empty(filter: _filter) : _List(entries: entries),
+                      ),
+                    ],
+                  ],
+                );
+              },
+            ),
           ),
         ],
       ),
-      slivers: [
-        SliverToBoxAdapter(
-          child: AsyncView<PendingOverview>(
-            value: ref.watch(pendingOverviewProvider),
-            loading: const LedgerPageSkeleton(),
-            builder: (context, o) {
-              final entries = ref.watch(pendingEntriesProvider(_filter)).value ?? const <PendingEntry>[];
-              final shown = entries.fold<int>(0, (n, e) => n + pendingEntryCount(e));
-              final any = o.counts.values.any((n) => n > 0);
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  PageColumn(top: Sp.lg, child: _Hero(overview: o)),
-                  if (!any)
-                    PageColumn(top: Sp.xl, child: _Empty(filter: _filter))
-                  else ...[
-                    PageColumn(
-                      top: Sp.section,
-                      child: _Controls(
-                        overview: o,
-                        filter: _filter,
-                        searching: _searching,
-                        onTab: (t) => _set(_filter.copyWith(tab: t)),
-                        onDirection: _toggleDirection,
-                        onLong: _toggleLong,
-                        onSearch: (q) => _set(_filter.copyWith(query: q)),
-                        onSearchToggle: _toggleSearch,
-                        onOptions: _openOptions,
-                      ),
-                    ),
-                    if (_filter.activeCount > 0 || _filter.sort != PendingSort.waiting || _filter.query.trim().isNotEmpty)
-                      PageColumn(
-                        top: Sp.md,
-                        child: _FilterSummary(
-                          filter: _filter,
-                          count: shown,
-                          onSort: _openOptions,
-                          onClear: () => _set(_filter.cleared()),
-                        ),
-                      ),
-                    PageColumn(
-                      top: Sp.md,
-                      child: entries.isEmpty ? _Empty(filter: _filter) : _List(entries: entries),
-                    ),
-                  ],
-                ],
-              );
-            },
-          ),
-        ),
-      ],
     );
   }
 }
@@ -149,41 +185,43 @@ class _Hero extends StatelessWidget {
     final both = o.toPay.isPositive && o.toCollect.isPositive;
     return KhataPanel(
       child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(label, style: t.label),
-        const SizedBox(height: Sp.xs),
-        AnimatedAmount(
-          net.abs(),
-          style: t.figureXL.copyWith(color: net.isPositive ? c.green : c.ink),
-          decimals: DecimalDisplay.none,
-          fit: true,
-          animateOnMount: true,
-        ),
-        const SizedBox(height: Sp.xs),
-        Text('Not part of your balance until settled.', style: t.label),
-        if (both) ...[
-          const SizedBox(height: Sp.xl),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: LedgerStat(
-                  label: 'To get',
-                  value: AmountText(o.toCollect, style: t.figure.copyWith(color: c.green), decimals: DecimalDisplay.none),
-                ),
-              ),
-              const SizedBox(width: Sp.md),
-              Expanded(
-                child: LedgerStat(
-                  label: 'To pay',
-                  value: AmountText(o.toPay, style: t.figure, decimals: DecimalDisplay.none),
-                ),
-              ),
-            ],
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(label, style: t.label),
+          const SizedBox(height: Sp.xs),
+          AnimatedAmount(
+            net.abs(),
+            style: t.figureXL.copyWith(color: net.isPositive ? c.green : c.ink),
+            decimals: DecimalDisplay.none,
+            fit: true,
+            animateOnMount: true,
           ),
+          if (both) ...[
+            const SizedBox(height: Sp.xl),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: LedgerStat(
+                    label: 'To get',
+                    value: AmountText(
+                      o.toCollect,
+                      style: t.figure.copyWith(color: c.green),
+                      decimals: DecimalDisplay.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: Sp.md),
+                Expanded(
+                  child: LedgerStat(
+                    label: 'To pay',
+                    value: AmountText(o.toPay, style: t.figure, decimals: DecimalDisplay.none),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
-      ],
       ),
     );
   }
@@ -225,13 +263,13 @@ class _Controls extends StatelessWidget {
     final active = f.tab == PendingTab.active;
     final longOn = active && f.ages.length == 1 && f.ages.contains(PendingAge.long);
     Widget side(PendingDirection d, String label, int n) => LedgerChip(
-          key: ValueKey('pending-side:${d.name}'),
-          label: label,
-          count: n,
-          selected: f.direction == d,
-          semanticLabel: '$label, $n ${n == 1 ? 'item' : 'items'}',
-          onTap: () => onDirection(d),
-        );
+      key: ValueKey('pending-side:${d.name}'),
+      label: label,
+      count: n,
+      selected: f.direction == d,
+      semanticLabel: '$label, $n ${n == 1 ? 'item' : 'items'}',
+      onTap: () => onDirection(d),
+    );
     // Waiting longest leads: those are the people to ask (or pay) first.
     final chips = <Widget>[
       if (active && (o.longCount > 0 || longOn))
@@ -279,7 +317,9 @@ class _Controls extends StatelessWidget {
         if (searching)
           Row(
             children: [
-              Expanded(child: LedgerSearchField(hint: 'Search people or purposes', onChanged: onSearch)),
+              Expanded(
+                child: LedgerSearchField(hint: 'Search people or purposes', onChanged: onSearch),
+              ),
               const SizedBox(width: Sp.xs),
               LedgerIconButton(icon: LucideIcons.x, tooltip: 'Close search', onPressed: onSearchToggle),
             ],
@@ -289,7 +329,9 @@ class _Controls extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Wrap, not scroll: every filter stays visible on narrow phones.
-              Expanded(child: Wrap(spacing: Sp.sm, runSpacing: Sp.sm, children: chips)),
+              Expanded(
+                child: Wrap(spacing: Sp.sm, runSpacing: Sp.sm, children: chips),
+              ),
               const SizedBox(width: Sp.xs),
               ...tools,
             ],
@@ -380,16 +422,16 @@ class _List extends StatelessWidget {
   }
 
   Widget _row(BuildContext context, PendingView v, {bool grouped = false, bool inSplit = false}) => KeyedSubtree(
-        key: ValueKey(v.payment.id),
-        child: PendingRow(
-          view: v,
-          grouped: grouped,
-          inSplit: inSplit,
-          onTap: () => context.push(AppRoutes.pendingItem(v.payment.id)),
-          onSettle: () => context.push(AppRoutes.settlePending(v.payment.id)),
-          onLongPress: () => _quickActions(context, v),
-        ),
-      );
+    key: ValueKey(v.payment.id),
+    child: PendingRow(
+      view: v,
+      grouped: grouped,
+      inSplit: inSplit,
+      onTap: () => context.push(AppRoutes.pendingItem(v.payment.id)),
+      onSettle: () => context.push(AppRoutes.settlePending(v.payment.id)),
+      onLongPress: () => _quickActions(context, v),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -399,18 +441,15 @@ class _List extends StatelessWidget {
         for (final e in entries)
           ...switch (e) {
             PendingItemEntry(:final view) => [_row(context, view)],
-            PendingPersonGroup() => [
-                _GroupHeader(group: e),
-                for (final v in e.items) _row(context, v, grouped: true),
-              ],
+            PendingPersonGroup() => [_GroupHeader(group: e), for (final v in e.items) _row(context, v, grouped: true)],
             PendingSplitEntry() => [
-                PendingSplitHeader(
-                  split: e.split,
-                  shown: e.count,
-                  onTap: () => context.push(AppRoutes.pendingItem(e.items.first.payment.id)),
-                ),
-                for (final v in e.items) _row(context, v, inSplit: true),
-              ],
+              PendingSplitHeader(
+                split: e.split,
+                shown: e.count,
+                onTap: () => context.push(AppRoutes.pendingItem(e.items.first.payment.id)),
+              ),
+              for (final v in e.items) _row(context, v, inSplit: true),
+            ],
           },
       ],
     );
@@ -453,28 +492,16 @@ class _Empty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (filter.query.trim().isNotEmpty || filter.activeCount > 0) {
-      return const LedgerEmpty(
-        icon: LucideIcons.searchX,
-        title: 'No matches',
-        message: 'Try a different name or clear the filters.',
-      );
+      return const LedgerEmpty(icon: LucideIcons.searchX, title: 'No matches');
     }
     return switch (filter.tab) {
       PendingTab.active => LedgerEmpty(
-          title: 'Nothing open',
-          message: 'Track a shared bill, a loan to a friend or a reimbursement. '
-              'Your balance changes only when you settle.',
-          actionLabel: 'Add money owed',
-          onAction: () => context.push(AppRoutes.newPending()),
-        ),
-      PendingTab.settled => const LedgerEmpty(
-          title: 'Nothing settled yet',
-          message: 'Items you settle in full appear here with their history.',
-        ),
-      PendingTab.writtenOff => const LedgerEmpty(
-          title: 'Nothing written off',
-          message: 'Items you no longer expect to be paid appear here.',
-        ),
+        title: 'Nothing open',
+        actionLabel: 'Add money owed',
+        onAction: () => context.push(AppRoutes.newPending()),
+      ),
+      PendingTab.settled => const LedgerEmpty(title: 'Nothing settled yet'),
+      PendingTab.writtenOff => const LedgerEmpty(title: 'Nothing written off'),
     };
   }
 }

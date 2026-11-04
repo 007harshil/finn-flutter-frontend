@@ -93,7 +93,6 @@ class SpendPulseCard extends ConsumerWidget {
     return InsightChartCard(
       heading: 'Month so far',
       title: title,
-      subtitle: 'Drag across the chart to read any day.',
       legend: [
         LegendEntry(DateFormats.monthName.format(month.start), c.brand),
         LegendEntry(prevName, c.inkSoft, dashed: true),

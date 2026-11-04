@@ -107,7 +107,6 @@ class _PendingPersonFieldState extends ConsumerState<PendingPersonField> {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.type;
     final linked = widget.linked;
     if (linked != null) {
       return MotionAnimatedSize(
@@ -185,9 +184,6 @@ class _PendingPersonFieldState extends ConsumerState<PendingPersonField> {
                     ),
                 ],
               ),
-            ] else if (friends.isNotEmpty) ...[
-              const SizedBox(height: Sp.xs + 2),
-              Text('Pick a friend to share it, or type any name to keep it private.', style: t.small),
             ],
           ],
         ],
@@ -210,7 +206,7 @@ class _NoFriends extends StatelessWidget {
       children: [
         Icon(LucideIcons.users, size: 14, color: c.inkSoft),
         const SizedBox(width: Sp.sm),
-        Expanded(child: Text('Only friends can be linked. Add friends with their FiNN ID.', style: t.small)),
+        Expanded(child: Text('No friends yet', style: t.small)),
         LedgerButton(
           key: const ValueKey('pending-open-friends'),
           label: 'Add friends',

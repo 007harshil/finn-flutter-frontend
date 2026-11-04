@@ -24,7 +24,6 @@ List<Widget> categoriesSection(InsightsData data) => [
         LedgerEmpty(
           icon: LucideIcons.chartPie,
           title: 'No spending in ${data.periodLabel}',
-          message: 'Record an expense and see where your money goes.',
         )
       else
         _WhereItWent(data: data),
@@ -110,10 +109,6 @@ class _WhereItWentState extends State<_WhereItWent> {
                 ),
             ],
           ),
-          if (cats.length > 1) ...[
-            const SizedBox(height: Sp.sm),
-            Text('Top ${top.length} of ${cats.length} categories by amount. Tap one to pick it out.', style: t.small),
-          ],
           HowCalculated(
             text: 'Each category\'s share = its spending ÷ total spending in the period. The change compares '
                 'the same category with ${data.previousLabel}. Categories beyond the top $_maxParts are grouped as '
@@ -201,9 +196,9 @@ class _Changes extends StatelessWidget {
       title: list.isEmpty ? 'Nothing to compare yet' : 'Biggest changes against ${data.previousLabel}',
       subtitle: list.isEmpty
           ? null
-          : 'Right = spent more, left = spent less. Up ${m(up)} and down ${m(down)} overall.',
+          : 'Up ${m(up)}, down ${m(down)} overall',
       child: list.isEmpty
-          ? const InsightNoData(message: 'Once you have two periods of spending, changes show up here.')
+          ? const InsightNoData(message: 'Not enough data yet')
           : Column(
               children: [
                 for (final (s, delta) in list)
@@ -304,7 +299,6 @@ List<Widget> paymentsSection(BuildContext context, InsightsData data) {
       LedgerEmpty(
         icon: LucideIcons.creditCard,
         title: 'No payments in ${data.periodLabel}',
-        message: 'Record expenses with an account to see how you pay.',
       ),
     ];
   }

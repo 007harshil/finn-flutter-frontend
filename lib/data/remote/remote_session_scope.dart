@@ -62,6 +62,12 @@ class _RemoteSessionScopeState extends ConsumerState<RemoteSessionScope> with Wi
 
   StreamSubscription<Set<String>>? _engineSub;
   Timer? _prefsDebounce;
+
+  /// Pulls changes made by other people (a friend sharing or settling a
+  /// pending item) while the app stays open. The server has no push, so
+  /// without this they only appear after a resume or the user's own action.
+  Timer? _poll;
+  static const _pollEvery = Duration(seconds: 30);
   JsonMap? _serverPrefs;
   bool _starting = false;
 
@@ -84,6 +90,7 @@ class _RemoteSessionScopeState extends ConsumerState<RemoteSessionScope> with Wi
       }
     });
     ref.listenManual<AppSettings>(settingsProvider, (prev, next) => _onSettingsChanged(next));
+    _startPolling();
     if (ref.read(authControllerProvider) != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_start()));
     }
@@ -94,15 +101,28 @@ class _RemoteSessionScopeState extends ConsumerState<RemoteSessionScope> with Wi
     WidgetsBinding.instance.removeObserver(this);
     _engineSub?.cancel();
     _prefsDebounce?.cancel();
+    _poll?.cancel();
     _backend.auth.onExpired = null;
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && ref.read(authControllerProvider) != null && _engine.userId != null) {
-      unawaited(_sync());
+    if (state == AppLifecycleState.resumed) {
+      if (ref.read(authControllerProvider) != null && _engine.userId != null) unawaited(_sync());
+      _startPolling();
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      _poll?.cancel();
+      _poll = null;
     }
+  }
+
+  void _startPolling() {
+    _poll?.cancel();
+    _poll = Timer.periodic(_pollEvery, (_) {
+      if (_starting || ref.read(authControllerProvider) == null || _engine.userId == null) return;
+      unawaited(_sync());
+    });
   }
 
   Future<void> _sync() async {

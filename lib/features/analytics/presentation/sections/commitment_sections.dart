@@ -26,8 +26,6 @@ List<Widget> budgetsSection(BuildContext context, InsightsData data) {
       LedgerEmpty(
         icon: LucideIcons.target,
         title: 'No budgets set yet',
-        message: 'A budget is a monthly limit for a category, like ₹8,000 for food. '
-            'Set one to see whether you are spending on pace.',
         actionLabel: 'Create a budget',
         onAction: () => context.push(AppRoutes.newBudget),
       ),
@@ -56,7 +54,6 @@ class _Pace extends StatelessWidget {
       return const LedgerEmpty(
         icon: LucideIcons.pause,
         title: 'All budgets are paused',
-        message: 'Resume a budget to track it here.',
       );
     }
     final over = used >= 10000;
@@ -197,7 +194,6 @@ List<Widget> savingsSection(BuildContext context, InsightsData data) {
       LedgerEmpty(
         icon: LucideIcons.piggyBank,
         title: 'No savings set aside yet',
-        message: 'Money moved into goals or your emergency fund shows up here. Start a goal, even a small one.',
         actionLabel: 'Start a goal',
         onAction: () => context.push(AppRoutes.newGoal),
       ),
@@ -231,7 +227,6 @@ List<Widget> savingsSection(BuildContext context, InsightsData data) {
     InsightChartCard(
       heading: 'Over time',
       title: data.savingsHeadline((x) => moneyText(context, x)),
-      subtitle: 'Set aside for goals and your emergency fund at each month end. Touch a point for the amount.',
       howCalculated: 'Set aside = all contributions minus withdrawals to goals and the emergency fund up to '
           'each month end. This money is still part of your cash balance: it is set aside, not spent.',
       child: TrendLineChart(points: data.savings, color: context.ink.green, seriesLabel: 'Savings'),
@@ -289,7 +284,6 @@ List<Widget> loansSection(BuildContext context, InsightsData data) {
       LedgerEmpty(
         icon: LucideIcons.landmark,
         title: 'You have no borrowed loans',
-        message: 'Nothing to pay back. If you take a loan, its payoff progress shows up here.',
       ),
     ];
   }
@@ -330,7 +324,6 @@ List<Widget> loansSection(BuildContext context, InsightsData data) {
     InsightChartCard(
       heading: 'Over time',
       title: data.debtHeadline((x) => moneyText(context, x)),
-      subtitle: 'What you still owe at each month end. A line going down is good news.',
       howCalculated: 'Outstanding debt = original principal minus principal repaid on loans you borrowed, measured '
           'at each month end (today for the current month). Interest paid does not reduce debt. Loans you gave '
           'to others are not included.',
@@ -387,8 +380,6 @@ List<Widget> subscriptionsSection(BuildContext context, InsightsData data) {
       LedgerEmpty(
         icon: LucideIcons.repeat,
         title: 'No active subscriptions',
-        message: 'Netflix, gym, phone plans: anything you pay again and again. '
-            'Add them to see what they cost you each month and year.',
         actionLabel: 'Add a subscription',
         onAction: () => context.push(AppRoutes.newSubscription),
       ),

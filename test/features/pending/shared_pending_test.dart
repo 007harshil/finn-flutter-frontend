@@ -363,7 +363,7 @@ void main() {
       await env.pumpWidget(tester, const PendingFormSheet());
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('pending-no-friends')), findsOneWidget);
-      expect(find.textContaining('Only friends can be linked'), findsOneWidget);
+      expect(find.text('No friends yet'), findsOneWidget);
       expect(find.byKey(const ValueKey('pending-open-friends')), findsOneWidget);
     });
 

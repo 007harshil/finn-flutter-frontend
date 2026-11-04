@@ -356,8 +356,7 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
     final settled = existing?.settled ?? Money.zero;
     final amountHelper = [
       if (settled.isPositive)
-        '${settled.format()} is already settled, so the amount cannot go lower.',
-      if (existing?.payment.isSplit ?? false) 'Part of a split bill. Changing it changes the bill total; the others stay as they are.',
+        'Min ${settled.format()} (already settled)',
     ].join(' ');
 
     return FinnSheetScaffold(
@@ -391,15 +390,6 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
           const SizedBox(height: LedgerForm.gap),
           LedgerField(
             label: 'Direction',
-            helper: _editing
-                ? 'Fixed after creation. Delete and re-add if it was wrong.'
-                : _splitting
-                ? (_direction.isOwe
-                      ? 'You pay each of them their share.'
-                      : 'Each of them pays you their share.')
-                : (_direction.isOwe
-                      ? 'You pay this person.'
-                      : 'This person pays you.'),
             child: _editing
                 ? _LockedValue(icon: _direction.icon, label: _direction.label)
                 : LedgerSegmented<PendingDirection>(

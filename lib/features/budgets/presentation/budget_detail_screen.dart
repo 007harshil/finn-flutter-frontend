@@ -101,7 +101,6 @@ class BudgetDetailScreen extends ConsumerWidget {
                   top: Sp.xxl,
                   child: LedgerEmpty(
                     title: 'Budget not found',
-                    message: 'It may have been deleted.',
                     actionLabel: 'Back to budgets',
                     onAction: () => context.go(AppRoutes.budgets),
                   ),
@@ -144,7 +143,7 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
             top: Sp.sm,
             child: LedgerNote(
               icon: LucideIcons.lock,
-              text: 'A past month is read-only. Budgets can only be changed for the current month.',
+              text: 'Past months are read-only',
             ),
           ),
         PageBlock(top: p.isPast ? Sp.xl : Sp.md, child: _Hero(pace: p)),
@@ -287,29 +286,60 @@ class _Hero extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(height: Sp.xl),
-        Text(over ? 'Over by' : 'Left', style: t.label.copyWith(color: over ? c.red : null)),
-        const SizedBox(height: Sp.xs),
-        AnimatedAmount(
-          u.remaining.abs(),
-          style: t.figureXL.copyWith(color: over && !hidden ? c.red : c.ink),
-          decimals: DecimalDisplay.none,
-          fit: true,
-          animateOnMount: true,
-        ),
-        const SizedBox(height: Sp.xs),
-        Text('of ${budgetMoney(context, u.budget.limit)}', style: t.label),
         const SizedBox(height: Sp.lg),
-        LedgerBar(
-          value: p.used,
-          marker: p.isPast || paused ? null : p.elapsed,
-          color: switch (p.state) {
-            BudgetState.risk => c.amber,
-            BudgetState.paused => c.inkFaint,
-            _ => c.green,
-          },
-          semanticLabel: '${formatBps(u.utilizationBps, decimals: 0)} of the limit used, '
-              '${formatBps(u.elapsedBps, decimals: 0)} of the period gone',
+        KhataPanel(
+          child: Row(
+            children: [
+              KhataRing(
+                value: p.used,
+                marker: p.isPast || paused ? null : p.elapsed,
+                size: 112,
+                color: switch (p.state) {
+                  BudgetState.over => c.red,
+                  BudgetState.risk => c.amber,
+                  BudgetState.paused => c.inkFaint,
+                  BudgetState.onTrack => c.brand,
+                },
+                semanticLabel: '${formatBps(u.utilizationBps, decimals: 0)} of the limit used, '
+                    '${formatBps(u.elapsedBps, decimals: 0)} of the period gone',
+                center: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(hidden ? '••' : formatBps(u.utilizationBps, decimals: 0), style: t.figure.copyWith(fontSize: 20)),
+                    Text('used', style: t.small),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(over ? 'Over by' : 'Left', style: t.label.copyWith(color: over ? c.red : null)),
+                    const SizedBox(height: 2),
+                    AnimatedAmount(
+                      u.remaining.abs(),
+                      style: t.figureL.copyWith(color: over && !hidden ? c.red : c.ink),
+                      decimals: DecimalDisplay.none,
+                      fit: true,
+                      animateOnMount: true,
+                    ),
+                    Text('of ${budgetMoney(context, u.budget.limit)}', style: t.label),
+                    const SizedBox(height: Sp.sm),
+                    KhataStamp(
+                      label: p.state.label,
+                      color: switch (p.state) {
+                        BudgetState.over => c.red,
+                        BudgetState.risk => c.amber,
+                        BudgetState.paused => c.inkSoft,
+                        BudgetState.onTrack => c.green,
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: Sp.md),
         Text(_verdict(context, p), style: t.label.copyWith(color: verdictColor)),

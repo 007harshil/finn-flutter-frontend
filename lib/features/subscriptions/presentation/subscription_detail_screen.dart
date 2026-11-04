@@ -144,7 +144,6 @@ class _SubscriptionDetailScreenState extends ConsumerState<SubscriptionDetailScr
                     top: Sp.xxl,
                     child: LedgerEmpty(
                       title: 'Subscription not found',
-                      message: 'It may have been deleted.',
                       actionLabel: 'Back to subscriptions',
                       onAction: () => context.go(AppRoutes.subscriptions),
                     ),
@@ -255,24 +254,51 @@ class _Hero extends StatelessWidget {
     final s = d.subscription;
     final next = subscriptionNextCharge(context, s, d.today);
     final paused = s.status == SubscriptionStatus.paused;
+    final cycleDays = s.frequency.months == 0 ? 7 : s.frequency.months * 30;
+    final daysLeft = daysBetween(d.today, s.nextDueDate);
+    final cycle = (1 - daysLeft / cycleDays).clamp(0.0, 1.0);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(d.category?.name ?? 'Uncategorised', style: t.label),
-        const SizedBox(height: Sp.xs),
-        Semantics(
-          container: true,
-          label:
-              '${s.name}, ${MoneyFormatter.spoken(s.amount)} ${s.frequency.label.toLowerCase()}, ${s.status.label}',
-          excludeSemantics: true,
+        KhataPanel(
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Flexible(child: AnimatedAmount(s.amount, style: t.figureXL, fit: true, animateOnMount: true)),
-              const SizedBox(width: Sp.sm),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 5),
-                child: Text('per ${s.frequency.unit}', style: t.figureSmall),
+              // How far through the current billing cycle we are.
+              KhataRing(
+                value: s.isActive ? cycle : 0,
+                size: 104,
+                stroke: 11,
+                color: next.color ?? c.brand,
+                center: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(s.isActive ? '${daysLeft < 0 ? 0 : daysLeft}' : '—', style: t.figure.copyWith(fontSize: 22)),
+                    Text(daysLeft == 1 ? 'day left' : 'days left', style: t.small),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(d.category?.name ?? 'Uncategorised', style: t.label),
+                    const SizedBox(height: 2),
+                    Semantics(
+                      container: true,
+                      label:
+                          '${s.name}, ${MoneyFormatter.spoken(s.amount)} ${s.frequency.label.toLowerCase()}, ${s.status.label}',
+                      excludeSemantics: true,
+                      child: AnimatedAmount(s.amount, style: t.figureL, fit: true, animateOnMount: true),
+                    ),
+                    Text('per ${s.frequency.unit}', style: t.figureSmall),
+                    const SizedBox(height: Sp.sm),
+                    KhataStamp(
+                      label: s.status.label,
+                      color: paused ? c.amber : (s.isActive ? c.green : c.inkSoft),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -308,17 +334,12 @@ class _Hero extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: Sp.md),
-          Text(
-            'Records one expense and moves the due date forward. Nothing is deducted automatically.',
-            style: t.label.copyWith(color: c.inkFaint),
-          ),
         ] else ...[
           LedgerNote(
             icon: paused ? LucideIcons.pause : LucideIcons.circleX,
             text: paused
-                ? 'Paused. No renewals are expected and it does not count towards your monthly cost.'
-                : 'Cancelled. No renewals are expected. Past payments stay in your transactions.',
+                ? 'Paused'
+                : 'Cancelled',
           ),
           const SizedBox(height: Sp.lg),
           LedgerButton(

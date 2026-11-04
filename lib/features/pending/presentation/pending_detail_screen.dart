@@ -113,7 +113,6 @@ class _PendingDetailScreenState extends ConsumerState<PendingDetailScreen> {
                   top: Sp.xxl,
                   child: LedgerEmpty(
                     title: 'This item no longer exists',
-                    message: 'It may have been deleted.',
                     actionLabel: 'Back to money owed',
                     onAction: () => context.go(AppRoutes.pending),
                   ),
@@ -150,13 +149,6 @@ class _Body extends StatelessWidget {
         if (p.isShared) PageColumn(top: Sp.section, child: _Shared(view: v)),
         PageColumn(top: Sp.section, child: _Details(view: v)),
         PageColumn(top: Sp.section, child: _History(view: v)),
-        PageColumn(
-          top: Sp.xl,
-          child: LedgerNote(
-            text: 'Creating this did not change your balance. Settling records the cash movement once.'
-                '${v.settlements.isNotEmpty ? ' Items with settlements cannot be deleted, so your history stays accurate. Write off the rest instead.' : ''}',
-          ),
-        ),
       ],
     );
   }
@@ -208,29 +200,51 @@ class _Hero extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(p.direction.sentence(p.counterparty), style: t.label),
-        const SizedBox(height: Sp.xs),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Flexible(
-              child: AnimatedAmount(
-                headline,
-                style: t.figureXL.copyWith(color: active && !p.direction.isOwe ? c.green : c.ink),
-                fit: true,
-                animateOnMount: true,
+        KhataPanel(
+          child: Row(
+            children: [
+              KhataRing(
+                value: settledShare,
+                size: 100,
+                stroke: 10,
+                color: c.green,
+                semanticLabel: '${v.settledBps ~/ 100}% settled',
+                center: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('${v.settledBps ~/ 100}%', style: t.figure.copyWith(fontSize: 18)),
+                    Text('settled', style: t.small),
+                  ],
+                ),
               ),
-            ),
-            if (after != null) ...[
-              const SizedBox(width: Sp.sm),
-              Flexible(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 5),
-                  child: Text(after, style: t.figureSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+              const SizedBox(width: Sp.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(p.direction.sentence(p.counterparty), style: t.label, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    AnimatedAmount(
+                      headline,
+                      style: t.figureL.copyWith(color: active && !p.direction.isOwe ? c.green : c.ink),
+                      fit: true,
+                      animateOnMount: true,
+                    ),
+                    if (after != null) Text(after, style: t.figureSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: Sp.sm),
+                    KhataStamp(
+                      label: v.status.label,
+                      color: switch (v.status) {
+                        PendingStatus.settled => c.green,
+                        PendingStatus.cancelled => c.inkSoft,
+                        _ => v.isLongPending ? c.amber : c.brand,
+                      },
+                    ),
+                  ],
                 ),
               ),
             ],
-          ],
+          ),
         ),
         const SizedBox(height: Sp.xs),
         Text(p.purpose, style: t.label),
@@ -365,7 +379,6 @@ class _TheirSideSheet extends StatelessWidget {
     final v = mirror.view(today);
     return FinnSheetScaffold(
       title: '$name’s FiNN',
-      description: 'What ${mirror.payment.link!.handle} sees for this item. Read-only.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

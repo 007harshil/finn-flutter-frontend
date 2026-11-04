@@ -137,7 +137,6 @@ class _EmergencyPlanSheetState extends ConsumerState<EmergencyPlanSheet> {
           : value.hasError
           ? const LedgerEmpty(
               title: 'Could not load your emergency fund',
-              message: 'Please try again.',
             )
           : const SavingsMovementSkeleton(),
     );
@@ -163,9 +162,6 @@ class _EmergencyPlanSheetState extends ConsumerState<EmergencyPlanSheet> {
           controller: _essentials,
           label: 'Essential spending per month',
           hint: '0',
-          helper: suggestion == null
-              ? 'Needs only: rent, groceries, bills, EMIs.'
-              : null,
           autofocus: !_isEdit && suggestion == null,
           errorText: _errors['essentialMonthlyExpenses'],
           textInputAction: TextInputAction.next,
@@ -245,7 +241,6 @@ class _EmergencyPlanSheetState extends ConsumerState<EmergencyPlanSheet> {
         const SizedBox(height: Sp.md),
         LedgerSwitchRow(
           title: 'Custom target',
-          subtitle: 'Use your own amount instead of essentials × months.',
           value: _custom,
           onChanged: (v) => setState(() {
             _custom = v;

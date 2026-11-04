@@ -149,7 +149,6 @@ class _AssetFormSheetState extends ConsumerState<AssetFormSheet> {
     final missing = _isEdit && ready && _existing == null;
     return FinnSheetScaffold(
       title: _isEdit ? 'Edit asset' : 'Add asset',
-      description: 'Counts towards net worth, not your cash balance.',
       footer: LedgerButton(
         label: _isEdit ? 'Save changes' : 'Add asset',
         expand: true,
@@ -161,7 +160,6 @@ class _AssetFormSheetState extends ConsumerState<AssetFormSheet> {
           : missing
           ? const LedgerEmpty(
               title: 'Asset not found',
-              message: 'It may have been deleted.',
             )
           : _form(context),
     );
@@ -177,7 +175,6 @@ class _AssetFormSheetState extends ConsumerState<AssetFormSheet> {
           hero: true,
           controller: _value,
           label: 'Current value',
-          helper: 'What it would fetch today.',
           errorText: _errors['value'],
           textInputAction: TextInputAction.next,
           onChanged: (_) => _clearError('value'),

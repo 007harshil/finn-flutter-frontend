@@ -70,7 +70,6 @@ class _SetBalanceSheetState extends ConsumerState<SetBalanceSheet> {
     final missing = ready && b == null;
     return FinnSheetScaffold(
       title: b != null && b.isLiability ? 'Correct amount owed' : 'Correct balance',
-      description: 'Your transactions are kept. Only the starting figure changes to match.',
       footer: LedgerButton(
         label: 'Save',
         expand: true,
@@ -80,7 +79,7 @@ class _SetBalanceSheetState extends ConsumerState<SetBalanceSheet> {
       child: !ready
           ? const LedgerSkeleton(height: 120)
           : missing
-          ? const LedgerEmpty(title: 'Account not found', message: 'It may have been deleted.')
+          ? const LedgerEmpty(title: 'Account not found')
           : _form(context, b!),
     );
   }
@@ -98,7 +97,6 @@ class _SetBalanceSheetState extends ConsumerState<SetBalanceSheet> {
           hero: true,
           controller: _amount,
           label: liability ? 'Amount owed now' : 'Actual balance',
-          helper: liability ? 'What your card statement says you owe.' : 'What the account really holds right now.',
           errorText: _errors['balance'],
           onChanged: (m) => setState(() {
             _value = m;

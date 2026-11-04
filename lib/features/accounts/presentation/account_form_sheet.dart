@@ -159,7 +159,7 @@ class _AccountFormSheetState extends ConsumerState<AccountFormSheet> {
               children: [LedgerSkeleton(height: 52), SizedBox(height: LedgerForm.gap), LedgerSkeleton(height: 52)],
             )
           : missing
-          ? const LedgerEmpty(title: 'Account not found', message: 'It may have been deleted.')
+          ? const LedgerEmpty(title: 'Account not found')
           : _form(context),
     );
   }
@@ -227,7 +227,6 @@ class _AccountFormSheetState extends ConsumerState<AccountFormSheet> {
         LedgerAmountField(
           controller: _opening,
           label: liability ? 'Amount owed' : 'Opening balance',
-          helper: liability ? 'What you owe on this card right now.' : 'Money in it on the date below.',
           errorText: _errors['openingBalance'],
           onChanged: (_) => _clearError('openingBalance'),
         ),
@@ -267,7 +266,6 @@ class _AccountFormSheetState extends ConsumerState<AccountFormSheet> {
           const SizedBox(height: LedgerForm.gap),
           LedgerSwitchRow(
             title: 'Set as default',
-            subtitle: 'New transactions start on this account.',
             value: _makeDefault,
             onChanged: (v) => setState(() => _makeDefault = v),
           ),

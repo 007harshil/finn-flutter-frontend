@@ -305,14 +305,12 @@ class LedgerEmpty extends StatelessWidget {
   const LedgerEmpty({
     super.key,
     required this.title,
-    required this.message,
     this.icon,
     this.actionLabel,
     this.onAction,
   });
 
   final String title;
-  final String message;
   final IconData? icon;
   final String? actionLabel;
   final VoidCallback? onAction;
@@ -337,11 +335,6 @@ class LedgerEmpty extends StatelessWidget {
             const SizedBox(height: Sp.lg),
           ],
           Text(title, style: t.heading, textAlign: TextAlign.center),
-          const SizedBox(height: Sp.xs + 2),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320),
-            child: Text(message, style: t.label, textAlign: TextAlign.center),
-          ),
           if (label != null) ...[
             const SizedBox(height: Sp.lg),
             LedgerButton(label: label, onPressed: onAction, variant: LedgerButtonVariant.secondary),

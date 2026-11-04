@@ -134,7 +134,6 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
                     padding: EdgeInsets.symmetric(vertical: Sp.xl),
                     child: LedgerEmpty(
                       title: 'Could not load your profile',
-                      message: 'Please close and try again.',
                     ),
                   )
                 : const _FormSkeleton())
@@ -162,7 +161,6 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
           hero: true,
           controller: _opening,
           label: 'Opening balance',
-          helper: 'Bank and wallet when you started. Balances are worked out from this.',
           errorText: _errors['openingBalance'],
           textInputAction: TextInputAction.next,
           onChanged: (m) => setState(() {
@@ -182,11 +180,6 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
             _errors = {..._errors}..remove('openingDate');
           }),
         ),
-        const SizedBox(height: Sp.sm),
-        Text(
-          'Transactions before this date are not counted in your cash balance.',
-          style: context.type.label,
-        ),
         if (_changesBalances) ...[
           const SizedBox(height: Sp.md),
           const LedgerNote(
@@ -199,7 +192,6 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
         LedgerAmountField(
           controller: _income,
           label: 'Monthly income (optional)',
-          helper: 'Used for guidance until we see your income.',
           errorText: _errors['monthlyIncomeEstimate'],
           onChanged: (_) => _clearError('monthlyIncomeEstimate'),
         ),

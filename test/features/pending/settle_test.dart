@@ -127,9 +127,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('You have not paid Rahul Verma back yet. 24 days have passed.'), findsOneWidget);
       expect(find.text('Settle'), findsOneWidget);
-      final note = find.textContaining('Creating this did not change your balance');
-      await tester.scrollUntilVisible(note, 300, scrollable: find.byType(Scrollable).first);
-      expect(note, findsOneWidget);
+      expect(find.textContaining('Creating this did not change your balance'), findsNothing);
       expect(find.text('₹2,000 left'), findsOneWidget, reason: 'remaining after the settlement');
       expect(tester.takeException(), isNull);
 

@@ -177,6 +177,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
       storageKey: 'alerts',
       appBar: const LedgerAppBar(title: 'Needs attention'),
       slivers: [
+        if (alerts.isNotEmpty) PageBlock(top: Sp.sm, child: _SeverityDonut(alerts: alerts)),
         if (present.length > 1)
           PageBlock(
             top: Sp.sm,
@@ -202,9 +203,6 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
             top: Sp.xl,
             child: LedgerEmpty(
               title: 'All clear',
-              message: alerts.isEmpty
-                  ? 'Due dates, budget limits and savings milestones will show up here.'
-                  : 'No alerts in this group.',
               actionLabel: alerts.isEmpty ? null : 'Show all alerts',
               onAction: alerts.isEmpty
                   ? null
@@ -277,6 +275,59 @@ class _DismissBackground extends StatelessWidget {
           Text('Dismiss', style: context.type.labelStrong),
           const SizedBox(width: Sp.sm),
           Icon(LucideIcons.x, size: 16, color: c.ink),
+        ],
+      ),
+    );
+  }
+}
+
+/// How many alerts sit at each level, as one donut with counted keys.
+class _SeverityDonut extends StatelessWidget {
+  const _SeverityDonut({required this.alerts});
+
+  final List<FinancialAlert> alerts;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ink;
+    final t = context.type;
+    Color hue(AlertSeverity s) => switch (s) {
+      AlertSeverity.critical => c.red,
+      AlertSeverity.warning => c.amber,
+      AlertSeverity.info => c.info,
+      AlertSeverity.positive => c.green,
+    };
+    final counts = {for (final s in AlertSeverity.values) s: alerts.where((a) => a.severity == s).length};
+    final shown = [for (final s in AlertSeverity.values) if (counts[s]! > 0) s];
+    final urgent = counts[AlertSeverity.critical]!;
+    return KhataPanel(
+      child: Row(
+        children: [
+          KhataDonut(
+            size: 96,
+            stroke: 13,
+            parts: [for (final s in shown) BarPart(counts[s]!.toDouble(), hue(s))],
+            semanticLabel: [for (final s in shown) '${counts[s]} ${s.label}'].join(', '),
+            center: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('${alerts.length}', style: t.figure.copyWith(fontSize: 20)),
+                Text('alerts', style: t.small),
+              ],
+            ),
+          ),
+          const SizedBox(width: Sp.lg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                KhataStamp(label: urgent > 0 ? '$urgent urgent' : 'Nothing urgent', color: urgent > 0 ? c.red : c.green),
+                const SizedBox(height: Sp.sm),
+                for (final s in shown)
+                  KhataKey(color: hue(s), label: '${s.label} · ${counts[s]}', value: const SizedBox.shrink()),
+              ],
+            ),
+          ),
         ],
       ),
     );

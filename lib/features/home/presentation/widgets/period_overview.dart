@@ -178,7 +178,6 @@ class _FlowPanel extends StatelessWidget {
           LedgerRow(
             leading: const IconWell(icon: LucideIcons.notebookPen),
             title: isCurrent ? 'Nothing recorded yet' : 'Nothing recorded',
-            subtitle: 'Add income or an expense to see this month take shape.',
           ),
         ],
       );

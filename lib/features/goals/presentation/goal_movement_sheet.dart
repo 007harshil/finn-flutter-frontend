@@ -31,7 +31,6 @@ class GoalMovementSheet extends ConsumerWidget {
         child: value.hasError
             ? const LedgerEmpty(
                 title: 'Could not load this goal',
-                message: 'Please try again.',
               )
             : const SavingsMovementSkeleton(),
       );
@@ -42,7 +41,6 @@ class GoalMovementSheet extends ConsumerWidget {
         title: 'Goal not found',
         child: LedgerEmpty(
           title: 'This goal no longer exists',
-          message: 'It may have been deleted.',
         ),
       );
     }

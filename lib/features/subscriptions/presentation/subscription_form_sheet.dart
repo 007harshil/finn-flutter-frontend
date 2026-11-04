@@ -175,7 +175,6 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
 
     return FinnSheetScaffold(
       title: _editing ? 'Edit subscription' : 'New subscription',
-      description: 'Saving never changes your balance. A renewal becomes an expense when you mark it paid.',
       footer: LedgerButton(
         label: _editing ? 'Save changes' : 'Add subscription',
         expand: true,
@@ -274,7 +273,6 @@ class _SubscriptionFormSheetState extends ConsumerState<SubscriptionFormSheet> {
           AccountPickerField(
             label: 'Charged to (optional)',
             hint: 'Default account',
-            helper: 'Used when you mark a renewal paid.',
             value: _accountId,
             optional: true,
             noneLabel: 'Default account',

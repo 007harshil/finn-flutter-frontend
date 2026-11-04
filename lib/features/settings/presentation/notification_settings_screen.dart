@@ -19,13 +19,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
       storageKey: 'notification-settings',
       appBar: const LedgerAppBar(title: 'Alerts & reminders'),
       slivers: [
-        const PageBlock(
-          top: Sp.sm,
-          child: LedgerNote(
-            text: 'Alerts show on Home under "Needs attention". Turn off the ones you do not want.',
-          ),
-        ),
-        const PageBlock(top: Sp.xl, child: _TimingGroup()),
+        const PageBlock(top: Sp.sm, child: _TimingGroup()),
         for (final g in _alertGroups)
           PageBlock(
             top: Sp.section,

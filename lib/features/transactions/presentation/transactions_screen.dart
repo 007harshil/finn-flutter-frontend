@@ -10,7 +10,6 @@ import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
-import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../features/transactions/domain/transaction.dart';
 import '../../../kit/kit.dart';
@@ -175,14 +174,12 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   List<Widget> _content(BuildContext context, AsyncValue<TransactionFeed> value) {
     if (!value.hasValue) {
       if (value.hasError) {
-        final e = value.error;
         return [
           PageBlock(
             top: Sp.xl,
             child: LedgerEmpty(
               icon: LucideIcons.cloudOff,
               title: 'Could not load your transactions',
-              message: e is AppFailure ? e.message : 'Please try again.',
               actionLabel: 'Try again',
               onAction: () => refreshFinanceData(ref),
             ),
@@ -206,14 +203,12 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
               ? LedgerEmpty(
                   icon: LucideIcons.searchX,
                   title: 'No transactions match these filters',
-                  message: 'Try a different search or filter, or widen the dates.',
                   actionLabel: 'Clear filters',
                   onAction: _clearRefinements,
                 )
               : LedgerEmpty(
                   icon: LucideIcons.inbox,
                   title: 'Nothing recorded ${_periodPhrase(filter)}',
-                  message: 'Income and expenses you record will appear here.',
                   actionLabel: 'Add transaction',
                   onAction: () => context.push(AppRoutes.newTransaction()),
                 ),

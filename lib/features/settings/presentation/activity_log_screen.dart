@@ -28,7 +28,6 @@ class ActivityLogScreen extends ConsumerWidget {
             top: Sp.xl,
             child: LedgerEmpty(
               title: 'Could not load activity',
-              message: 'Please go back and try again.',
             ),
           ),
         ],
@@ -61,8 +60,6 @@ List<Widget> _body(BuildContext context, WidgetRef ref, List<AuditEntry> entries
         child: LedgerEmpty(
           icon: LucideIcons.history,
           title: 'No activity yet',
-          message:
-              'Changes you make, like adding a transaction or paying an EMI, are listed here while the app is open.',
         ),
       ),
     ];
@@ -79,7 +76,7 @@ List<Widget> _body(BuildContext context, WidgetRef ref, List<AuditEntry> entries
       child: LedgerNote(
         text:
             '${entries.length} change${entries.length == 1 ? '' : 's'} this session'
-            '${failed > 0 ? ', $failed not completed' : ''}. Kept only while the app is open.',
+            '${failed > 0 ? ', $failed not completed' : ''}',
       ),
     ),
     for (final day in days.entries)

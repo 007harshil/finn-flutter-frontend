@@ -19,11 +19,6 @@ class WelcomeCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text('Welcome to FiNN', style: t.heading),
-        const SizedBox(height: Sp.xs),
-        Text(
-          'Record your first income or expense. Balances, budgets and goals build from there.',
-          style: t.label,
-        ),
         const SizedBox(height: Sp.lg),
         LedgerButton(
           label: 'Record first transaction',

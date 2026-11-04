@@ -288,8 +288,7 @@ class _PeriodSection extends StatelessWidget {
           ],
           const SizedBox(height: Sp.md),
           Text(
-            '${fmt.format(range.start)} – ${fmt.format(range.end)}. Applies to dated records; '
-            'loans, budgets and assets are always included in full.',
+            '${fmt.format(range.start)} – ${fmt.format(range.end)}',
             style: t.label.copyWith(color: c.inkSoft),
           ),
         ],

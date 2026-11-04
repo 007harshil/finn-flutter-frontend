@@ -145,7 +145,6 @@ class _AccountDetailScreenState extends ConsumerState<AccountDetailScreen> {
                     top: Sp.xxl,
                     child: LedgerEmpty(
                       title: 'This account no longer exists',
-                      message: 'It may have been deleted.',
                       actionLabel: 'Back to accounts',
                       onAction: () => context.go(AppRoutes.accounts),
                     ),
@@ -223,8 +222,7 @@ class _BodyState extends ConsumerState<_Body> {
             top: Sp.lg,
             child: LedgerNote(
               icon: LucideIcons.archive,
-              text:
-                  'Archived. It keeps its history but is hidden from pickers.',
+              text: 'Archived',
             ),
           ),
         PageColumn(
@@ -344,30 +342,65 @@ class _Hero extends StatelessWidget {
     final c = context.ink;
     final a = balance.account;
     final limit = limitLeftText(balance);
+    final hidden = AmountVisibility.hiddenOf(context);
+    final bal = balance.balance.paise.abs();
+    final left = balance.limitLeft?.paise;
+    final double share = a.isLiability
+        ? (left == null || bal + left <= 0 ? 0 : bal / (bal + left))
+        : (bal <= 0 ? 0 : (balance.earmarked.paise / bal).clamp(0.0, 1.0));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(a.isLiability ? 'Amount owed' : 'Balance', style: t.label),
-        const SizedBox(height: Sp.xs),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: AlignmentDirectional.centerStart,
-          child: AccountAmount(balance, style: t.figureXL),
-        ),
-        const SizedBox(height: Sp.sm),
-        Text(
-          [accountSubtitle(a), if (a.isDefault) 'Default'].join(' · '),
-          style: t.label,
-        ),
-        if (limit != null) ...[
-          const SizedBox(height: Sp.xs),
-          Text(
-            limit,
-            style: t.label.copyWith(
-              color: balance.limitLeft!.isNegative ? c.red : c.inkSoft,
-            ),
+        KhataPanel(
+          child: Row(
+            children: [
+              // Cards: how much of the limit is used. Bank and cash: how
+              // much of the balance is set aside for goals and emergencies.
+              KhataRing(
+                value: share,
+                size: 104,
+                stroke: 11,
+                color: a.isLiability ? null : c.marigold,
+                center: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(hidden ? '••' : '${(share * 100).round()}%', style: t.figure.copyWith(fontSize: 19)),
+                    Text(a.isLiability ? 'of limit' : 'set aside', style: t.small),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(a.isLiability ? 'Amount owed' : 'Balance', style: t.label),
+                    const SizedBox(height: 2),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: AlignmentDirectional.centerStart,
+                      child: AccountAmount(balance, style: t.figureL),
+                    ),
+                    const SizedBox(height: Sp.xs),
+                    Text(
+                      [accountSubtitle(a), if (a.isDefault) 'Default'].join(' · '),
+                      style: t.label,
+                    ),
+                    if (limit != null) ...[
+                      const SizedBox(height: Sp.xs),
+                      Text(
+                        limit,
+                        style: t.label.copyWith(
+                          color: balance.limitLeft!.isNegative ? c.red : c.inkSoft,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
         const SizedBox(height: Sp.lg),
         Row(
           children: [

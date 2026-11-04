@@ -97,8 +97,6 @@ class _ChapterSlivers extends ConsumerWidget {
         child: LedgerEmpty(
           icon: LucideIcons.bookOpen,
           title: 'A quiet month',
-          message:
-              'No key moments in ${DateFormats.monthYear.format(month.start)} yet. Income, larger spends, loan payments and savings will appear here.',
         ),
       );
     }
@@ -135,13 +133,52 @@ class _ChapterHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ink;
     final t = context.type;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Semantics(header: true, child: Text(chapter.name, style: t.figureL)),
-        const SizedBox(height: Sp.sm),
-        Text(chapter.summary, style: t.body.copyWith(color: c.inkSoft)),
-      ],
+    final n = chapter.events.length;
+    return KhataPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Semantics(header: true, child: Text(chapter.name, style: t.figureL))),
+              const SizedBox(width: Sp.sm),
+              KhataStamp(label: '$n ${n == 1 ? 'moment' : 'moments'}', color: c.brand),
+            ],
+          ),
+          const SizedBox(height: Sp.sm),
+          Text(chapter.summary, style: t.body.copyWith(color: c.inkSoft)),
+          if (n > 0) ...[
+            const SizedBox(height: Sp.md),
+            // One bead per moment, placed by its day in the month.
+            ExcludeSemantics(
+              child: SizedBox(
+                height: 14,
+                child: LayoutBuilder(
+                  builder: (context, box) => Stack(
+                    children: [
+                      Positioned(left: 0, right: 0, top: 6, child: Container(height: 2, color: c.khataRule)),
+                      for (final e in chapter.events)
+                        Positioned(
+                          left: (box.maxWidth - 12) * ((e.date.day - 1) / (chapter.month.dayCount - 1).clamp(1, 31)),
+                          top: 1,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: c.marigold,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: c.khata, width: 2),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -63,7 +63,6 @@ class _ReportReplySheetState extends ConsumerState<ReportReplySheet> {
   Widget build(BuildContext context) {
     return FinnSheetScaffold(
       title: 'Report this reply',
-      description: 'Tell us what is wrong with this assistant reply. It is sent to the FiNN team for review.',
       footer: LedgerButton(
         key: const ValueKey('send-report'),
         label: 'Send report',

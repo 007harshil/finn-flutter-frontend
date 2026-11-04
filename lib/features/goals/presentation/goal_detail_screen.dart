@@ -101,7 +101,6 @@ class GoalDetailScreen extends ConsumerWidget {
                     top: Sp.xxl,
                     child: LedgerEmpty(
                       title: 'Goal not found',
-                      message: 'It may have been deleted.',
                       actionLabel: 'Back to goals',
                       onAction: () => context.go(AppRoutes.goals),
                     ),
@@ -131,7 +130,7 @@ class _GoalBody extends ConsumerWidget {
             top: Sp.sm,
             child: LedgerNote(
               icon: LucideIcons.archive,
-              text: 'This goal is archived. Its money stays earmarked. Restore it to add or withdraw.',
+              text: 'Archived. Restore it to add or withdraw.',
             ),
           ),
         PageColumn(top: Sp.xl, child: _Hero(progress: g, today: today)),
@@ -169,27 +168,45 @@ class _Hero extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Saved', style: t.label),
-        const SizedBox(height: Sp.xs),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Flexible(
-              child: AnimatedAmount(g.saved, style: t.figureXL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
-            ),
-            const SizedBox(width: Sp.sm),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 5),
-              child: Text('of ${goalMoney(context, g.goal.target)}', style: t.figureSmall),
-            ),
-          ],
-        ),
-        const SizedBox(height: Sp.lg),
-        LedgerBar(
-          value: g.progress,
-          marker: expected,
-          semanticLabel: '${goalPercent(g.progress)} saved'
-              '${expected == null || hidden ? '' : '. By now your date needs ${goalPercent(expected)}'}',
+        KhataPanel(
+          child: Row(
+            children: [
+              KhataRing(
+                value: g.progress,
+                marker: expected,
+                size: 112,
+                color: g.isAchieved ? c.green : c.tint(g.goal.colorIndex).$1,
+                semanticLabel: '${goalPercent(g.progress)} saved'
+                    '${expected == null || hidden ? '' : '. By now your date needs ${goalPercent(expected)}'}',
+                center: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(hidden ? '••' : goalPercent(g.progress), style: t.figure.copyWith(fontSize: 20)),
+                    Text('saved', style: t.small),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Saved', style: t.label),
+                    const SizedBox(height: 2),
+                    AnimatedAmount(g.saved, style: t.figureL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
+                    Text('of ${goalMoney(context, g.goal.target)}', style: t.figureSmall),
+                    if (g.isAchieved || g.onTrack != null) ...[
+                      const SizedBox(height: Sp.sm),
+                      KhataStamp(
+                        label: g.isAchieved ? 'Reached' : (g.onTrack == true ? 'On track' : 'Behind'),
+                        color: g.isAchieved || g.onTrack == true ? c.green : c.amber,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: Sp.md),
         Text(status, style: t.label.copyWith(color: tone)),
@@ -257,7 +274,6 @@ class _PlanSectionState extends ConsumerState<_PlanSection> {
   static const _step = 500;
 
   late int _monthly = _initial();
-  bool _saving = false;
 
   /// Starting point for the slider, in whole rupees.
   int _initial() {
@@ -290,41 +306,8 @@ class _PlanSectionState extends ConsumerState<_PlanSection> {
     }
   }
 
-  Future<void> _usePlan() async {
-    final goal = widget.progress.goal;
-    setState(() => _saving = true);
-    await runAction(
-      context,
-      ref,
-      action: const UpdateGoalAction(),
-      input: UpdateGoalInput(
-        id: goal.id,
-        expectedVersion: goal.version,
-        data: GoalInput(
-          name: goal.name,
-          category: goal.category,
-          target: goal.target,
-          colorIndex: goal.colorIndex,
-          targetDate: goal.targetDate,
-          plannedMonthlyContribution: Money.rupees(_monthly),
-          note: goal.note,
-        ),
-      ),
-      idempotencyKey: newIdempotencyKey(),
-      successTitle: 'Monthly plan updated',
-    );
-    if (mounted) setState(() => _saving = false);
-  }
-
-  int _roundUp(Money m) => math.max(_step, ((m.paise / 100) / _step).ceil() * _step);
-
-  void _try(Money m) {
-    HapticFeedback.selectionClick();
-    setState(() => _monthly = _roundUp(m));
-  }
-
   /// Plan (else recent average) against what the date needs.
-  (String, Color?) _verdict(BuildContext context) {
+  (String?, Color?) _verdict(BuildContext context) {
     final g = widget.progress;
     final c = context.ink;
     final plan = g.goal.plannedMonthlyContribution;
@@ -334,7 +317,7 @@ class _PlanSectionState extends ConsumerState<_PlanSection> {
     final date = g.goal.targetDate;
     final which = plan != null ? 'Your plan' : 'Your average';
     if (date == null || need == null) {
-      return ('No target date. Move the slider to see when you would finish.', null);
+      return (null, null);
     }
     if (!has) return ('${goalMoney(context, need)} a month gets you there by ${goalMonth.format(date)}.', null);
     if (rate >= need) {
@@ -351,9 +334,6 @@ class _PlanSectionState extends ConsumerState<_PlanSection> {
     final date = g.goal.targetDate;
     final rate = Money.rupees(_monthly);
     final finish = finishWith(g.remaining, rate, widget.today);
-    final plan = g.goal.plannedMonthlyContribution;
-    final need = g.requiredMonthly;
-    final avg = g.averageMonthlyContribution;
     final max = _max;
     final value = _monthly.clamp(_step, max);
     final (verdict, tone) = _verdict(context);
@@ -373,16 +353,14 @@ class _PlanSectionState extends ConsumerState<_PlanSection> {
     }
 
     final late = finish != null && date != null && finish.isAfter(date);
-    Widget money(Money? m, String empty) => m == null
-        ? Text(empty, style: t.figure.copyWith(color: c.inkSoft))
-        : AmountText(m, style: t.figure, decimals: DecimalDisplay.none);
-    bool at(Money? m) => m != null && _roundUp(m) == value;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(verdict, style: t.body.copyWith(color: tone)),
-        const SizedBox(height: Sp.xl),
+        if (verdict != null) ...[
+          Text(verdict, style: t.body.copyWith(color: tone)),
+          const SizedBox(height: Sp.xl),
+        ],
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
@@ -421,50 +399,6 @@ class _PlanSectionState extends ConsumerState<_PlanSection> {
           ),
         ),
         Text(whatIf(), style: t.bodyStrong.copyWith(color: late ? c.amber : null)),
-        const SizedBox(height: Sp.xl),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: LedgerStat(
-                label: 'Needed',
-                value: money(need, '—'),
-                selected: at(need),
-                semanticLabel: need == null ? null : 'Needed, ${goalMoney(context, need)} a month. Try this amount',
-                onTap: need == null ? null : () => _try(need),
-              ),
-            ),
-            const SizedBox(width: Sp.md),
-            Expanded(
-              // Tappable stats carry vertical padding; match it so labels line up.
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: Sp.xs),
-                child: LedgerStat(label: 'Your average', value: money(avg, '—')),
-              ),
-            ),
-            const SizedBox(width: Sp.md),
-            Expanded(
-              child: LedgerStat(
-                label: 'Plan',
-                value: money(plan, 'Not set'),
-                selected: at(plan),
-                semanticLabel: plan == null ? null : 'Plan, ${goalMoney(context, plan)} a month. Try this amount',
-                onTap: plan == null ? null : () => _try(plan),
-              ),
-            ),
-          ],
-        ),
-        if (plan != rate && g.goal.status == GoalStatus.active) ...[
-          const SizedBox(height: Sp.lg),
-          LedgerButton(
-            key: const ValueKey('goal-use-plan'),
-            label: 'Make it my plan',
-            variant: LedgerButtonVariant.secondary,
-            expand: true,
-            loading: _saving,
-            onPressed: _saving ? null : _usePlan,
-          ),
-        ],
       ],
     );
   }
@@ -492,7 +426,7 @@ class _History extends StatelessWidget {
       title: 'History',
       count: movements.isEmpty ? null : movements.length,
       child: movements.isEmpty
-          ? Text('No money added yet. Your first contribution will show here.', style: t.label)
+          ? Text('No money added yet', style: t.label)
           : LedgerPanel(
               children: [
                 for (final e in groups.entries) ...[

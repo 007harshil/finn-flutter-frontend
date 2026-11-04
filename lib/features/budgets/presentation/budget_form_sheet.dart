@@ -145,7 +145,6 @@ class _BudgetFormSheetState extends ConsumerState<BudgetFormSheet> {
           : (_isEdit && _existing == null)
           ? const LedgerEmpty(
               title: 'Budget not found',
-              message: 'It may have been deleted.',
             )
           : _form(context, s),
     );
@@ -173,9 +172,6 @@ class _BudgetFormSheetState extends ConsumerState<BudgetFormSheet> {
           hero: true,
           controller: _limit,
           label: 'Monthly limit',
-          helper: _isEdit
-              ? 'Applies from this month. Earlier months keep their limit.'
-              : 'Renews every month.',
           errorText: _errors['limit'],
           textInputAction: TextInputAction.next,
           onChanged: (_) {
@@ -261,7 +257,6 @@ class _BudgetFormSheetState extends ConsumerState<BudgetFormSheet> {
             },
           ),
         ),
-        Text('Marked "Near limit" once you pass this.', style: t.label),
         if (_errors['warningThresholdBps'] != null)
           Text(
             _errors['warningThresholdBps']!,

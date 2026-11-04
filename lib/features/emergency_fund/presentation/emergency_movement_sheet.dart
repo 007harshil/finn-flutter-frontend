@@ -27,7 +27,6 @@ class EmergencyMovementSheet extends ConsumerWidget {
         child: value.hasError
             ? const LedgerEmpty(
                 title: 'Could not load your emergency fund',
-                message: 'Please try again.',
               )
             : const SavingsMovementSkeleton(),
       );

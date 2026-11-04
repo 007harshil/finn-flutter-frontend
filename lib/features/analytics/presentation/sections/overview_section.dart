@@ -32,30 +32,61 @@ class _Hero extends StatelessWidget {
     final t = context.type;
     final cur = data.current;
     final rate = data.savingsRateBps;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InsightLead(
-          label: data.isPartial ? 'Spent so far' : 'Spent',
-          value: AnimatedAmount(cur.expense, style: t.figureXL, decimals: DecimalDisplay.none, fit: true),
-          below: _Change(data: data),
-        ),
-        const SizedBox(height: Sp.xl),
-        InsightStats(stats: [
-          InsightStat(
-            label: 'Income',
-            value: insightAmount(context, cur.income, color: cur.income.isPositive ? c.green : null),
+    final spent = cur.expense.paise;
+    final kept = cur.net.isNegative ? 0 : cur.net.paise;
+    final over = cur.net.isNegative ? -cur.net.paise : 0;
+    final hidden = AmountVisibility.hiddenOf(context);
+    return KhataPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              // Where the income went: spent (teal), kept (green) or
+              // overspent beyond income (red).
+              KhataDonut(
+                size: 104,
+                stroke: 14,
+                parts: [
+                  BarPart((spent - over).toDouble(), c.brand),
+                  BarPart(kept.toDouble(), c.green),
+                  BarPart(over.toDouble(), c.red),
+                ],
+                center: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(hidden || rate == null ? '—' : formatBps(rate, decimals: 0), style: t.figure.copyWith(fontSize: 18)),
+                    Text(cur.net.isNegative ? 'over' : 'kept', style: t.small),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.lg),
+              Expanded(
+                child: InsightLead(
+                  label: data.isPartial ? 'Spent so far' : 'Spent',
+                  value: AnimatedAmount(cur.expense, style: t.figureL, decimals: DecimalDisplay.none, fit: true),
+                  below: _Change(data: data),
+                ),
+              ),
+            ],
           ),
-          InsightStat(
-            label: cur.net.isNegative ? 'Overspent' : 'Saved',
-            value: insightAmount(context, cur.net, sign: SignDisplay.always, color: signColor(context, cur.net)),
-          ),
-          InsightStat(
-            label: 'Daily avg',
-            value: rate == null && cur.expense.isZero ? Text('—', style: t.figure) : insightAmount(context, data.dailyBurn),
-          ),
-        ]),
-      ],
+          const SizedBox(height: Sp.lg),
+          InsightStats(stats: [
+            InsightStat(
+              label: 'Income',
+              value: insightAmount(context, cur.income, color: cur.income.isPositive ? c.green : null),
+            ),
+            InsightStat(
+              label: cur.net.isNegative ? 'Overspent' : 'Saved',
+              value: insightAmount(context, cur.net, sign: SignDisplay.always, color: signColor(context, cur.net)),
+            ),
+            InsightStat(
+              label: 'Daily avg',
+              value: rate == null && cur.expense.isZero ? Text('—', style: t.figure) : insightAmount(context, data.dailyBurn),
+            ),
+          ]),
+        ],
+      ),
     );
   }
 }
@@ -95,7 +126,6 @@ class _HealthCheck extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ink;
-    final t = context.type;
 
     final rate = data.savingsRateBps;
     final keptColor = rate == null ? c.inkFaint : (rate >= 2000 ? c.green : (rate >= 0 ? c.amber : c.red));
@@ -150,8 +180,6 @@ class _HealthCheck extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: Sp.sm),
-          Text('Tick = target (20% kept) or time passed this month', style: t.small),
         ],
       ),
     );

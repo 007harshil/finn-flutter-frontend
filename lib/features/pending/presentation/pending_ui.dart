@@ -737,8 +737,6 @@ class _PendingViewSheetState extends ConsumerState<PendingViewSheet> {
             _f.groupByPerson);
     return FinnSheetScaffold(
       title: 'Sort and filter',
-      description:
-          'Filters apply within the ${_f.tab.label.toLowerCase()} list.',
       footer: Row(
         children: [
           LedgerButton(
@@ -811,7 +809,6 @@ class _PendingViewSheetState extends ConsumerState<PendingViewSheet> {
           const SizedBox(height: LedgerForm.gap),
           LedgerSwitchRow(
             title: 'Group by person',
-            subtitle: 'Keep several items with one person together',
             value: _f.groupByPerson,
             onChanged: (b) => _set(_f.copyWith(groupByPerson: b)),
           ),

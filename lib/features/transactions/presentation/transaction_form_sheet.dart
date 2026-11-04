@@ -8,7 +8,6 @@ import '../../../app/di/core_providers.dart';
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/money/money_format.dart';
-import '../../../core/result/result.dart';
 import '../../../kit/kit.dart';
 import '../../../features/transactions/domain/transaction.dart';
 import '../../accounts/presentation/widgets/account_picker_field.dart';
@@ -46,12 +45,10 @@ class TransactionFormSheet extends ConsumerWidget {
     const title = 'Edit transaction';
     final value = ref.watch(transactionByIdProvider(id));
     if (value.hasError && !value.hasValue) {
-      final e = value.error;
       return FinnSheetScaffold(
         title: title,
         child: LedgerEmpty(
           title: 'Could not load this transaction',
-          message: e is AppFailure ? e.message : 'Please try again.',
           actionLabel: 'Try again',
           onAction: () => refreshFinanceData(ref),
         ),
@@ -75,7 +72,6 @@ class TransactionFormSheet extends ConsumerWidget {
         title: title,
         child: LedgerEmpty(
           title: 'Transaction not found',
-          message: 'It may have been deleted.',
         ),
       );
     }
@@ -84,7 +80,6 @@ class TransactionFormSheet extends ConsumerWidget {
         title: title,
         child: LedgerEmpty(
           title: 'Created by ${tx.origin.label}',
-          message: 'Change or reverse it from the linked record to keep balances accurate.',
         ),
       );
     }

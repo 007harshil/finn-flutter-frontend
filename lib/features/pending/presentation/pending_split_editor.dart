@@ -122,7 +122,6 @@ class PendingSplitEditor extends StatelessWidget {
       children: [
         LedgerField(
           label: 'Split',
-          helper: method.hint,
           child: LedgerChoiceChips<SplitMethod>(
             options: [
               for (final m in SplitMethod.values)

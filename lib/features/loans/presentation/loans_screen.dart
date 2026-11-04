@@ -64,8 +64,8 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                     icon: LucideIcons.triangleAlert,
                     tone: NoteTone.alert,
                     text: o.overdueCount == 1
-                        ? 'One loan has a payment past its due date. Record it once it is paid.'
-                        : '${o.overdueCount} loans have payments past their due date. Record them once they are paid.',
+                        ? '1 loan has an overdue payment'
+                        : '${o.overdueCount} loans have overdue payments',
                   ),
                 ),
               PageBlock(
@@ -86,14 +86,11 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                 child: o.isEmpty || _tab == _Tab.active
                     ? LedgerEmpty(
                         title: o.isEmpty ? 'No loans yet' : 'No active loans',
-                        message: 'Add a bank loan with EMIs, or money borrowed from or lent to family and friends. '
-                            'FiNN tracks what is left and what is due next.',
                         actionLabel: 'Add a loan',
                         onAction: () => context.push(AppRoutes.newLoan),
                       )
                     : const LedgerEmpty(
                         title: 'No closed loans',
-                        message: 'Loans you repay in full appear here with their history.',
                       ),
               )
             else

@@ -218,9 +218,6 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
           const SizedBox(height: LedgerForm.gap),
           LedgerField(
             label: 'Direction',
-            helper: borrowed
-                ? 'You repay this. It counts as debt.'
-                : 'Someone repays you.',
             child: _editing
                 ? _LockedValue(icon: _direction.icon, label: _direction.pill)
                 : LedgerSegmented<LoanDirection>(
@@ -254,7 +251,6 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
           const SizedBox(height: LedgerForm.groupGap),
           LedgerField(
             label: 'Repayment type',
-            helper: _structure.description,
             child: IgnorePointer(
               ignoring: locked,
               child: Opacity(
@@ -377,7 +373,6 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
             const SizedBox(height: LedgerForm.groupGap),
             LedgerField(
               label: 'If you prepay',
-              helper: _prepayment.description,
               child: LedgerSegmented<PrepaymentStrategy>(
                 segments: [
                   for (final p in PrepaymentStrategy.values)

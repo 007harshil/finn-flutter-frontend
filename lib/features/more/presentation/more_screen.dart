@@ -197,7 +197,6 @@ class _FriendsItem extends ConsumerWidget {
       title: 'Friends',
       route: AppRoutes.friends,
       open: open,
-      subtitle: 'Your FiNN ID and requests',
       semanticLabel: requests == 0 ? null : 'Friends. $requests new ${requests == 1 ? 'request' : 'requests'}',
       trailing: requests == 0 ? null : Text('$requests new', style: t.labelStrong),
     );

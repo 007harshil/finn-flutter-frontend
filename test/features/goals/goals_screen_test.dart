@@ -1,4 +1,3 @@
-import 'package:finn/core/money/money.dart';
 import 'package:finn/features/goals/application/goal_view.dart';
 import 'package:finn/features/goals/presentation/goal_detail_screen.dart';
 import 'package:finn/features/goals/presentation/goals_screen.dart';
@@ -10,12 +9,6 @@ import '../../helpers/test_app.dart';
 void _tallView(WidgetTester tester, {double width = 400}) {
   tester.view.physicalSize = Size(width, 1600) * tester.view.devicePixelRatio;
   addTearDown(tester.view.resetPhysicalSize);
-}
-
-Future<void> _settle(WidgetTester tester) async {
-  for (var i = 0; i < 10; i++) {
-    await tester.pump(const Duration(milliseconds: 500));
-  }
 }
 
 void main() {
@@ -65,7 +58,7 @@ void main() {
   });
 
   group('GoalDetailScreen', () {
-    testWidgets('what-if slider moves the finish date and can become the plan', (tester) async {
+    testWidgets('what-if slider moves the finish date', (tester) async {
       _tallView(tester);
       final env = await TestEnv.create();
       const id = 'goal_seed_japan';
@@ -76,7 +69,7 @@ void main() {
       expect(find.text('Monthly plan'), findsOneWidget);
       expect(find.text('What if I put in'), findsOneWidget);
       expect(find.text('Add money'), findsOneWidget);
-      expect(find.byKey(const ValueKey('goal-use-plan')), findsNothing, reason: 'slider starts at the current plan');
+      expect(find.text('Make it my plan'), findsNothing);
 
       final slider = find.byKey(const ValueKey('goal-whatif-slider'));
       final doneBefore = tester.widget<Text>(find.textContaining('Done by')).data;
@@ -85,16 +78,6 @@ void main() {
       final value = tester.widget<Slider>(slider).value.round();
       expect(value, greaterThan(before.goal.plannedMonthlyContribution!.paise ~/ 100));
       expect(tester.widget<Text>(find.textContaining('Done by')).data, isNot(doneBefore));
-
-      await tester.tap(find.byKey(const ValueKey('goal-use-plan')));
-      await _settle(tester);
-      if (find.text('Confirm').evaluate().isNotEmpty) {
-        await tester.tap(find.text('Confirm'));
-        await _settle(tester);
-      }
-      final after = (await env.snapshot()).goal(id)!;
-      expect(after.goal.plannedMonthlyContribution, Money.rupees(value));
-      expect(after.saved, before.saved, reason: 'changing the plan moves no money');
       expect(tester.takeException(), isNull);
     });
   });

@@ -136,13 +136,10 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
                 child: o.isPast
                     ? const LedgerEmpty(
                         title: 'No budgets this month',
-                        message: 'None of your budgets existed yet in this month.',
                       )
                     : LedgerEmpty(
                         icon: LucideIcons.chartPie,
                         title: 'No budgets yet',
-                        message: 'Set a monthly limit for a category like Food or Shopping. '
-                            'Every expense in that category counts towards it automatically.',
                         actionLabel: 'Create a budget',
                         onAction: () => context.push(AppRoutes.newBudget),
                       ),
@@ -163,7 +160,6 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
                 child: shown.isEmpty
                     ? LedgerEmpty(
                         title: 'Nothing here',
-                        message: 'No budget matches this view.',
                         actionLabel: 'Show all budgets',
                         onAction: () => _set(const BudgetListFilter()),
                       )

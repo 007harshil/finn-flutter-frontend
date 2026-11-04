@@ -71,14 +71,6 @@ class _Body extends StatelessWidget {
           movements: s.movements,
         ),
         PageColumn(top: Sp.section, child: _History(movements: s.movements)),
-        if (configured)
-          const PageColumn(
-            top: Sp.section,
-            child: LedgerNote(
-              text: 'Money here is earmarked from your balance. Adding lowers what is available to spend. '
-                  'Withdrawing releases it back. Your net worth stays the same.',
-            ),
-          ),
       ],
     );
   }
@@ -115,7 +107,6 @@ class _Hero extends StatelessWidget {
       EmergencyFundLevel.funded => c.green,
       EmergencyFundLevel.notConfigured => null,
     };
-    final suggestion = s.suggestedEssentialMonthly;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -226,10 +217,6 @@ class _Hero extends StatelessWidget {
           LedgerEmpty(
             icon: LucideIcons.shield,
             title: 'Plan your safety net',
-            message: suggestion == null
-                ? 'Enter your essential monthly spending and how many months to cover. Most people aim for 3 to 6.'
-                : 'Your essentials averaged ${savingsMoney(context, suggestion)} a month recently. '
-                    'Most people aim to cover 3 to 6 months.',
             actionLabel: 'Set up plan',
             onAction: () => context.push(AppRoutes.emergencyPlan),
           ),
@@ -327,7 +314,7 @@ class _History extends StatelessWidget {
       title: 'History',
       count: movements.isEmpty ? null : movements.length,
       child: movements.isEmpty
-          ? Text('Nothing set aside yet. Your first contribution will show here.', style: t.label)
+          ? Text('Nothing set aside yet', style: t.label)
           : LedgerPanel(
               children: [
                 for (final e in groups.entries) ...[

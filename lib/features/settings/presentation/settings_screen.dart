@@ -155,7 +155,6 @@ class _PrivacyGroup extends ConsumerWidget {
             child: LedgerSwitchRow(
               key: const ValueKey('hide-balances'),
               title: 'Hide balances',
-              subtitle: 'Mask amounts across the app',
               value: hide,
               onChanged: (v) => ctrl.update((s) => s.copyWith(hideBalances: v)),
             ),
@@ -165,7 +164,6 @@ class _PrivacyGroup extends ConsumerWidget {
             child: LedgerSwitchRow(
               key: const ValueKey('haptics'),
               title: 'Haptic feedback',
-              subtitle: 'Gentle vibration on taps',
               value: haptics,
               onChanged: (v) =>
                   ctrl.update((s) => s.copyWith(hapticsEnabled: v)),
@@ -205,7 +203,6 @@ class _MoneyGroup extends ConsumerWidget {
           SettingsStepperRow(
             key: const ValueKey('month-start'),
             title: 'Budget month starts',
-            subtitle: 'Useful if your salary arrives mid-month',
             value: startDay,
             min: 1,
             max: 28,
@@ -217,7 +214,6 @@ class _MoneyGroup extends ConsumerWidget {
             child: LedgerSwitchRow(
               key: const ValueKey('show-paise'),
               title: 'Show paise',
-              subtitle: 'Amounts to the paisa where it matters',
               value: paise,
               onChanged: (v) => ctrl.update((s) => s.copyWith(showPaise: v)),
             ),
@@ -311,14 +307,12 @@ class _DataGroup extends ConsumerWidget {
               LedgerRow(
                 leading: const IconWell(icon: LucideIcons.download),
                 title: 'Export data',
-                subtitle: 'CSV, JSON or a PDF report',
                 chevron: true,
                 onTap: () => context.push(AppRoutes.export),
               ),
               LedgerRow(
                 leading: const IconWell(icon: LucideIcons.history),
                 title: 'Activity log',
-                subtitle: 'Changes made in this session',
                 chevron: true,
                 onTap: () => context.push(AppRoutes.activity),
               ),
@@ -326,7 +320,6 @@ class _DataGroup extends ConsumerWidget {
                 LedgerRow(
                   leading: const IconWell(icon: LucideIcons.rotateCcw),
                   title: 'Load sample data',
-                  subtitle: 'Replace your records with examples',
                   onTap: () => _loadSample(context, ref),
                 ),
             ],
@@ -374,14 +367,12 @@ class _AboutGroup extends StatelessWidget {
             key: const ValueKey('privacy-policy'),
             leading: const IconWell(icon: LucideIcons.shieldCheck),
             title: 'Privacy policy',
-            subtitle: 'What FiNN stores and why',
             trailing: const Icon(LucideIcons.externalLink, size: 16),
             onTap: () => _open(context, LegalLinks.privacyPolicy),
           ),
           LedgerRow(
             leading: const IconWell(icon: LucideIcons.userX),
             title: 'Deleting your account',
-            subtitle: 'Profile › Security › Delete account, or on the web',
             trailing: const Icon(LucideIcons.externalLink, size: 16),
             onTap: () => _open(context, LegalLinks.deleteAccount),
           ),
@@ -405,7 +396,7 @@ class _Footer extends StatelessWidget {
     final t = context.type;
     final c = context.ink;
     return Text(
-      'Your records are saved to your FiNN account.\nFiNN by Zenvora Labs · Made for Indian households',
+      'FiNN by Zenvora Labs · Made for Indian households',
       style: t.label.copyWith(color: c.inkFaint),
       textAlign: TextAlign.center,
     );

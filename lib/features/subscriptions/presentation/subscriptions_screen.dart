@@ -67,9 +67,6 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
                 top: Sp.xl,
                 child: LedgerEmpty(
                   title: 'No subscriptions yet',
-                  message:
-                      'Add OTT, music, phone, gym or cloud plans to see your monthly cost '
-                      'and get reminded before each renewal.',
                   actionLabel: 'Add a subscription',
                   onAction: () => context.push(AppRoutes.newSubscription),
                 ),
@@ -97,7 +94,6 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
                     top: Sp.md,
                     child: LedgerEmpty(
                       title: 'No active subscriptions',
-                      message: 'Paused and cancelled plans do not count towards your monthly cost.',
                       actionLabel: 'Add a subscription',
                       onAction: () => context.push(AppRoutes.newSubscription),
                     ),

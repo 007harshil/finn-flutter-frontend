@@ -99,8 +99,6 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
                 top: Sp.xl,
                 child: LedgerEmpty(
                   title: 'Start your first goal',
-                  message: 'A trip, a laptop, a home down payment. Give it a name and a target, '
-                      'and set money aside at your own pace.',
                   actionLabel: 'Create a goal',
                   onAction: () => context.push(AppRoutes.newGoal),
                 ),
@@ -146,7 +144,6 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
     if (_filter.paces.isNotEmpty) {
       return LedgerEmpty(
         title: 'No matches',
-        message: 'No active goal has this status right now.',
         actionLabel: 'Show all',
         onAction: () => _set(_filter.cleared()),
       );
@@ -154,17 +151,14 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
     return switch (_filter.tab) {
       GoalTab.active => LedgerEmpty(
         title: 'No active goals',
-        message: 'Every goal is done or archived. Start a new one when you are ready.',
         actionLabel: 'Create a goal',
         onAction: () => context.push(AppRoutes.newGoal),
       ),
       GoalTab.completed => const LedgerEmpty(
         title: 'Nothing completed yet',
-        message: 'Goals you fully fund will appear here.',
       ),
       GoalTab.archived => const LedgerEmpty(
         title: 'No archived goals',
-        message: 'Archive a goal to hide it without losing its history.',
       ),
     };
   }

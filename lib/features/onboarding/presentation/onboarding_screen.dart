@@ -213,8 +213,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Semantics(header: true, child: Text('A few details to begin', style: t.title)),
-          const SizedBox(height: Sp.xs),
-          Text('You can change any of this later in Settings.', style: t.label),
           const SizedBox(height: Sp.xl),
           LedgerTextField(
             label: 'What should we call you?',
@@ -236,7 +234,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 LedgerOptionRow(
                   selected: _mode == _StartMode.fresh,
                   title: 'Start fresh',
-                  subtitle: 'Begin with a clean slate and your own numbers.',
                   onTap: () => setState(() => _mode = _StartMode.fresh),
                 ),
                 // Sample data exists only in the local (mock) mode.
@@ -244,7 +241,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   LedgerOptionRow(
                     selected: _mode == _StartMode.sample,
                     title: 'Explore with sample data',
-                    subtitle: 'Look around with six months of realistic example data first.',
                     onTap: () => setState(() => _mode = _StartMode.sample),
                   ),
               ],
@@ -256,7 +252,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     padding: const EdgeInsets.only(top: Sp.xl),
                     child: LedgerAmountField(
                       label: 'Opening balance · bank + cash today',
-                      helper: 'Your balance builds from this number.',
                       controller: _balance,
                       errorText: _balanceError,
                       textInputAction: TextInputAction.done,
@@ -265,12 +260,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       },
                     ),
                   )
-                : const Padding(
-                    padding: EdgeInsets.only(top: Sp.lg),
-                    child: LedgerNote(
-                      text: 'Sample data is for exploring. You can reset to a clean slate any time from Settings.',
-                    ),
-                  ),
+                : const SizedBox.shrink(),
           ),
         ],
       ),

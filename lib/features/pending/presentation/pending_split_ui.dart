@@ -115,8 +115,6 @@ class PendingSplitSection extends StatelessWidget {
               for (final m in s.members) _member(context, m, dir),
             ],
           ),
-          const SizedBox(height: Sp.sm),
-          Text('Each person settles their own part.', style: t.label),
         ],
       ),
     );

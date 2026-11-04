@@ -64,13 +64,6 @@ class _Body extends StatelessWidget {
           top: Sp.section,
           child: _LinesSection(title: 'What you owe', lines: view.liabilities, liability: true),
         ),
-        const PageBlock(
-          top: Sp.section,
-          child: LedgerNote(
-            text: 'Cash is counted once. It already includes money set aside for goals and your emergency fund. '
-                'Asset values are your own estimates; update them when they change.',
-          ),
-        ),
       ],
     );
   }
@@ -122,7 +115,7 @@ class _Hero extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('What you own minus what you owe', style: t.label),
+                    Text('Net worth', style: t.label),
                     const SizedBox(height: 2),
                     AnimatedAmount(s.netWorth, style: t.figureL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
                     const SizedBox(height: Sp.sm),
@@ -257,7 +250,6 @@ class _AssetsSection extends StatelessWidget {
         child: LedgerEmpty(
           icon: LucideIcons.landmark,
           title: 'No assets added yet',
-          message: 'Add investments, gold, property or deposits to see your full net worth.',
           actionLabel: 'Add asset',
           onAction: () => context.push(AppRoutes.newAsset),
         ),

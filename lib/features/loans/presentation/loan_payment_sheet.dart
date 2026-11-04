@@ -179,11 +179,6 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
           const SizedBox(height: LedgerForm.groupGap),
           LedgerField(
             label: 'Payment type',
-            helper: kind == LoanPaymentKind.principal
-                ? (l.isAmortizing
-                      ? 'Part-prepayment: ${l.prepaymentStrategy.description.toLowerCase()}.'
-                      : 'Repays part or all of the principal. Future interest goes down.')
-                : 'Interest due is covered first; any extra reduces the principal.',
             child: LedgerSegmented<LoanPaymentKind>(
               segments: [
                 LedgerSegment(
@@ -338,8 +333,6 @@ class _Closed extends StatelessWidget {
     child: LedgerEmpty(
       icon: LucideIcons.circleCheck,
       title: 'Nothing left to pay',
-      message:
-          '${state.loan.name} is fully repaid. No further payments can be recorded.',
       actionLabel: 'Close',
       onAction: () => Navigator.of(context).maybePop(),
     ),

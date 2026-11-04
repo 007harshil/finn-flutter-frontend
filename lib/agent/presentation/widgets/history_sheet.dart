@@ -83,7 +83,6 @@ class _AgentHistorySheetState extends ConsumerState<AgentHistorySheet> {
     final t = context.type;
     return FinnSheetScaffold(
       title: 'Agent history',
-      description: 'What you asked FiNN to do and what was saved. Kept for 180 days and never sent to the AI.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -100,7 +99,6 @@ class _AgentHistorySheetState extends ConsumerState<AgentHistorySheet> {
             LedgerEmpty(
               icon: LucideIcons.cloudOff,
               title: 'Could not load history',
-              message: _error!,
               actionLabel: 'Try again',
               onAction: () => _load(reset: true),
             )
@@ -117,7 +115,6 @@ class _AgentHistorySheetState extends ConsumerState<AgentHistorySheet> {
             LedgerEmpty(
               icon: LucideIcons.history,
               title: _filter == null ? 'Nothing here yet' : 'No ${_filter!.label.toLowerCase()} requests',
-              message: 'Changes you ask the agent to make will appear here.',
             )
           else ...[
             LedgerPanel(

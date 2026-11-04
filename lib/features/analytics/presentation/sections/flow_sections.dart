@@ -12,8 +12,6 @@ import '../insight_charts.dart';
 import '../insight_widgets.dart';
 import '../spend_pulse.dart';
 
-String _window(InsightsData d) => d.windowMonths == 1 ? 'this month' : 'the last ${d.windowMonths} months';
-
 // ---------------------------------------------------------------------------
 // Daily spend
 // ---------------------------------------------------------------------------
@@ -90,9 +88,7 @@ class _DayByDay extends StatelessWidget {
       title: data.current.expense.isZero
           ? 'Spending on each day'
           : '$above of ${data.elapsedDays} days were above your average',
-      subtitle: noSpend == 0
-          ? 'Each bar is one day. Touch a bar for the amount.'
-          : 'Each bar is one day. You had $noSpend no-spend day${noSpend == 1 ? '' : 's'}.',
+      subtitle: noSpend == 0 ? null : '$noSpend no-spend day${noSpend == 1 ? '' : 's'}',
       legend: [
         LegendEntry('Normal day', c.lineStrong),
         LegendEntry('Above average', c.brand),
@@ -121,7 +117,6 @@ class _MonthByMonth extends StatelessWidget {
       title: data.monthsHaveActivity
           ? '$above of ${data.activeMonths.length} months cost more than usual'
           : 'Spending each month',
-      subtitle: 'Spending each month, ${_window(data)}. Touch a bar for the amount.',
       legend: [
         LegendEntry('Usual month', c.lineStrong),
         LegendEntry('Pricier month', c.brand),
@@ -131,7 +126,7 @@ class _MonthByMonth extends StatelessWidget {
           'have any activity. A month is "pricier" when it is more than 10% above the average.',
       child: data.monthsHaveActivity
           ? MonthlySpendChart(months: data.months, average: avg)
-          : const InsightNoData(message: 'Record expenses to see how each month compares.'),
+          : const InsightNoData(message: 'No spending yet'),
     );
   }
 }
@@ -149,7 +144,7 @@ class _Weekdays extends StatelessWidget {
       heading: 'By weekday',
       title: busy == null ? 'Which days cost the most' : '${weekdayNames[busy]}s cost you the most',
       subtitle: busy == null || quiet == null
-          ? 'Typical spend on each day of the week'
+          ? null
           : 'About ${m(data.weekdayAverages[busy])} on a typical ${weekdayNames[busy]}, '
               'against ${m(data.weekdayAverages[quiet])} on a ${weekdayNames[quiet]}.',
       howCalculated: 'For each weekday: total spending on that weekday ÷ how many of that weekday have passed in '
@@ -221,7 +216,6 @@ List<Widget> cashFlowSection(BuildContext context, InsightsData data) {
     InsightChartCard(
       heading: 'Month by month',
       title: data.incomeVsExpenseHeadline,
-      subtitle: 'Money in and money out, ${_window(data)}. Touch a bar for the amount.',
       legend: [
         LegendEntry('Income', c.green),
         LegendEntry('Spending', c.ink),
@@ -232,12 +226,11 @@ List<Widget> cashFlowSection(BuildContext context, InsightsData data) {
           'income or spending, and moving money into goals is not spending.',
       child: data.monthsHaveActivity
           ? IncomeExpenseBarChart(months: data.months, averageExpense: data.avgMonthlyExpense)
-          : const InsightNoData(message: 'Record income or expenses to see how each month compares.'),
+          : const InsightNoData(message: 'No activity yet'),
     ),
     InsightChartCard(
       heading: 'Left over',
       title: data.netHeadline((x) => moneyText(context, x)),
-      subtitle: 'What was left each month. Bars below the line mean you spent more than you earned.',
       legend: [
         LegendEntry('Saved', c.green),
         LegendEntry('Overspent', c.red),

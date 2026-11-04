@@ -116,22 +116,12 @@ class _BodyState extends ConsumerState<_Body> {
                             for (final b in archived) AccountRow(balance: b),
                           ],
                         )
-                      : const LedgerNote(
-                          text: 'Archived accounts keep their history but are hidden from pickers.',
-                        ),
+                      : const SizedBox.shrink(),
                 ),
               ],
             ),
           ),
-        const PageBlock(
-          top: Sp.section,
-          bottom: Sp.xl,
-          child: LedgerNote(
-            text:
-                'Total money adds up your cash, bank accounts and cards. A credit card shows what you owe; '
-                'it is paid from another account and never counts as money.',
-          ),
-        ),
+        const SliverToBoxAdapter(child: SizedBox(height: Sp.xl)),
       ],
     );
   }

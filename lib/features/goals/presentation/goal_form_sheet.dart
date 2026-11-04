@@ -164,7 +164,7 @@ class _GoalFormSheetState extends ConsumerState<GoalFormSheet> {
       child: !ready
           ? const _FormSkeleton()
           : missing
-          ? const LedgerEmpty(title: 'Goal not found', message: 'It may have been deleted.')
+          ? const LedgerEmpty(title: 'Goal not found')
           : _form(context),
     );
   }
@@ -224,7 +224,6 @@ class _GoalFormSheetState extends ConsumerState<GoalFormSheet> {
         LedgerAmountField(
           controller: _monthly,
           label: 'Monthly plan (optional)',
-          helper: "Used to estimate when you'll get there.",
           errorText: _errors['plannedMonthlyContribution'],
           onChanged: (_) => _clearError('plannedMonthlyContribution'),
         ),
@@ -234,7 +233,7 @@ class _GoalFormSheetState extends ConsumerState<GoalFormSheet> {
             controller: _starting,
             label: 'Set aside now (optional)',
             helper: onAccount == null
-                ? 'Sets money aside for this goal.'
+                ? null
                 : 'Free to spend in ${onAccount.account.name}: ${savingsMoney(context, onAccount.available)}',
             errorText:
                 _errors['initialAllocation'] ??

@@ -4,6 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
+import '../../../app/di/core_providers.dart';
+import '../../../app/di/data_providers.dart';
+import '../../../core/time/dates.dart';
+import '../../../core/money/money.dart';
+import '../../../core/money/money_format.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../../transactions/domain/transaction.dart';
@@ -75,20 +80,13 @@ class _CategoriesScreenState extends ConsumerState<CategoriesScreen> {
             ],
           ),
         ),
-        if (_type == TransactionType.expense)
-          const PageBlock(
-            top: Sp.lg,
-            child: LedgerNote(
-              text: 'Mark essentials like rent and groceries. They shape your emergency-fund suggestion.',
-            ),
-          ),
+        PageBlock(top: Sp.lg, child: _MonthShare(type: _type)),
         if (group.active.isEmpty)
           PageBlock(
             top: Sp.xl,
             child: LedgerEmpty(
               icon: LucideIcons.tags,
               title: 'No $noun categories',
-              message: 'Create one to start organising your $noun.',
             ),
           )
         else
@@ -138,6 +136,79 @@ class _CategoryRow extends ConsumerWidget {
         'Edit',
       ].join(', '),
       onTap: () => context.push(AppRoutes.editCategory(cat.id)),
+    );
+  }
+}
+
+/// This month's money by category as a donut, with the top five as keys.
+class _MonthShare extends ConsumerWidget {
+  const _MonthShare({required this.type});
+
+  final TransactionType type;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.ink;
+    final t = context.type;
+    final all = ref.watch(transactionsStreamProvider).value;
+    final cats = ref.watch(categoriesByIdProvider).value ?? const {};
+    if (all == null) return const SizedBox.shrink();
+    final month = MonthKey.fromDate(ref.watch(todayProvider));
+    final by = <String, int>{};
+    for (final x in all) {
+      if (x.type != type || MonthKey.fromDate(x.date) != month) continue;
+      by[x.categoryId] = (by[x.categoryId] ?? 0) + x.amount.paise;
+    }
+    final total = by.values.fold<int>(0, (a, b) => a + b);
+    if (total <= 0) return const SizedBox.shrink();
+    final top = by.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final shown = top.take(5).toList();
+    final rest = total - shown.fold<int>(0, (a, e) => a + e.value);
+    Color hue(String id) => cats[id] == null ? c.inkSoft : c.tint(cats[id]!.colorIndex).$1;
+    final hidden = AmountVisibility.hiddenOf(context);
+    return KhataPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              KhataDonut(
+                size: 100,
+                stroke: 14,
+                parts: [
+                  for (final e in shown) BarPart(e.value.toDouble(), hue(e.key)),
+                  if (rest > 0) BarPart(rest.toDouble(), c.lineStrong),
+                ],
+                center: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('${by.length}', style: t.figure.copyWith(fontSize: 20)),
+                    Text('used', style: t.small),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(type == TransactionType.expense ? 'Spent this month' : 'Earned this month', style: t.label),
+                    const SizedBox(height: 2),
+                    AmountText(Money.fromPaise(total), style: t.figureL, decimals: DecimalDisplay.none, fit: true),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Sp.md),
+          for (final e in shown)
+            KhataKey(
+              color: hue(e.key),
+              label: '${cats[e.key]?.name ?? 'Deleted category'} · ${hidden ? '••' : '${(e.value * 100 / total).round()}%'}',
+              value: const SizedBox.shrink(),
+            ),
+        ],
+      ),
     );
   }
 }
