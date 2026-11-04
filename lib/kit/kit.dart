@@ -12,6 +12,7 @@ export '../design_system/components/success.dart' show showSuccessOverlay;
 export '../design_system/components/toast.dart' show FinnToast;
 export '../design_system/components/tone.dart' show FinnTone;
 export '../design_system/motion/motion.dart' show MotionX, Motion;
+export 'components/bahi.dart';
 export 'components/busy.dart';
 export 'components/controls.dart';
 export 'components/data.dart';

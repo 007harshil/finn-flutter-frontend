@@ -41,7 +41,7 @@ Future<void> _loadFonts() async {
   }
   // Material widgets without an explicit family fall back to Roboto, which
   // flutter_test does not ship; render them in the app font instead.
-  final roboto = FontLoader('Roboto')..addFont(rootBundle.load('assets/fonts/Manrope.ttf'));
+  final roboto = FontLoader('Roboto')..addFont(rootBundle.load('assets/fonts/AnekLatin.ttf'));
   await roboto.load();
 }
 

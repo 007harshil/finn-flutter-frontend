@@ -9,16 +9,16 @@ import '../../kit/tokens.dart';
 import '../motion/motion.dart';
 import '../tokens/tokens.dart' show Durations2;
 
-/// Success mark, stamped like an entry in a ledger: a tilted teal seal
-/// with a check lands from slightly larger (220 ms, no bounce) with a firm
-/// haptic. Under reduced motion it simply appears. [onCompleted] fires once
+/// Success mark, stamped like an entry in a bahi: a tilted green stamp
+/// with a double edge lands from larger with a slight spring (260 ms) and
+/// a firm haptic. Under reduced motion it simply appears. [onCompleted] fires once
 /// it has landed.
 class SuccessCheck extends StatefulWidget {
   const SuccessCheck({super.key, this.size = 64, this.color, this.onCompleted});
 
   final double size;
 
-  /// Defaults to the brand teal.
+  /// Defaults to money-in green.
   final Color? color;
   final VoidCallback? onCompleted;
 
@@ -27,7 +27,7 @@ class SuccessCheck extends StatefulWidget {
 }
 
 class _SuccessCheckState extends State<SuccessCheck> with SingleTickerProviderStateMixin {
-  late final AnimationController _stamp = AnimationController(vsync: this, duration: const Duration(milliseconds: 220));
+  late final AnimationController _stamp = AnimationController(vsync: this, duration: const Duration(milliseconds: 260));
   bool _started = false;
 
   @override
@@ -57,21 +57,25 @@ class _SuccessCheckState extends State<SuccessCheck> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     final c = context.ink;
-    final color = widget.color ?? c.brand;
+    final color = widget.color ?? c.green;
     final size = widget.size;
     final seal = Transform.rotate(
-      angle: -0.14,
+      angle: -0.10,
       child: Container(
         width: size,
         height: size,
-        padding: const EdgeInsets.all(4),
+        padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: color.withValues(alpha: 0.9), width: 2.5),
+          borderRadius: BorderRadius.circular(size * 0.2),
+          border: Border.all(color: color.withValues(alpha: 0.95), width: 3),
         ),
         child: Container(
-          decoration: BoxDecoration(color: c.brandSoft, shape: BoxShape.circle),
-          child: Icon(LucideIcons.check, size: size * 0.42, color: color),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(size * 0.14),
+            border: Border.all(color: color.withValues(alpha: 0.55)),
+          ),
+          child: Icon(LucideIcons.check, size: size * 0.46, color: color),
         ),
       ),
     );
@@ -81,7 +85,7 @@ class _SuccessCheckState extends State<SuccessCheck> with SingleTickerProviderSt
       child: AnimatedBuilder(
         animation: _stamp,
         builder: (context, child) {
-          final v = Curves.easeOutCubic.transform(_stamp.value);
+          final v = Curves.easeOutBack.transform(_stamp.value);
           return Opacity(
             opacity: (_stamp.value * 2).clamp(0.0, 1.0),
             child: Transform.scale(scale: 1.6 - 0.6 * v, child: child),
@@ -201,9 +205,9 @@ class _SuccessOverlayState extends State<_SuccessOverlay> with SingleTickerProvi
                   constraints: const BoxConstraints(minWidth: 240, maxWidth: 320),
                   padding: const EdgeInsets.symmetric(horizontal: Sp.xl, vertical: Sp.xl + Sp.xs),
                   decoration: BoxDecoration(
-                    color: c.surface,
-                    borderRadius: Rad.rLg,
-                    border: Border.all(color: c.line),
+                    color: c.khata,
+                    borderRadius: Rad.rMd,
+                    border: Border.all(color: c.khataRule),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,

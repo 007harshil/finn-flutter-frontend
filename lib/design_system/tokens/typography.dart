@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'finn_colors.dart';
 
-/// Type scale in Manrope, the app font (see `LedgerType`). Money uses
-/// tabular figures so columns align.
+/// Type scale in Anek Latin, the app font (see `LedgerType`): condensed
+/// for money, wide for display headings. Money uses tabular figures so
+/// columns align.
 @immutable
 class FinnTypography extends ThemeExtension<FinnTypography> {
   const FinnTypography({
@@ -26,30 +27,32 @@ class FinnTypography extends ThemeExtension<FinnTypography> {
 
   factory FinnTypography.from(FinnColors c) {
     const tabular = [FontFeature.tabularFigures(), FontFeature.liningFigures()];
-    TextStyle s(double size, FontWeight w, {double? ls, double? h, Color? color}) => TextStyle(
-          fontFamily: 'Manrope',
+    TextStyle s(double size, FontWeight w, {double? ls, double? h, Color? color, double width = 100}) => TextStyle(
+          fontFamily: 'AnekLatin',
+          fontFamilyFallback: const ['AnekDevanagari', 'Manrope'],
           fontSize: size,
           fontWeight: w,
+          fontVariations: [FontVariation.weight(w.value.toDouble()), FontVariation.width(width)],
           letterSpacing: ls,
           height: h,
           color: color ?? c.textPrimary,
         );
     return FinnTypography(
-      display: s(30, FontWeight.w900, ls: -1.2, h: 1.1),
-      pageTitle: s(24, FontWeight.w900, ls: -0.8, h: 1.15),
-      title: s(18, FontWeight.w800, ls: -0.3, h: 1.25),
-      sectionTitle: s(13, FontWeight.w900, ls: 0.4, h: 1.2),
-      body: s(14, FontWeight.w500, h: 1.45),
-      bodyStrong: s(14, FontWeight.w700, ls: -0.1, h: 1.35),
-      caption: s(12, FontWeight.w500, h: 1.4, color: c.textSecondary),
-      label: s(12, FontWeight.w700, ls: 0.2, h: 1.3, color: c.textSecondary),
-      eyebrow: s(10.5, FontWeight.w900, ls: 1.2, h: 1.2, color: c.textSecondary),
-      micro: s(10, FontWeight.w700, ls: 0.3, h: 1.2, color: c.textTertiary),
-      amountHero: s(34, FontWeight.w900, ls: -1.4, h: 1.05).copyWith(fontFeatures: tabular),
-      amountLarge: s(24, FontWeight.w900, ls: -0.9, h: 1.1).copyWith(fontFeatures: tabular),
-      amountMedium: s(16, FontWeight.w800, ls: -0.4, h: 1.15).copyWith(fontFeatures: tabular),
-      amountSmall: s(13, FontWeight.w700, ls: -0.2, h: 1.2).copyWith(fontFeatures: tabular),
-      button: s(14, FontWeight.w800, ls: 0.3, h: 1.2),
+      display: s(32, FontWeight.w700, ls: -0.3, h: 1.05, width: 112),
+      pageTitle: s(26, FontWeight.w700, ls: -0.2, h: 1.1, width: 112),
+      title: s(19, FontWeight.w600, ls: -0.1, h: 1.2, width: 106),
+      sectionTitle: s(13, FontWeight.w700, ls: 0.6, h: 1.2, width: 110),
+      body: s(15, FontWeight.w400, h: 1.4),
+      bodyStrong: s(15, FontWeight.w600, h: 1.3),
+      caption: s(13, FontWeight.w500, h: 1.35, color: c.textSecondary),
+      label: s(13, FontWeight.w600, ls: 0.1, h: 1.3, color: c.textSecondary),
+      eyebrow: s(11.5, FontWeight.w700, ls: 1.0, h: 1.2, color: c.textSecondary, width: 110),
+      micro: s(11, FontWeight.w600, ls: 0.2, h: 1.2, color: c.textTertiary),
+      amountHero: s(46, FontWeight.w700, ls: -0.4, h: 1.0, width: 78).copyWith(fontFeatures: tabular),
+      amountLarge: s(30, FontWeight.w700, ls: -0.3, h: 1.05, width: 82).copyWith(fontFeatures: tabular),
+      amountMedium: s(18, FontWeight.w600, h: 1.15, width: 90).copyWith(fontFeatures: tabular),
+      amountSmall: s(14, FontWeight.w600, h: 1.2, width: 95).copyWith(fontFeatures: tabular),
+      button: s(15, FontWeight.w600, h: 1.2, width: 104),
     );
   }
 

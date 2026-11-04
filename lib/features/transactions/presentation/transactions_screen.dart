@@ -226,15 +226,24 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         padding: const EdgeInsets.only(top: Sp.lg),
         sliver: SliverList.builder(
           itemCount: items.length,
+          // Bahi: the whole list is one khata page. Day numerals and
+          // category icons sit in the margin, entries right of the red line.
           itemBuilder: (context, i) => switch (items[i]) {
             _HeaderItem(:final header) => PageColumn(
                 key: ValueKey('day-${header.date.millisecondsSinceEpoch}'),
-                child: _DayHeader(date: header.date, today: today, net: header.net, count: header.count),
-              ),
-            _RowItem(:final transaction, :final first, :final last) => PageColumn(
                 child: LedgerPanelSlice(
-                  first: first,
-                  last: last,
+                  khata: true,
+                  first: i == 0,
+                  last: i == items.length - 1,
+                  dividerIndent: 0,
+                  child: _DayHeader(date: header.date, today: today, net: header.net, count: header.count),
+                ),
+              ),
+            _RowItem(:final transaction, :final last) => PageColumn(
+                child: LedgerPanelSlice(
+                  khata: true,
+                  first: false,
+                  last: last && i == items.length - 1,
                   dividerIndent: _rowIndent,
                   child: TransactionRow(
                     key: ValueKey(transaction.id),
@@ -243,10 +252,11 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   ),
                 ),
               ),
-            _TransferItem(:final transfer, :final first, :final last) => PageColumn(
+            _TransferItem(:final transfer, :final last) => PageColumn(
                 child: LedgerPanelSlice(
-                  first: first,
-                  last: last,
+                  khata: true,
+                  first: false,
+                  last: last && i == items.length - 1,
                   dividerIndent: _rowIndent,
                   child: TransferRow(key: ValueKey(transfer.id), transfer: transfer, showDate: !grouped),
                 ),
@@ -543,10 +553,10 @@ class _DayHeader extends StatelessWidget {
           '${hidden ? '' : ', net ${AmountText.spokenLabel(net, sign: sign)}'}',
       excludeSemantics: true,
       child: Padding(
-        padding: const EdgeInsets.only(top: Sp.xl, bottom: Sp.sm + 2),
+        padding: const EdgeInsets.only(top: Sp.md + 2, bottom: Sp.sm),
         child: Row(
           children: [
-            // Centred over the rows' 40 px icon wells (16 px row inset).
+            // In the khata margin, centred over the rows' 40 px icon tiles.
             Padding(
               padding: const EdgeInsets.only(left: Sp.lg),
               child: SizedBox(
@@ -554,11 +564,11 @@ class _DayHeader extends StatelessWidget {
                 child: Text(
                   '${date.day}',
                   textAlign: TextAlign.center,
-                  style: t.figureL.copyWith(fontSize: 26, height: 1, color: diff == 0 ? c.brand : c.ink),
+                  style: t.figureL.copyWith(fontSize: 30, height: 1, color: diff == 0 ? c.red : c.ink),
                 ),
               ),
             ),
-            const SizedBox(width: Sp.md + 2),
+            const SizedBox(width: Sp.md + 2 + 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

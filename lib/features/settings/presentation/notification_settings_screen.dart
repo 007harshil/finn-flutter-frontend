@@ -47,7 +47,6 @@ class _TimingGroup extends ConsumerWidget {
           _StepperRow(
             key: const ValueKey('emi-days'),
             title: 'EMI reminder',
-            subtitle: 'Days before an EMI is due',
             value: s.emiReminderDays,
             min: 1,
             max: 15,
@@ -58,7 +57,6 @@ class _TimingGroup extends ConsumerWidget {
           _StepperRow(
             key: const ValueKey('subscription-days'),
             title: 'Renewal reminder',
-            subtitle: 'Days before a subscription renews',
             value: s.subscriptionReminderDays,
             min: 1,
             max: 15,
@@ -69,7 +67,6 @@ class _TimingGroup extends ConsumerWidget {
           _StepperRow(
             key: const ValueKey('budget-warning'),
             title: 'Budget warning',
-            subtitle: 'Alert when this much of a budget is used',
             value: s.defaultBudgetWarningBps,
             min: 5000,
             max: 9500,
@@ -81,7 +78,6 @@ class _TimingGroup extends ConsumerWidget {
           _StepperRow(
             key: const ValueKey('emergency-months'),
             title: 'Emergency fund low',
-            subtitle: 'Alert when it covers fewer months of expenses',
             value: s.lowEmergencyCoverageMonths,
             min: 1,
             max: 12,
@@ -100,7 +96,6 @@ class _StepperRow extends StatelessWidget {
   const _StepperRow({
     super.key,
     required this.title,
-    required this.subtitle,
     required this.value,
     required this.min,
     required this.max,
@@ -110,7 +105,6 @@ class _StepperRow extends StatelessWidget {
   });
 
   final String title;
-  final String subtitle;
   final int value;
   final int min;
   final int max;
@@ -124,17 +118,13 @@ class _StepperRow extends StatelessWidget {
     final label = format(value);
     final canDown = value - step >= min;
     final canUp = value + step <= max;
-    final text = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(title, style: t.bodyStrong),
-        const SizedBox(height: 2),
-        Text(subtitle, style: t.label),
-      ],
-    );
+    final c = context.ink;
+    final text = Text(title, style: t.bodyStrong);
+    // Bahi stepper: one sunken pill, the value as a condensed figure.
     final stepper = ExcludeSemantics(
-      child: Row(
+      child: Container(
+        decoration: BoxDecoration(color: c.sunken, borderRadius: Rad.rBtn),
+        child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           LedgerIconButton(
@@ -146,7 +136,7 @@ class _StepperRow extends StatelessWidget {
             width: 72,
             child: Text(
               label,
-              style: t.bodyStrong,
+              style: t.figure,
               textAlign: TextAlign.center,
             ),
           ),
@@ -156,6 +146,7 @@ class _StepperRow extends StatelessWidget {
             onPressed: canUp ? () => onChanged(value + step) : null,
           ),
         ],
+        ),
       ),
     );
     return Semantics(
@@ -168,7 +159,7 @@ class _StepperRow extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.sm),
         child: LayoutBuilder(
-          builder: (context, box) => box.maxWidth >= 380
+          builder: (context, box) => box.maxWidth >= 300
               ? Row(
                   children: [
                     Expanded(child: text),
@@ -219,21 +210,6 @@ const _alertGroups = [
   ]),
 ];
 
-String _describe(AlertType t) => switch (t) {
-  AlertType.emiDue => 'Before an EMI is due',
-  AlertType.emiOverdue => 'When an EMI date has passed unpaid',
-  AlertType.pendingOwed => 'When money you owe is unpaid for over 21 days',
-  AlertType.collectOwed => 'When money owed to you is unpaid for over 21 days',
-  AlertType.subscriptionRenewal => 'Before a subscription renews',
-  AlertType.subscriptionOverdue => 'When a renewal has not been paid',
-  AlertType.budgetNearLimit => 'When a budget reaches your warning level',
-  AlertType.budgetBreached => 'When spending goes over a budget',
-  AlertType.monthlyDeficit => 'When this month\'s spending is above income',
-  AlertType.emergencyFundLow => 'When your safety net is below your threshold',
-  AlertType.emergencyFundNotSet => 'Reminder to set up an emergency fund',
-  AlertType.goalMilestone => 'When a goal reaches a milestone',
-  AlertType.goalAtRisk => 'When a goal falls behind its target date',
-};
 
 class _AlertTypeGroup extends ConsumerWidget {
   const _AlertTypeGroup({required this.group});
@@ -255,7 +231,6 @@ class _AlertTypeGroup extends ConsumerWidget {
               child: LedgerSwitchRow(
                 key: ValueKey('alert-${type.name}'),
                 title: type.label,
-                subtitle: _describe(type),
                 value: !disabled.contains(type),
                 onChanged: (on) => ctrl.update(
                   (s) => s.copyWith(

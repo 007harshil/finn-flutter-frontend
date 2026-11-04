@@ -164,11 +164,11 @@ class _Hero extends StatelessWidget {
         children: [
           Row(
             children: [
-              // Principal repaid (green) against what is still left (teal).
+              // Principal repaid (green) against what is still left (lilac).
               KhataDonut(
                 size: 112,
                 stroke: 15,
-                parts: [BarPart(repaid.toDouble(), c.green), BarPart(left.toDouble(), c.brand)],
+                parts: [BarPart(repaid.toDouble(), c.green), BarPart(left.toDouble(), c.lilac)],
                 semanticLabel: hidden ? null : '${mine.length} loans, ${(share * 100).round()} percent of principal repaid',
                 center: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -203,7 +203,7 @@ class _Hero extends StatelessWidget {
             value: AmountText(Money.fromPaise(repaid), style: t.figureSmall.copyWith(color: c.ink), decimals: DecimalDisplay.none),
           ),
           KhataKey(
-            color: c.brand,
+            color: c.lilac,
             label: 'Still to repay',
             value: AmountText(Money.fromPaise(left), style: t.figureSmall.copyWith(color: c.ink), decimals: DecimalDisplay.none),
           ),

@@ -189,11 +189,6 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
           const SizedBox(height: LedgerForm.gap),
           LedgerSwitchRow(
             title: 'Record as cash movement',
-            subtitle: _recordCash
-                ? (owe
-                      ? 'Adds an expense and lowers your balance.'
-                      : 'Adds income and raises your balance.')
-                : 'Off: settled outside FiNN. Balance unchanged.',
             value: _recordCash,
             onChanged: (b) => setState(() => _recordCash = b),
           ),

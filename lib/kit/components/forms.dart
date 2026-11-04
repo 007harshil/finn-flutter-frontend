@@ -322,8 +322,9 @@ class AmountInputFormatter extends TextInputFormatter {
 
 /// Rupee amount input with a ₹ prefix and strict formatting.
 ///
-/// [hero] is for the one amount a sheet is about: a large tabular figure on
-/// a hairline, no box. Other amounts use the regular boxed field.
+/// [hero] is for the one amount a sheet is about: a large condensed Bahi
+/// figure on a hairline, no box. Other amounts use the regular
+/// boxed field.
 class LedgerAmountField extends StatelessWidget {
   const LedgerAmountField({
     super.key,
@@ -367,7 +368,7 @@ class LedgerAmountField extends StatelessWidget {
     final t = context.type;
     final change = onChanged;
     final submit = onSubmitted;
-    final figure = hero ? t.figureXL : t.figure.copyWith(fontSize: 20, height: 1.2);
+    final figure = hero ? t.figureXL.copyWith(fontSize: 64, height: 1.05) : t.figure.copyWith(fontSize: 20, height: 1.2);
     final color = enabled ? c.ink : c.inkSoft;
     final hintStyle = _numeric.hasMatch(hint)
         ? figure.copyWith(color: hero ? c.inkFaint : c.inkSoft)
@@ -402,14 +403,14 @@ class LedgerAmountField extends StatelessWidget {
         filled: false,
         contentPadding: const EdgeInsets.only(bottom: Sp.sm, top: Sp.xs),
         prefixIcon: Padding(
-          padding: const EdgeInsets.only(right: Sp.sm),
+          padding: const EdgeInsets.only(right: Sp.xs),
           child: symbol,
         ),
         prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
         border: line(c.line),
         enabledBorder: line(c.lineStrong),
         disabledBorder: line(c.line),
-        focusedBorder: line(c.ink, 1.5),
+        focusedBorder: line(c.brand, 2),
         errorBorder: line(c.red),
         focusedErrorBorder: line(c.red, 1.5),
       );

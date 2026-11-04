@@ -147,7 +147,7 @@ class _Body extends StatelessWidget {
         if (split case final split?)
           PageColumn(top: Sp.section, child: PendingSplitSection(split: split, currentId: p.id)),
         if (p.isShared) PageColumn(top: Sp.section, child: _Shared(view: v)),
-        PageColumn(top: Sp.section, child: _Details(view: v)),
+        PageColumn(top: Sp.lg, child: _Details(view: v)),
         PageColumn(top: Sp.section, child: _History(view: v)),
       ],
     );
@@ -158,8 +158,8 @@ class _Body extends StatelessWidget {
 // Hero
 // ---------------------------------------------------------------------------
 
-/// What is left as the one number, how much is settled, how long it has
-/// waited, and the settle action.
+/// What is left as the one number on the slab, the settled share as a
+/// ring, how long it has waited, and the settle action.
 class _Hero extends StatelessWidget {
   const _Hero({required this.view});
 
@@ -167,101 +167,52 @@ class _Hero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.ink;
-    final t = context.type;
     final v = view;
     final p = v.payment;
     final active = v.status.isActive;
-    final (Money headline, String? after) = switch (v.status) {
-      PendingStatus.settled => (p.originalAmount, 'settled in full'),
-      PendingStatus.cancelled => (p.originalAmount - v.settled, 'written off'),
-      PendingStatus.partiallySettled => (v.outstanding, 'left of ${pendingMoney(context, p.originalAmount)}'),
-      PendingStatus.open => (v.outstanding, null),
+    final Money headline = switch (v.status) {
+      PendingStatus.settled => p.originalAmount,
+      PendingStatus.cancelled => p.originalAmount - v.settled,
+      _ => v.outstanding,
     };
     final settledShare = v.settledBps / 10000;
-    final String status;
-    Color? tone;
-    switch (v.status) {
-      case PendingStatus.settled:
-        final on = v.settledOn;
-        final took = on == null ? 0 : daysBetween(p.createdDate, on);
-        status = on == null
-            ? 'Settled in full'
-            : 'Settled ${DateFormats.dayMonthYear.format(on)}, '
-                '${took <= 0 ? 'the day it began' : '${pendingDays(took)} after it began'}';
-        tone = c.green;
-      case PendingStatus.cancelled:
-        status = 'Written off. ${pendingMoney(context, v.settled)} was settled before that.';
-      case PendingStatus.open || PendingStatus.partiallySettled:
-        status = pendingAgeSentence(v);
-        tone = v.isLongPending ? c.amber : null;
-    }
-    final last = v.daysSinceLastPayment;
+    final waited = active ? v.daysOpen : daysBetween(p.createdDate, v.settledOn ?? p.updatedAt);
+    final tone = switch (v.status) {
+      PendingStatus.settled => SlabTone.good,
+      PendingStatus.cancelled => SlabTone.neutral,
+      _ => v.isLongPending ? SlabTone.warn : SlabTone.neutral,
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        KhataPanel(
-          child: Row(
-            children: [
-              KhataRing(
-                value: settledShare,
-                size: 100,
-                stroke: 10,
-                color: c.green,
-                semanticLabel: '${v.settledBps ~/ 100}% settled',
-                center: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('${v.settledBps ~/ 100}%', style: t.figure.copyWith(fontSize: 18)),
-                    Text('settled', style: t.small),
-                  ],
-                ),
-              ),
-              const SizedBox(width: Sp.lg),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(p.direction.sentence(p.counterparty), style: t.label, maxLines: 2, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
-                    AnimatedAmount(
-                      headline,
-                      style: t.figureL.copyWith(color: active && !p.direction.isOwe ? c.green : c.ink),
-                      fit: true,
-                      animateOnMount: true,
-                    ),
-                    if (after != null) Text(after, style: t.figureSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: Sp.sm),
-                    KhataStamp(
-                      label: v.status.label,
-                      color: switch (v.status) {
-                        PendingStatus.settled => c.green,
-                        PendingStatus.cancelled => c.inkSoft,
-                        _ => v.isLongPending ? c.amber : c.brand,
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
+        BahiSlab(
+          leading: p.direction.isOwe ? LucideIcons.arrowUpRight : LucideIcons.arrowDownLeft,
+          label: p.direction.sentence(p.counterparty),
+          figure: SlabFigure(headline, color: active && !p.direction.isOwe ? Slab.good : null),
+          caption: p.purpose,
+          stamp: SlabStamp(label: v.status.label, tone: tone),
+          visual: SlabRing(
+            value: settledShare,
+            size: 96,
+            color: Slab.good,
+            top: '${v.settledBps ~/ 100}%',
+            bottom: 'settled',
+            semanticLabel: '${v.settledBps ~/ 100}% settled',
           ),
+          stats: [
+            SlabStat.money(label: 'Of', amount: p.originalAmount),
+            if (v.settled.isPositive) SlabStat.money(label: 'Settled', amount: v.settled, color: Slab.good),
+            SlabStat(
+              label: active ? 'Waiting' : 'Was open',
+              value: Text(
+                pendingDays(waited),
+                style: context.type.figure.copyWith(color: active && v.isLongPending ? Slab.warn : Slab.ink),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: Sp.xs),
-        Text(p.purpose, style: t.label),
-        if (v.settled.isPositive && v.status != PendingStatus.settled) ...[
-          const SizedBox(height: Sp.lg),
-          LedgerBar(value: settledShare, semanticLabel: '${v.settledBps ~/ 100}% settled'),
-          const SizedBox(height: Sp.sm),
-          Text(
-            '${pendingMoney(context, v.settled)} settled'
-            '${last == null || !active ? '' : ', last ${last == 0 ? 'today' : '$last ${last == 1 ? 'day' : 'days'} ago'}'}',
-            style: t.label,
-          ),
-        ],
-        const SizedBox(height: Sp.md),
-        Text(status, style: t.body.copyWith(color: tone)),
         if (active) ...[
-          const SizedBox(height: Sp.xl),
+          const SizedBox(height: Sp.md),
           Row(
             children: [
               Expanded(
@@ -352,13 +303,6 @@ class _Shared extends ConsumerWidget {
                 ),
             ],
           ),
-          const SizedBox(height: Sp.sm),
-          Text(
-            link.createdByMe
-                ? 'In both accounts. You can edit it; either of you can record a settlement.'
-                : '$first added this, so only they can edit it. Either of you can record a settlement.',
-            style: t.label,
-          ),
         ],
       ),
     );
@@ -421,16 +365,21 @@ class _Details extends StatelessWidget {
     final p = v.payment;
     final notes = p.notes?.trim() ?? '';
     final waited = v.status.isActive ? v.daysOpen : daysBetween(p.createdDate, v.settledOn ?? p.updatedAt);
-    return LedgerSection(
-      title: 'Details',
-      child: LedgerPanel(
-        children: [
-          LedgerFact(label: 'Reason', text: p.kind.label),
-          LedgerFact(label: 'Began', text: DateFormats.dayMonthYear.format(p.createdDate)),
-          LedgerFact(label: v.status.isActive ? 'Waiting' : 'Was open', text: pendingDays(waited)),
-          if (notes.isNotEmpty) LedgerFact(label: 'Note', text: notes, stacked: true),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FactTags(
+          tags: [
+            p.kind.label,
+            'Began ${DateFormats.dayMonthYear.format(p.createdDate)}',
+            if (!v.status.isActive) 'Open ${pendingDays(waited)}',
+          ],
+        ),
+        if (notes.isNotEmpty) ...[
+          const SizedBox(height: Sp.md),
+          LedgerNote(icon: LucideIcons.stickyNote, text: notes),
         ],
-      ),
+      ],
     );
   }
 }
@@ -444,7 +393,6 @@ class _History extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ink;
-    final t = context.type;
     final v = view;
     final owe = v.payment.direction.isOwe;
     // Remaining after each settlement, computed oldest first.
@@ -458,8 +406,9 @@ class _History extends StatelessWidget {
       title: 'Settlements',
       count: v.settlements.isEmpty ? null : v.settlements.length,
       child: v.settlements.isEmpty
-          ? Text(v.status.isActive ? 'Nothing settled yet.' : 'No settlements were recorded.', style: t.label)
+          ? const LedgerEmpty(icon: LucideIcons.hourglass, title: 'Nothing settled yet')
           : LedgerPanel(
+              khata: true,
               dividerIndent: Sp.lg + 40 + Sp.md + 2,
               children: [
                 for (final s in v.settlements)

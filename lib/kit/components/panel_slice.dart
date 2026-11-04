@@ -14,9 +14,15 @@ class LedgerPanelSlice extends StatelessWidget {
     this.first = false,
     this.last = false,
     this.dividerIndent = Sp.lg,
+    this.khata = false,
   });
 
   final Widget child;
+
+  /// Bahi ledger paper: warm fill, ruled edges and the red double margin
+  /// line at [khataMargin] (between the icon column and the text).
+  final bool khata;
+  static const khataMargin = 60.0;
 
   /// Opens the panel: rounded top edge, no divider above.
   final bool first;
@@ -34,7 +40,13 @@ class LedgerPanelSlice extends StatelessWidget {
     final radius = BorderRadius.vertical(top: first ? r : Radius.zero, bottom: last ? r : Radius.zero);
     return CustomPaint(
       // Dark mode separates panels by tone alone, like [LedgerPanel].
-      painter: _SlicePainter(first: first, last: last, fill: c.surface, line: c.isDark ? null : c.line),
+      painter: _SlicePainter(
+        first: first,
+        last: last,
+        fill: khata ? c.khata : c.surface,
+        line: khata ? c.khataRule : c.line,
+        margin: khata ? c.khataMargin : null,
+      ),
       child: ClipRRect(
         borderRadius: radius,
         child: Material(
@@ -42,7 +54,11 @@ class LedgerPanelSlice extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (!first) LedgerDivider(indent: dividerIndent),
+              if (!first)
+                Padding(
+                  padding: EdgeInsetsDirectional.only(start: dividerIndent),
+                  child: Container(height: 1, color: khata ? c.khataRule : c.line),
+                ),
               child,
             ],
           ),
@@ -53,12 +69,13 @@ class LedgerPanelSlice extends StatelessWidget {
 }
 
 class _SlicePainter extends CustomPainter {
-  _SlicePainter({required this.first, required this.last, required this.fill, this.line});
+  _SlicePainter({required this.first, required this.last, required this.fill, this.line, this.margin});
 
   final bool first;
   final bool last;
   final Color fill;
   final Color? line;
+  final Color? margin;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -75,6 +92,15 @@ class _SlicePainter extends CustomPainter {
       ),
       Paint()..color = fill,
     );
+    final m = margin;
+    if (m != null) {
+      final p = Paint()
+        ..color = m
+        ..strokeWidth = 1.2;
+      const x = LedgerPanelSlice.khataMargin;
+      canvas.drawLine(Offset(x, first ? 6 : 0), Offset(x, last ? size.height - 6 : size.height), p);
+      canvas.drawLine(Offset(x + 3, first ? 6 : 0), Offset(x + 3, last ? size.height - 6 : size.height), p);
+    }
     final stroke = line;
     if (stroke == null) return;
     // Stroke a rounded rect that runs past the open ends, clipped to this
@@ -100,5 +126,5 @@ class _SlicePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SlicePainter old) =>
-      old.first != first || old.last != last || old.fill != fill || old.line != line;
+      old.first != first || old.last != last || old.fill != fill || old.line != line || old.margin != margin;
 }

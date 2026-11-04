@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
-import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../kit/kit.dart';
@@ -74,92 +73,56 @@ class _Hero extends StatelessWidget {
   const _Hero({required this.view});
   final NetWorthView view;
 
+  /// Light group hues that read on the slab.
+  static Color _slab(NetWorthGroup g) => switch (g) {
+        NetWorthGroup.cash => Slab.cool,
+        NetWorthGroup.assets => Slab.lilac,
+        NetWorthGroup.receivables => Slab.warn,
+        NetWorthGroup.liabilities => Slab.bad,
+      };
+
   @override
   Widget build(BuildContext context) {
-    final t = context.type;
     final s = view.snapshot;
     final ratio = view.debtRatioBps;
-    final c = context.ink;
     final hidden = AmountVisibility.hiddenOf(context);
     final own = s.totalAssets.paise;
     final owe = s.liabilities.paise;
-    return KhataPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              // Outer: what you own by group. Inner: owe against own.
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  KhataDonut(
-                    size: 116,
-                    stroke: 14,
-                    parts: [for (final x in view.slices) BarPart(x.fraction, _sliceColor(c, x.group))],
-                  ),
-                  KhataRing(
-                    value: own <= 0 ? 0 : owe / own,
-                    size: 72,
-                    stroke: 6,
-                    color: c.red,
-                    center: Text(
-                      hidden || ratio == null ? '—' : formatBps(ratio, decimals: 0),
-                      style: t.small.copyWith(color: c.ink, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: Sp.lg),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Net worth', style: t.label),
-                    const SizedBox(height: 2),
-                    AnimatedAmount(s.netWorth, style: t.figureL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
-                    const SizedBox(height: Sp.sm),
-                    KhataStamp(
-                      label: s.netWorth.isNegative ? 'In the red' : 'In the black',
-                      color: s.netWorth.isNegative ? c.red : c.green,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Sp.md),
-          Row(
-            children: [
-              Expanded(
-                child: LedgerStat(
-                  label: 'You own',
-                  value: AmountText(s.totalAssets, style: t.figure, decimals: DecimalDisplay.none, fit: true),
-                ),
-              ),
-              const SizedBox(width: Sp.lg),
-              Expanded(
-                child: LedgerStat(
-                  label: 'You owe',
-                  value: AmountText(s.liabilities, style: t.figure.copyWith(color: c.red), decimals: DecimalDisplay.none, fit: true),
-                ),
-              ),
-            ],
-          ),
-          if (ratio != null && s.liabilities.isPositive) ...[
-            const SizedBox(height: Sp.md),
-            Text('Debts are ${formatBps(ratio, decimals: 0)} of what you own', style: t.label),
-          ],
-        ],
+    return BahiSlab(
+      leading: LucideIcons.scale,
+      label: 'Net worth',
+      figure: SlabFigure(s.netWorth, color: s.netWorth.isNegative ? Slab.bad : null),
+      stamp: SlabStamp(
+        label: s.netWorth.isNegative ? 'In the red' : 'In the black',
+        tone: s.netWorth.isNegative ? SlabTone.bad : SlabTone.good,
       ),
+      // Debts against what you own.
+      visual: SlabRing(
+        value: own <= 0 ? 0 : owe / own,
+        size: 96,
+        color: Slab.bad,
+        top: hidden || ratio == null ? '—' : formatBps(ratio, decimals: 0),
+        bottom: 'owed',
+      ),
+      stats: [
+        SlabStat.money(label: 'You own', amount: s.totalAssets),
+        SlabStat.money(label: 'You owe', amount: s.liabilities, color: Slab.bad),
+      ],
+      footer: view.slices.isEmpty
+          ? null
+          : SlabBar(
+              height: 10,
+              parts: [for (final x in view.slices) (x.fraction, _slab(x.group))],
+              semanticLabel: 'What you own by group',
+            ),
     );
   }
 }
 
 /// One hue per group (share, not good or bad); debts stay red.
 Color _sliceColor(LedgerColors c, NetWorthGroup g) => switch (g) {
-  NetWorthGroup.cash => c.brand,
-  NetWorthGroup.assets => c.info,
+  NetWorthGroup.cash => c.rain,
+  NetWorthGroup.assets => c.lilac,
   NetWorthGroup.receivables => c.marigold,
   NetWorthGroup.liabilities => c.red,
 };
@@ -177,11 +140,6 @@ class _Composition extends StatelessWidget {
       child: LedgerPanel(
         padding: const EdgeInsets.all(Sp.lg),
         children: [
-          LedgerStackBar(
-            height: 10,
-            parts: [for (final s in view.slices) BarPart(s.fraction, _sliceColor(c, s.group))],
-          ),
-          const SizedBox(height: Sp.md),
           for (final s in view.slices)
             MergeSemantics(
               child: Padding(
@@ -215,21 +173,20 @@ class _CashSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ink;
-    final t = context.type;
     final b = snapshot.balance;
-    AmountText amt(Money money, {Color? color}) =>
-        AmountText(money, style: t.figure, decimals: DecimalDisplay.none, color: color);
     return LedgerSection(
       title: 'Cash & bank',
-      child: LedgerPanel(
-        children: [
-          LedgerFact(label: 'Total cash', value: amt(snapshot.cash)),
+      child: StatGrid(
+        tiles: [
+          StatTile.money(label: 'Total cash', amount: snapshot.cash, icon: LucideIcons.wallet, color: c.rain),
           if (b.earmarked.isPositive) ...[
-            LedgerFact(label: 'Set aside for goals', value: amt(b.earmarkedGoals)),
-            LedgerFact(label: 'Emergency fund', value: amt(b.earmarkedEmergency)),
-            LedgerFact(
+            StatTile.money(label: 'For goals', amount: b.earmarkedGoals, icon: LucideIcons.target, color: c.lilac),
+            StatTile.money(label: 'Emergency fund', amount: b.earmarkedEmergency, icon: LucideIcons.shield, color: c.jade),
+            StatTile.money(
               label: 'Free to spend',
-              value: amt(b.available, color: b.available.isNegative ? c.red : null),
+              amount: b.available,
+              icon: LucideIcons.coins,
+              color: b.available.isNegative ? c.red : c.ink,
             ),
           ],
         ],

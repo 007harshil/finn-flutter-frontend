@@ -150,7 +150,8 @@ class FinnCard extends StatelessWidget {
             variant == FinnCardVariant.muted ||
             variant == FinnCardVariant.outlined
         ? Elevation.none
-        : Elevation.md;
+        // Bahi cards are flat: hairline edge, no shadow.
+        : Elevation.none;
     final interactive = onTap != null || onLongPress != null;
 
     Widget content = Padding(padding: padding, child: child);

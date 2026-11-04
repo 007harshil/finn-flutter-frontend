@@ -42,7 +42,8 @@ abstract final class FinnTheme {
     );
     return ThemeData(
       useMaterial3: true,
-      fontFamily: 'Manrope',
+      fontFamily: 'AnekLatin',
+      fontFamilyFallback: const ['AnekDevanagari', 'Manrope'],
       brightness: c.brightness,
       colorScheme: scheme,
       scaffoldBackgroundColor: c.background,

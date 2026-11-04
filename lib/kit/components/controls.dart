@@ -8,7 +8,7 @@ import '../../design_system/motion/motion.dart';
 import '../tokens.dart';
 
 enum LedgerButtonVariant {
-  /// Teal fill. One per view: the main thing to do.
+  /// Indigo fill on a pressable edge. One per view: the main thing to do.
   primary,
 
   /// Outlined. Everything else that is a button.
@@ -111,36 +111,57 @@ class _LedgerButtonState extends State<LedgerButton> {
         ),
       ],
     );
+    // Bahi: the primary button sits on a 3 px edge and sinks onto it when
+    // pressed, like a key. Other variants squeeze slightly.
+    final edged = variant == LedgerButtonVariant.primary;
+    final edge = color == null ? c.edge : Color.lerp(color, Colors.black, 0.35)!;
+    final down = _down && enabled;
+    final reduce = context.reduceMotion;
+    final dur = Duration(milliseconds: reduce ? 0 : 70);
+    final button = Material(
+      color: bg,
+      shape: RoundedRectangleBorder(borderRadius: Rad.rBtn, side: side),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: enabled ? _press : null,
+        onHighlightChanged: (v) => setState(() => _down = v),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: height, minWidth: small ? 0 : 48),
+          child: Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: content),
+        ),
+      ),
+    );
     return Semantics(
       button: true,
       enabled: enabled,
       child: Opacity(
         opacity: enabled ? 1 : (loading || _busy ? 0.6 : 0.4),
-        // A short squeeze on press: the button feels pushed, never bouncy.
-        child: AnimatedScale(
-          scale: _down && !context.reduceMotion ? 0.97 : 1,
-          duration: const Duration(milliseconds: 90),
-          curve: Curves.easeOut,
-          child: Material(
-            color: bg,
-            shape: RoundedRectangleBorder(borderRadius: Rad.rMd, side: side),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: enabled ? _press : null,
-              onHighlightChanged: (v) => setState(() => _down = v),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: height, minWidth: small ? 0 : 48),
-                child: Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: content),
+        child: edged
+            ? Padding(
+                padding: const EdgeInsets.only(bottom: Rad.edge),
+                child: AnimatedContainer(
+                  duration: dur,
+                  curve: Curves.easeOut,
+                  transform: Matrix4.translationValues(0, down ? Rad.edge : 0, 0),
+                  decoration: BoxDecoration(
+                    borderRadius: Rad.rBtn,
+                    boxShadow: [BoxShadow(color: edge, offset: Offset(0, down ? 0 : Rad.edge))],
+                  ),
+                  child: button,
+                ),
+              )
+            : AnimatedScale(
+                scale: down && !reduce ? 0.97 : 1,
+                duration: const Duration(milliseconds: 90),
+                curve: Curves.easeOut,
+                child: button,
               ),
-            ),
-          ),
-        ),
       ),
     );
   }
 }
 
-/// 44pt round icon button. [selected] fills it with teal (an active toggle
+/// 44pt round icon button. [selected] fills it with indigo (an active toggle
 /// or a filter that is on); [badge] shows a count in the corner.
 class LedgerIconButton extends StatelessWidget {
   const LedgerIconButton({
@@ -237,7 +258,7 @@ class LedgerMenuButton extends StatelessWidget {
   }
 }
 
-/// Pill used for filters and quick choices. Selected = teal fill.
+/// Chip used for filters and quick choices. Selected = marigold wash.
 class LedgerChip extends StatelessWidget {
   const LedgerChip({
     super.key,
@@ -270,8 +291,8 @@ class LedgerChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ink;
     final t = context.type;
-    final fg = selected ? c.onBrand : c.ink;
-    final soft = selected ? c.onBrand.withValues(alpha: 0.78) : c.inkSoft;
+    final fg = selected ? c.marigoldInk : c.ink;
+    final soft = selected ? c.marigoldInk.withValues(alpha: 0.78) : c.inkSoft;
     final d = dot;
     final ic = icon;
     final n = count;
@@ -281,8 +302,11 @@ class LedgerChip extends StatelessWidget {
       label: semanticLabel,
       excludeSemantics: semanticLabel != null,
       child: Material(
-        color: selected ? c.brand : c.surface,
-        shape: StadiumBorder(side: BorderSide(color: selected ? c.brand : c.lineStrong.withValues(alpha: 0.7))),
+        color: selected ? c.marigoldSoft : c.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: Rad.rChip,
+          side: BorderSide(color: selected ? c.marigold.withValues(alpha: 0.55) : c.lineStrong),
+        ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap == null
@@ -380,7 +404,7 @@ class LedgerSegmented<T> extends StatelessWidget {
                       color: s.value == selected ? (c.isDark ? c.lineStrong : c.surface) : Colors.transparent,
                       borderRadius: const BorderRadius.all(Radius.circular(Rad.md - 3)),
                       boxShadow: s.value == selected && !c.isDark
-                          ? const [BoxShadow(color: Color(0x1A0F1F21), blurRadius: 6, offset: Offset(0, 1))]
+                          ? [BoxShadow(color: c.ink.withValues(alpha: 0.10), blurRadius: 6, offset: const Offset(0, 1))]
                           : null,
                     ),
                     child: Text.rich(

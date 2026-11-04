@@ -361,9 +361,7 @@ class _PendingFormSheetState extends ConsumerState<PendingFormSheet> {
 
     return FinnSheetScaffold(
       title: _editing ? 'Edit money owed' : 'Add money owed',
-      description: _editing
-          ? existing!.payment.purpose
-          : 'Your balance does not change.',
+      description: _editing ? existing!.payment.purpose : null,
       footer: LedgerButton(
         label: _editing
             ? 'Save changes'

@@ -71,92 +71,113 @@ abstract final class Palette {
   static const yellow300 = Color(0xFFFDE047);
 }
 
-/// The FiNN "Current" palette: the raw values behind both the kit tokens
+/// The FiNN "Bahi" palette: the raw values behind both the kit tokens
 /// (`LedgerColors`) and the Material theme (`FinnColors`), so the two can
-/// never drift apart. Deep teal comes from the logo's flowing arrows.
+/// never drift apart. After the bahi-khata ledger: indigo ink, marigold
+/// highlights, warm ruled paper and a red margin line. Charts use the
+/// "Monsoon" hues (one hue per meaning), deepened for light grounds.
 /// Every text pair is at least 4.5:1 on its ground.
 abstract final class Hue {
-  // Light: quiet shore ground, white panels, ink text, one deep teal.
-  static const shore = Color(0xFFF4F7F6);
-  static const shoreBackdrop = Color(0xFFE6ECEB);
+  // Light: cool page, white panels, indigo ink, marigold highlights.
+  static const shore = Color(0xFFF7F7FA);
+  static const shoreBackdrop = Color(0xFFE9EAF3);
   static const panel = Color(0xFFFFFFFF);
-  static const mist = Color(0xFFEAF0EF);
-  static const hair = Color(0xFFDEE6E5);
-  static const hairStrong = Color(0xFFC6D1D0);
-  static const ink = Color(0xFF0F1F21);
-  static const inkSoft = Color(0xFF4D5D60);
-  static const inkFaint = Color(0xFF879497);
-  static const current = Color(0xFF0B6E69);
-  static const currentSoft = Color(0xFFDDEFEC);
-  static const deep = Color(0xFF0B3B44);
-  static const deepEnd = Color(0xFF0D4F55);
-  static const flow = Color(0xFF3FC1B4);
-  static const moneyIn = Color(0xFF157347);
-  static const moneyInSoft = Color(0xFFE1F1E7);
-  static const near = Color(0xFF8F5300);
-  static const nearSoft = Color(0xFFF8EDDC);
-  static const over = Color(0xFFB3261E);
-  static const overSoft = Color(0xFFFAE6E4);
-  static const info = Color(0xFF1F5FBF);
-  static const infoSoft = Color(0xFFE3EDFB);
+  static const mist = Color(0xFFECEEF6);
+  static const hair = Color(0xFFDEE1EE);
+  static const hairStrong = Color(0xFFC7CBE0);
+  static const ink = Color(0xFF191B3F);
+  static const inkSoft = Color(0xFF50547A);
+  static const inkFaint = Color(0xFF8A8DAE);
+  static const current = Color(0xFF2C3192); // indigo: primary fills, links
+  static const currentSoft = Color(0xFFE7E8F8);
+  static const edge = Color(0xFF1B1F66); // pressable edge under primary
+  static const deep = Color(0xFF23286F); // hero slab
+  static const deepEnd = Color(0xFF1B1F66);
+  static const onDeepSoft = Color(0xFFC5C8F0);
+  static const heroFigure = Color(0xFFFFC24B);
+  static const flow = Color(0xFFFFC24B); // highlight that reads on the slab
+  static const moneyIn = Color(0xFF11734A);
+  static const moneyInSoft = Color(0xFFE0F2E8);
+  static const near = Color(0xFF9A5500);
+  static const nearSoft = Color(0xFFFCEFD6);
+  static const over = Color(0xFFBE2A2F);
+  static const overSoft = Color(0xFFFBE6E6);
+  static const info = Color(0xFF1F6BCB);
+  static const infoSoft = Color(0xFFE3EDFA);
 
-  // Dark: teal-tinted slate. Panels are separated by tone, not borders,
-  // and colours glow a little so meaning still reads at night.
-  static const night = Color(0xFF0D1416);
-  static const nightBackdrop = Color(0xFF080D0E);
-  static const nightPanel = Color(0xFF162023);
-  static const nightRaised = Color(0xFF1F2B2E);
-  static const nightHair = Color(0xFF263336);
-  static const nightHairStrong = Color(0xFF37474A);
-  static const nightInk = Color(0xFFE7EEED);
-  static const nightInkSoft = Color(0xFFA0AFB1);
-  static const nightInkFaint = Color(0xFF6C7B7E);
-  static const nightCurrent = Color(0xFF4FC4B8);
-  static const nightCurrentSoft = Color(0xFF143533);
-  static const nightOnCurrent = Color(0xFF04201E);
-  static const nightDeep = Color(0xFF103C42);
-  static const nightDeepEnd = Color(0xFF0E2C31);
-  static const nightFlow = Color(0xFF6FE0D2);
-  static const nightIn = Color(0xFF5FC290);
+  // Dark: night indigo, marigold becomes the primary fill.
+  static const night = Color(0xFF0F1029);
+  static const nightBackdrop = Color(0xFF0A0B1E);
+  static const nightPanel = Color(0xFF181A3A);
+  static const nightRaised = Color(0xFF20234A);
+  static const nightHair = Color(0xFF2C2F5A);
+  static const nightHairStrong = Color(0xFF3D4170);
+  static const nightInk = Color(0xFFEDEDF8);
+  static const nightInkSoft = Color(0xFFA9ACCF);
+  static const nightInkFaint = Color(0xFF6F7299);
+  static const nightCurrent = Color(0xFFFFC24B);
+  static const nightCurrentSoft = Color(0xFF3A2E12);
+  static const nightOnCurrent = Color(0xFF1A1300);
+  static const nightEdge = Color(0xFFC98A12);
+  static const nightDeep = Color(0xFF1D2063);
+  static const nightDeepEnd = Color(0xFF161850);
+  static const nightOnDeepSoft = Color(0xFFC5C8F0);
+  static const nightFlow = Color(0xFFFFC24B);
+  static const nightIn = Color(0xFF63C995);
   static const nightInSoft = Color(0xFF15302A);
-  static const nightNear = Color(0xFFE9B160);
+  static const nightNear = Color(0xFFF0B45A);
   static const nightNearSoft = Color(0xFF33291A);
-  static const nightOver = Color(0xFFF2836F);
-  static const nightOverSoft = Color(0xFF3A201C);
-  static const nightInfo = Color(0xFF8DB8F5);
-  static const nightInfoSoft = Color(0xFF15253D);
+  static const nightOver = Color(0xFFFF8A80);
+  static const nightOverSoft = Color(0xFF3A1F2A);
+  static const nightInfo = Color(0xFF6DB3FF);
+  static const nightInfoSoft = Color(0xFF16254A);
 
-  // Bahi khata: warm ruled paper with a red margin line and marigold ink,
-  // used behind chart-led summaries.
-  static const khata = Color(0xFFFFF7E3);
-  static const khataRule = Color(0xFFEADFC2);
-  static const khataMargin = Color(0xFFE7A49C);
+  // Bahi khata: warm ruled paper with a red margin line and marigold ink.
+  static const khata = Color(0xFFFFF7E0);
+  static const khataRule = Color(0xFFF0DFAF);
+  static const khataMargin = Color(0xD9BE2A2F);
   static const marigold = Color(0xFFF4A51C);
-  static const nightKhata = Color(0xFF1E2224);
-  static const nightKhataRule = Color(0xFF2C3133);
-  static const nightKhataMargin = Color(0xFF6E3A35);
+  static const marigoldInk = Color(0xFF6E4300);
+  static const marigoldSoft = Color(0xFFFFEBC2);
+  static const nightKhata = Color(0xFF211E33);
+  static const nightKhataRule = Color(0xFF3A3550);
+  static const nightKhataMargin = Color(0xB3FF8A80);
   static const nightMarigold = Color(0xFFFFC24B);
+  static const nightMarigoldInk = Color(0xFFFFD98A);
+  static const nightMarigoldSoft = Color(0xFF3A2E12);
+
+  // Monsoon data hues: light deepened to pass 4.5:1 on white.
+  static const rain = Color(0xFF1F6BCB);
+  static const jade = Color(0xFF0A7A57);
+  static const saffron = Color(0xFFA86400);
+  static const rose = Color(0xFFC2335A);
+  static const lilac = Color(0xFF6847D6);
+  static const nightRain = Color(0xFF6DB3FF);
+  static const nightJade = Color(0xFF45D4A4);
+  static const nightSaffron = Color(0xFFFFB547);
+  static const nightRose = Color(0xFFFF7D9C);
+  static const nightLilac = Color(0xFFB7A2FF);
 
   /// Chart hues, one per meaning (light / dark).
   static const chartLight = [
-    current,
-    Color(0xFF1F6BCB),
-    Color(0xFFC77A06),
-    Color(0xFFC8456E),
-    Color(0xFF6A44C2),
-    Color(0xFF0A7A57),
-    Color(0xFF0F6F9E),
-    Color(0xFF6B7A7D),
+    rain,
+    lilac,
+    jade,
+    saffron,
+    rose,
+    Color(0xFF0F7F9E),
+    Color(0xFF9A3FA8),
+    Color(0xFF6B7090),
   ];
   static const chartDark = [
-    nightCurrent,
-    Color(0xFF6DB3FF),
-    Color(0xFFFFB547),
-    Color(0xFFFF7D9C),
-    Color(0xFFB9A1F3),
-    Color(0xFF45D4A4),
-    Color(0xFF7FC6E8),
-    Color(0xFFAEB8BB),
+    nightRain,
+    nightLilac,
+    nightJade,
+    nightSaffron,
+    nightRose,
+    Color(0xFF7FD3EE),
+    Color(0xFFE596D6),
+    Color(0xFFB0B3D0),
   ];
 }
 

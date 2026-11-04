@@ -42,13 +42,13 @@ class _Hero extends StatelessWidget {
         children: [
           Row(
             children: [
-              // Where the income went: spent (teal), kept (green) or
+              // Where the income went: spent (rain), kept (green) or
               // overspent beyond income (red).
               KhataDonut(
                 size: 104,
                 stroke: 14,
                 parts: [
-                  BarPart((spent - over).toDouble(), c.brand),
+                  BarPart((spent - over).toDouble(), c.rain),
                   BarPart(kept.toDouble(), c.green),
                   BarPart(over.toDouble(), c.red),
                 ],

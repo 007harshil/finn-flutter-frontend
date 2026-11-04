@@ -404,7 +404,9 @@ class GoalListRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: Sp.md),
-            AmountText(g.saved, style: t.figure.copyWith(color: soft), decimals: DecimalDisplay.none),
+            Flexible(
+              child: AmountText(g.saved, style: t.figure.copyWith(color: soft), decimals: DecimalDisplay.none, fit: true),
+            ),
           ],
         ),
         const SizedBox(height: 2),

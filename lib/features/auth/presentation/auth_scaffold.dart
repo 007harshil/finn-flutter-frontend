@@ -66,12 +66,13 @@ class AuthScaffold extends StatelessWidget {
   }
 }
 
-/// Title and one line of body at the top of an auth screen.
+/// Title (wide Bahi heading over a marigold rule) and an optional line of
+/// body at the top of an auth screen.
 class AuthHeader extends StatelessWidget {
-  const AuthHeader({super.key, required this.title, required this.body});
+  const AuthHeader({super.key, required this.title, this.body});
 
   final String title;
-  final Widget body;
+  final Widget? body;
 
   @override
   Widget build(BuildContext context) {
@@ -80,9 +81,13 @@ class AuthHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Semantics(header: true, child: Text(title, style: t.title)),
-        const SizedBox(height: Sp.sm),
-        DefaultTextStyle.merge(style: t.body.copyWith(color: c.inkSoft), child: body),
+        Semantics(header: true, child: Text(title, style: t.title.wide(116).copyWith(fontSize: 30))),
+        const SizedBox(height: Sp.md),
+        Container(width: 44, height: 4, decoration: BoxDecoration(color: c.marigold, borderRadius: Rad.pill)),
+        if (body case final b?) ...[
+          const SizedBox(height: Sp.md),
+          DefaultTextStyle.merge(style: t.body.copyWith(color: c.inkSoft), child: b),
+        ],
       ],
     );
   }

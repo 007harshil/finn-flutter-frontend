@@ -13,9 +13,9 @@ import '../../../../kit/kit.dart';
 import '../../../../shared/presentation/async_view.dart';
 import 'accounts_section.dart';
 
-/// "Available to spend": the one number Home exists for, on the deep teal
-/// slab. Under it, a bar of your cash with the free part in bright teal
-/// and the set-aside part in a lighter tone, and the two amounts that
+/// "Available to spend": the one number Home exists for, in marigold on
+/// the indigo Bahi slab. Under it, a bar of your cash with the free part
+/// in marigold and the set-aside part in a lighter tone, and the two amounts that
 /// explain the gap. Tapping
 /// "Set aside" splits it into goals and emergency fund; tapping the number
 /// opens the full maths. Below that, the accounts the money sits in, as
@@ -73,7 +73,7 @@ class _BalanceState extends State<_Balance> {
         : [BarPart(free, c.flow), BarPart(share(b.earmarked), _Slab.faint)];
 
     final slab = Container(
-      decoration: BoxDecoration(gradient: c.deepGradient, borderRadius: Rad.rXl),
+      decoration: BoxDecoration(gradient: c.deepGradient, borderRadius: Rad.rLg),
       clipBehavior: Clip.antiAlias,
       child: CustomPaint(
         painter: const _FlowMarks(),
@@ -113,7 +113,7 @@ class _BalanceState extends State<_Balance> {
                           const SizedBox(height: Sp.xs),
                           AnimatedAmount(
                             b.available,
-                            style: t.figureXL.copyWith(color: over && !hidden ? _Slab.over : _Slab.ink),
+                            style: t.figureXL.copyWith(fontSize: 58, color: over && !hidden ? _Slab.over : c.heroFigure),
                             decimals: DecimalDisplay.none,
                             fit: true,
                             animateOnMount: true,
@@ -287,17 +287,17 @@ class _Legend extends StatelessWidget {
   }
 }
 
-/// Text and marks on the deep slab (the same in light and dark mode).
+/// Text and marks on the indigo slab (the same in light and dark mode).
 abstract final class _Slab {
   static const ink = Color(0xFFFFFFFF);
-  static const soft = Color(0xD9FFFFFF);
-  static const faint = Color(0x52FFFFFF);
-  static const goals = Color(0xFFB9EBE4);
-  static const over = Color(0xFFFFA494);
+  static const soft = Color(0xFFC5C8F0);
+  static const faint = Color(0x47FFFFFF);
+  static const goals = Color(0xFFA3A9FF);
+  static const over = Color(0xFFFF8A80);
 }
 
-/// Two faint arcs in the slab's corner, after the flowing arrows of the
-/// FiNN mark.
+/// A faint marigold seal ring in the slab's corner, like the stamp mark
+/// on a bahi page.
 class _FlowMarks extends CustomPainter {
   const _FlowMarks();
 
@@ -305,12 +305,9 @@ class _FlowMarks extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..color = const Color(0x14FFFFFF);
-    final r = size.height * 0.9;
-    final centre = Offset(size.width + r * 0.18, -r * 0.1);
-    canvas.drawCircle(centre, r * 0.62, paint..strokeWidth = 18);
-    canvas.drawCircle(centre, r * 0.92, paint..strokeWidth = 10);
+      ..color = const Color(0x29FFC24B);
+    canvas.drawCircle(Offset(size.width - 28, 28), 36, paint..strokeWidth = 10);
+    canvas.drawCircle(Offset(size.width - 28, 28), 56, paint..strokeWidth = 1.5);
   }
 
   @override
@@ -322,7 +319,7 @@ class _BalanceSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const LedgerSkeleton(height: 320, radius: Rad.xl);
+    return const LedgerSkeleton(height: 320, radius: Rad.lg);
   }
 }
 
@@ -350,7 +347,6 @@ class BalanceBreakdownSheet extends StatelessWidget {
 
     return FinnSheetScaffold(
       title: 'How your balance adds up',
-      description: 'Set-aside money is still yours. It is earmarked so you do not spend it by accident.',
       footer: FinnButton(label: 'Got it', expand: true, onPressed: () => Navigator.of(context).maybePop()),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -130,72 +130,64 @@ class _BodyState extends ConsumerState<_Body> {
 class _Total extends ConsumerWidget {
   const _Total();
 
+  /// Light hues that read on the indigo slab, one per account.
+  static const _hues = [Slab.warn, Slab.cool, Slab.lilac, Slab.good, Slab.bad, Slab.soft];
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = context.type;
-    final c = context.ink;
     final b = ref.watch(balanceProvider).value;
     final owed = ref.watch(creditOwedProvider).value;
     if (b == null) return const SizedBox(height: 80);
     final hidden = AmountVisibility.hiddenOf(context);
+    final all = ref.watch(accountBalancesProvider).value ?? const <AccountBalance>[];
     final held = [
-      for (final x in ref.watch(accountBalancesProvider).value ?? const <AccountBalance>[])
-        if (!x.account.isArchived && x.balance.isPositive) x,
+      for (final x in all)
+        if (!x.account.isArchived && x.balance.isPositive && !x.isLiability) x,
     ]..sort((x, y) => y.balance.paise.compareTo(x.balance.paise));
     final total = held.fold<int>(0, (sum, x) => sum + x.balance.paise);
-    final hues = [for (var i = 0; i < held.length; i++) c.tint(i * 3 + 9).$1];
-    return KhataPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              KhataDonut(
-                size: 108,
-                stroke: 14,
-                parts: [for (var i = 0; i < held.length; i++) BarPart(held[i].balance.paise.toDouble(), hues[i])],
-                center: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('${held.length}', style: t.figure.copyWith(fontSize: 22)),
-                    Text(held.length == 1 ? 'account' : 'accounts', style: t.small),
-                  ],
+    final open = all.where((x) => !x.account.isArchived).length;
+    Color hue(int i) => _hues[i % _hues.length];
+    return BahiSlab(
+      leading: LucideIcons.wallet,
+      label: 'Total money',
+      figure: SlabFigure(b.cash),
+      stats: [
+        SlabStat.text(label: 'Accounts', text: '$open'),
+        if (owed != null && owed.isPositive) SlabStat.money(label: 'Card owed', amount: owed, color: Slab.bad),
+        SlabStat.money(label: 'Set aside', amount: b.earmarked),
+      ],
+      footer: held.length < 2 || total <= 0
+          ? null
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SlabBar(
+                  height: 10,
+                  parts: [for (var i = 0; i < held.length; i++) (held[i].balance.paise / total, hue(i))],
+                  semanticLabel: 'Share of money by account',
                 ),
-              ),
-              const SizedBox(width: Sp.lg),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: Sp.sm + 2),
+                Wrap(
+                  spacing: Sp.lg,
+                  runSpacing: Sp.xs,
                   children: [
-                    Text('Total money', style: t.label),
-                    const SizedBox(height: 2),
-                    AnimatedAmount(b.cash, style: t.figureL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
-                    if (owed != null && owed.isPositive) ...[
-                      const SizedBox(height: Sp.xs),
+                    for (var i = 0; i < held.length && i < 6; i++)
                       Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Flexible(child: Text('Credit card owed  ', style: t.label, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                          AmountText(owed, style: t.figureSmall.copyWith(color: c.red), decimals: DecimalDisplay.none),
+                          Container(width: 8, height: 8, decoration: BoxDecoration(color: hue(i), shape: BoxShape.circle)),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${held[i].account.name} ${hidden ? '••' : '${(held[i].balance.paise * 100 / total).round()}%'}',
+                            style: t.small.copyWith(color: Slab.soft),
+                          ),
                         ],
                       ),
-                    ],
                   ],
                 ),
-              ),
-            ],
-          ),
-          if (held.length > 1 && total > 0) ...[
-            const SizedBox(height: Sp.md),
-            for (var i = 0; i < held.length && i < 5; i++)
-              KhataKey(
-                color: hues[i],
-                // Name with share, so the key never repeats a row title.
-                label: '${held[i].account.name} · ${hidden ? '••' : '${(held[i].balance.paise * 100 / total).round()}%'}',
-                value: const SizedBox.shrink(),
-              ),
-          ],
-        ],
-      ),
+              ],
+            ),
     );
   }
 }
@@ -210,9 +202,87 @@ class _Group extends StatelessWidget {
     return LedgerSection(
       title: title,
       count: items.length,
-      child: LedgerPanel(
-        dividerIndent: Sp.lg + 36 + Sp.md + 2,
-        children: [for (final b in items) AccountRow(balance: b)],
+      child: LayoutBuilder(
+        builder: (context, box) {
+          const gap = Sp.sm + 2;
+          final w = (box.maxWidth - gap) / 2;
+          return Wrap(
+            spacing: gap,
+            runSpacing: gap,
+            children: [for (final b in items) SizedBox(width: items.length == 1 ? box.maxWidth : w, child: AccountCard(balance: b))],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// A passbook card: kind icon, name, balance, and a bar for how much is set
+/// aside (or, on a credit card, how much of the limit is used).
+class AccountCard extends StatelessWidget {
+  const AccountCard({super.key, required this.balance});
+
+  final AccountBalance balance;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ink;
+    final t = context.type;
+    final a = balance.account;
+    final hidden = AmountVisibility.hiddenOf(context);
+    final bal = balance.balance.paise.abs();
+    final left = balance.limitLeft;
+    final double? share = a.isLiability
+        ? (left == null || bal + left.paise <= 0 ? null : bal / (bal + left.paise))
+        : (SetAsideLine.shows(balance) && bal > 0 ? (balance.earmarked.paise / bal) : null);
+    final sub = [
+      if (a.last4 != null) '····${a.last4}' else a.kind.label,
+      ?limitLeftText(balance, short: true),
+      if (a.isDefault) 'Default',
+    ].join(' · ');
+    return Semantics(
+      key: ValueKey('account-row-${a.id}'),
+      button: true,
+      label: accountSemantics(balance, hidden: hidden),
+      excludeSemantics: true,
+      child: Material(
+        color: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: Rad.rMd, side: BorderSide(color: a.isDefault ? c.marigold : c.line)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => context.push(AppRoutes.accountDetail(a.id)),
+          child: Padding(
+            padding: const EdgeInsets.all(Sp.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    IconWell(icon: accountIcon(a.kind), size: 32),
+                    const SizedBox(width: Sp.sm),
+                    Expanded(child: Text(a.name, style: t.labelStrong, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  ],
+                ),
+                const SizedBox(height: Sp.md),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: AccountAmount(balance, style: t.figureL.copyWith(fontSize: 24), decimals: DecimalDisplay.none),
+                ),
+                Text(sub, style: t.small, maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: Sp.sm),
+                SizedBox(
+                  width: double.infinity,
+                  child: LedgerBar(
+                  value: share ?? 0,
+                  height: 5,
+                  color: a.isLiability ? (share != null && share >= 0.85 ? c.saffron : c.rain) : c.marigold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

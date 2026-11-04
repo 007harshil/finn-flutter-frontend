@@ -19,6 +19,7 @@ import '../../savings/presentation/held_on_section.dart';
 import '../application/goal_actions.dart';
 import '../application/goal_view.dart';
 import '../domain/goal.dart';
+import '../../../shared/presentation/category_icons.dart';
 import 'goal_parts.dart';
 
 /// One savings goal: what is saved and whether it is on time, add or
@@ -130,10 +131,10 @@ class _GoalBody extends ConsumerWidget {
             top: Sp.sm,
             child: LedgerNote(
               icon: LucideIcons.archive,
-              text: 'Archived. Restore it to add or withdraw.',
+              text: 'Archived',
             ),
           ),
-        PageColumn(top: Sp.xl, child: _Hero(progress: g, today: today)),
+        PageColumn(top: Sp.lg, child: _Hero(progress: g, today: today)),
         if (!g.isAchieved)
           PageColumn(
             top: Sp.section,
@@ -159,58 +160,48 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final g = progress;
-    final c = context.ink;
-    final t = context.type;
     final active = g.goal.status == GoalStatus.active;
     final expected = active && !g.isAchieved ? expectedShare(g, today) : null;
-    final (status, tone) = _status(context, g, c);
     final hidden = AmountVisibility.hiddenOf(context);
+    final date = g.goal.targetDate;
+    final finish = g.estimatedCompletion;
+    final need = g.requiredMonthly;
+    final (stamp, tone) = g.isAchieved
+        ? ('Reached', SlabTone.good)
+        : g.onTrack == true
+            ? ('On track', SlabTone.good)
+            : g.onTrack == false
+                ? ('Behind', SlabTone.warn)
+                : (null, SlabTone.neutral);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        KhataPanel(
-          child: Row(
-            children: [
-              KhataRing(
-                value: g.progress,
-                marker: expected,
-                size: 112,
-                color: g.isAchieved ? c.green : c.tint(g.goal.colorIndex).$1,
-                semanticLabel: '${goalPercent(g.progress)} saved'
-                    '${expected == null || hidden ? '' : '. By now your date needs ${goalPercent(expected)}'}',
-                center: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(hidden ? '••' : goalPercent(g.progress), style: t.figure.copyWith(fontSize: 20)),
-                    Text('saved', style: t.small),
-                  ],
-                ),
-              ),
-              const SizedBox(width: Sp.lg),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Saved', style: t.label),
-                    const SizedBox(height: 2),
-                    AnimatedAmount(g.saved, style: t.figureL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
-                    Text('of ${goalMoney(context, g.goal.target)}', style: t.figureSmall),
-                    if (g.isAchieved || g.onTrack != null) ...[
-                      const SizedBox(height: Sp.sm),
-                      KhataStamp(
-                        label: g.isAchieved ? 'Reached' : (g.onTrack == true ? 'On track' : 'Behind'),
-                        color: g.isAchieved || g.onTrack == true ? c.green : c.amber,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
+        BahiSlab(
+          leading: CategoryIcons.of(g.goal.category.iconKey),
+          label: 'Saved',
+          figure: SlabFigure(g.saved),
+          caption: 'of ${goalMoney(context, g.goal.target)}',
+          stamp: stamp == null ? null : SlabStamp(label: stamp, tone: tone),
+          visual: SlabRing(
+            value: g.progress,
+            marker: expected,
+            size: 104,
+            color: g.isAchieved ? Slab.good : Slab.warn,
+            top: hidden ? '••' : goalPercent(g.progress),
+            bottom: 'saved',
+            semanticLabel: '${goalPercent(g.progress)} saved'
+                '${expected == null || hidden ? '' : '. By now your date needs ${goalPercent(expected)}'}',
           ),
+          stats: [
+            if (!g.isAchieved) SlabStat.money(label: 'To go', amount: g.remaining),
+            if (date != null) SlabStat.text(label: 'Target', text: goalMonth.format(date)),
+            if (!g.isAchieved && finish != null)
+              SlabStat.text(label: 'At your pace', text: goalMonth.format(finish))
+            else if (!g.isAchieved && need != null)
+              SlabStat.money(label: 'Needs a month', amount: need),
+          ],
         ),
         const SizedBox(height: Sp.md),
-        Text(status, style: t.label.copyWith(color: tone)),
-        const SizedBox(height: Sp.xl),
         Row(
           children: [
             Expanded(
@@ -235,24 +226,6 @@ class _Hero extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  /// One line on where the goal stands, coloured only when it matters.
-  static (String, Color?) _status(BuildContext context, GoalProgress g, LedgerColors c) {
-    if (g.isAchieved) return ('Target reached', c.green);
-    final date = g.goal.targetDate;
-    final finish = g.estimatedCompletion;
-    if (g.onTrack == true && finish != null) return ('On track, done by ${goalMonth.format(finish)}', null);
-    if (g.onTrack == false && finish != null && date != null) {
-      final late = monthsApart(finish, date);
-      return (late <= 0 ? 'Behind, finishing just after your date' : 'Behind, ${aboutMonths(late)} late', c.amber);
-    }
-    final need = g.requiredMonthly;
-    if (date != null && need != null) {
-      return ('Needs ${goalMoney(context, need)} a month to finish by ${goalMonth.format(date)}', null);
-    }
-    if (finish != null) return ('Done around ${goalMonth.format(finish)} at your pace', null);
-    return ('No target date', null);
   }
 }
 
@@ -306,24 +279,31 @@ class _PlanSectionState extends ConsumerState<_PlanSection> {
     }
   }
 
-  /// Plan (else recent average) against what the date needs.
-  (String?, Color?) _verdict(BuildContext context) {
+  /// Monsoon bars: what the date needs a month against the plan (else the
+  /// recent average). Null when there is nothing to compare.
+  Widget? _compare(BuildContext context) {
     final g = widget.progress;
     final c = context.ink;
+    final t = context.type;
     final plan = g.goal.plannedMonthlyContribution;
     final rate = plan ?? g.averageMonthlyContribution;
-    final has = rate != null && rate.isPositive;
     final need = g.requiredMonthly;
-    final date = g.goal.targetDate;
-    final which = plan != null ? 'Your plan' : 'Your average';
-    if (date == null || need == null) {
-      return (null, null);
-    }
-    if (!has) return ('${goalMoney(context, need)} a month gets you there by ${goalMonth.format(date)}.', null);
-    if (rate >= need) {
-      return ('$which of ${goalMoney(context, rate)} a month covers the ${goalMoney(context, need)} needed.', null);
-    }
-    return ('You need ${goalMoney(context, need)} a month. $which is ${goalMoney(context, rate)}.', c.amber);
+    if (g.goal.targetDate == null || need == null) return null;
+    final short = rate == null || rate < need;
+    Widget fig(Money m, Color color) =>
+        AmountText(m, decimals: DecimalDisplay.none, style: t.figureSmall.copyWith(color: color));
+    return MonsoonBars(
+      bars: [
+        MonsoonBar('Needed a month', need.paise.toDouble(), c.saffron, trailing: fig(need, c.ink)),
+        if (rate != null && rate.isPositive)
+          MonsoonBar(
+            plan != null ? 'Your plan' : 'Your average',
+            rate.paise.toDouble(),
+            short ? c.red : c.jade,
+            trailing: fig(rate, short ? c.red : c.ink),
+          ),
+      ],
+    );
   }
 
   @override
@@ -336,7 +316,7 @@ class _PlanSectionState extends ConsumerState<_PlanSection> {
     final finish = finishWith(g.remaining, rate, widget.today);
     final max = _max;
     final value = _monthly.clamp(_step, max);
-    final (verdict, tone) = _verdict(context);
+    final compare = _compare(context);
 
     String whatIf() {
       if (finish == null) return 'Too slow to estimate';
@@ -357,9 +337,9 @@ class _PlanSectionState extends ConsumerState<_PlanSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (verdict != null) ...[
-          Text(verdict, style: t.body.copyWith(color: tone)),
-          const SizedBox(height: Sp.xl),
+        if (compare != null) ...[
+          MonsoonCard(padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.sm, Sp.sm, Sp.xs), child: compare),
+          const SizedBox(height: Sp.lg),
         ],
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -373,10 +353,10 @@ class _PlanSectionState extends ConsumerState<_PlanSection> {
         const SizedBox(height: Sp.xs),
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
-            activeTrackColor: c.ink,
+            activeTrackColor: c.rain,
             inactiveTrackColor: c.sunken,
-            thumbColor: c.ink,
-            overlayColor: c.ink.withValues(alpha: 0.08),
+            thumbColor: c.brand,
+            overlayColor: c.rain.withValues(alpha: 0.10),
             activeTickMarkColor: Colors.transparent,
             inactiveTickMarkColor: Colors.transparent,
             trackHeight: 4,
@@ -398,7 +378,17 @@ class _PlanSectionState extends ConsumerState<_PlanSection> {
             },
           ),
         ),
-        Text(whatIf(), style: t.bodyStrong.copyWith(color: late ? c.amber : null)),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+            decoration: BoxDecoration(
+              color: late ? c.amberSoft : c.greenSoft,
+              borderRadius: Rad.rChip,
+            ),
+            child: Text(whatIf(), style: t.labelStrong.copyWith(color: late ? c.amber : c.green)),
+          ),
+        ),
       ],
     );
   }
@@ -426,19 +416,21 @@ class _History extends StatelessWidget {
       title: 'History',
       count: movements.isEmpty ? null : movements.length,
       child: movements.isEmpty
-          ? Text('No money added yet', style: t.label)
+          ? const LedgerEmpty(icon: LucideIcons.piggyBank, title: 'No money added yet')
           : LedgerPanel(
+              khata: true,
+              dividerIndent: 0,
               children: [
                 for (final e in groups.entries) ...[
                   // Month header inside the one panel: month and its net.
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.md),
+                    padding: const EdgeInsets.fromLTRB(70, Sp.md, Sp.lg, Sp.sm),
                     child: Row(
                       children: [
                         Expanded(
                           child: Semantics(
                             header: true,
-                            child: Text(DateFormats.monthYear.format(e.key.start), style: t.labelStrong),
+                            child: Text(DateFormats.monthYear.format(e.key.start), style: t.labelStrong.copyWith(color: c.red)),
                           ),
                         ),
                         AmountText(
@@ -455,6 +447,8 @@ class _History extends StatelessWidget {
                       key: ValueKey(m.id),
                       leading: IconWell(
                         icon: m.kind == SavingsMovementKind.contribution ? LucideIcons.plus : LucideIcons.minus,
+                        color: m.kind == SavingsMovementKind.contribution ? c.green : c.ink,
+                        background: m.kind == SavingsMovementKind.contribution ? c.greenSoft : c.sunken,
                       ),
                       title: m.kind == SavingsMovementKind.contribution ? 'Added' : 'Withdrawn',
                       subtitle: [

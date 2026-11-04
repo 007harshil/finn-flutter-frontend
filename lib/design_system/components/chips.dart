@@ -47,7 +47,7 @@ class FinnTapChip extends StatelessWidget {
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
-          borderRadius: Radii.rFull,
+          borderRadius: Radii.rMd,
           onTap: () {
             HapticFeedback.selectionClick();
             onTap();
@@ -56,7 +56,7 @@ class FinnTapChip extends StatelessWidget {
             duration: context.motion.fast,
             height: height,
             padding: const EdgeInsets.symmetric(horizontal: Space.x2_5),
-            decoration: BoxDecoration(color: bg, borderRadius: Radii.rFull),
+            decoration: BoxDecoration(color: bg, borderRadius: Radii.rMd),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

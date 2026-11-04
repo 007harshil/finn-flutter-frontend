@@ -213,38 +213,21 @@ class _BodyState extends ConsumerState<_Body> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        PageColumn(
-          top: Sp.xl,
-          child: _Hero(balance: b),
-        ),
-        if (a.isArchived)
-          const PageColumn(
-            top: Sp.lg,
-            child: LedgerNote(
-              icon: LucideIcons.archive,
-              text: 'Archived',
-            ),
-          ),
-        PageColumn(
-          top: Sp.section,
-          child: LedgerSection(
-            title: 'Details',
-            child: LedgerPanel(children: _facts(context, b)),
-          ),
-        ),
+        PageColumn(top: Sp.lg, child: _Hero(balance: b)),
+        PageColumn(top: Sp.lg, child: _Facts(balance: b)),
         PageColumn(
           top: Sp.section,
           child: LedgerSection(
             title: 'Movements',
             count: all.isEmpty ? null : all.length,
             child: all.isEmpty
-                ? const LedgerNote(
-                    text: 'Nothing recorded on this account yet.',
-                  )
+                ? const LedgerEmpty(icon: LucideIcons.notebookPen, title: 'No movements yet')
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       LedgerPanel(
+                        khata: true,
+                        dividerIndent: 70,
                         children: [
                           for (final m in visible)
                             if (m.tx != null)
@@ -282,53 +265,59 @@ class _BodyState extends ConsumerState<_Body> {
       ],
     );
   }
+}
 
-  List<Widget> _facts(BuildContext context, AccountBalance b) {
+/// Tags for what the account is, tiles for its numbers.
+class _Facts extends StatelessWidget {
+  const _Facts({required this.balance});
+  final AccountBalance balance;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ink;
+    final b = balance;
     final a = b.account;
-    final t = context.type;
-    final ink = context.ink.ink;
-    Widget fact(String label, String text) =>
-        LedgerFact(label: label, text: text);
-    return [
-      if (SetAsideLine.shows(b)) ...[
-        LedgerFact(
-          label: 'Total',
-          value: AmountText(b.balance, style: t.figureSmall.copyWith(color: ink)),
-        ),
-        LedgerFact(
-          label: 'Set aside',
-          value: AmountText(b.earmarked, style: t.figureSmall.copyWith(color: ink)),
-        ),
-        LedgerFact(
-          label: 'Available to spend',
-          value: AmountText(
-            b.available,
-            style: t.figureSmall.copyWith(color: b.available.isNegative ? context.ink.red : ink),
-          ),
-        ),
-      ],
-      fact('Kind', a.kind.label),
-      if (a.institution != null) fact('Institution', a.institution!),
-      if (a.last4 != null) fact('Card', '····${a.last4}'),
-      LedgerFact(
-        label: a.isLiability
-            ? 'Owed on ${DateFormats.dayMonthYear.format(a.openingDate)}'
-            : 'Opening balance',
-        value: AmountText(a.opening, style: t.figureSmall.copyWith(color: ink)),
-      ),
-      if (!a.isLiability)
-        fact('Tracked since', DateFormats.dayMonthYear.format(a.openingDate)),
-      if (a.creditLimit != null)
-        LedgerFact(
-          label: 'Credit limit',
-          value: AmountText(
-            a.creditLimit!,
-            style: t.figureSmall.copyWith(color: ink),
-          ),
-        ),
-      if (a.isDefault) fact('Default', 'Used for new entries'),
-      if (a.note != null) fact('Note', a.note!),
+    final since = DateFormats.dayMonthYear.format(a.openingDate);
+    final tags = [
+      a.kind.label,
+      ?a.institution,
+      if (a.last4 != null) '····${a.last4}',
+      if (a.isDefault) 'Default',
+      if (a.isArchived) 'Archived',
+      'Since $since',
     ];
+    final note = a.note;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FactTags(tags: tags, highlight: const {'Default'}),
+        const SizedBox(height: Sp.md),
+        StatGrid(
+          tiles: [
+            StatTile.money(
+              label: a.isLiability ? 'Owed on $since' : 'Opening balance',
+              amount: a.opening,
+              icon: LucideIcons.flagTriangleRight,
+            ),
+            if (a.creditLimit != null)
+              StatTile.money(label: 'Credit limit', amount: a.creditLimit!, icon: LucideIcons.gauge),
+            if (SetAsideLine.shows(b)) ...[
+              StatTile.money(label: 'Set aside', amount: b.earmarked, icon: LucideIcons.lock, color: c.marigoldInk),
+              StatTile.money(
+                label: 'Available to spend',
+                amount: b.available,
+                icon: LucideIcons.wallet,
+                color: b.available.isNegative ? c.red : c.green,
+              ),
+            ],
+          ],
+        ),
+        if (note != null) ...[
+          const SizedBox(height: Sp.md),
+          LedgerNote(icon: LucideIcons.stickyNote, text: note),
+        ],
+      ],
+    );
   }
 }
 
@@ -338,86 +327,57 @@ class _Hero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.type;
-    final c = context.ink;
     final a = balance.account;
-    final limit = limitLeftText(balance);
     final hidden = AmountVisibility.hiddenOf(context);
     final bal = balance.balance.paise.abs();
-    final left = balance.limitLeft?.paise;
+    final left = balance.limitLeft;
     final double share = a.isLiability
-        ? (left == null || bal + left <= 0 ? 0 : bal / (bal + left))
+        ? (left == null || bal + left.paise <= 0 ? 0 : bal / (bal + left.paise))
         : (bal <= 0 ? 0 : (balance.earmarked.paise / bal).clamp(0.0, 1.0));
+    final owed = a.isLiability && balance.balance.isPositive;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        KhataPanel(
-          child: Row(
-            children: [
-              // Cards: how much of the limit is used. Bank and cash: how
-              // much of the balance is set aside for goals and emergencies.
-              KhataRing(
-                value: share,
-                size: 104,
-                stroke: 11,
-                color: a.isLiability ? null : c.marigold,
-                center: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(hidden ? '••' : '${(share * 100).round()}%', style: t.figure.copyWith(fontSize: 19)),
-                    Text(a.isLiability ? 'of limit' : 'set aside', style: t.small),
-                  ],
-                ),
-              ),
-              const SizedBox(width: Sp.lg),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(a.isLiability ? 'Amount owed' : 'Balance', style: t.label),
-                    const SizedBox(height: 2),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: AlignmentDirectional.centerStart,
-                      child: AccountAmount(balance, style: t.figureL),
-                    ),
-                    const SizedBox(height: Sp.xs),
-                    Text(
-                      [accountSubtitle(a), if (a.isDefault) 'Default'].join(' · '),
-                      style: t.label,
-                    ),
-                    if (limit != null) ...[
-                      const SizedBox(height: Sp.xs),
-                      Text(
-                        limit,
-                        style: t.label.copyWith(
-                          color: balance.limitLeft!.isNegative ? c.red : c.inkSoft,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
+        BahiSlab(
+          leading: accountIcon(a.kind),
+          label: a.isLiability ? 'Amount owed' : 'Balance',
+          figure: SlabFigure(
+            balance.balance,
+            color: owed || (!a.isLiability && balance.balance.isNegative) ? Slab.bad : null,
           ),
-        ),
-        const SizedBox(height: Sp.lg),
-        Row(
-          children: [
-            LedgerButton(
-              label: 'Transfer',
-              icon: LucideIcons.arrowLeftRight,
-              variant: LedgerButtonVariant.secondary,
-              small: true,
-              onPressed: a.isArchived
-                  ? null
-                  : () => showTransferSheet(
-                      context,
-                      fromAccountId: a.isLiability ? null : a.id,
-                      toAccountId: a.isLiability ? a.id : null,
-                    ),
-            ),
+          // Cards: how much of the limit is used. Bank and cash: how much
+          // of the balance is set aside for goals and emergencies.
+          visual: (a.isLiability && left == null)
+              ? null
+              : SlabRing(
+                  value: share,
+                  size: 96,
+                  color: a.isLiability ? (share >= 1 ? Slab.bad : (share >= 0.85 ? Slab.warn : Slab.cool)) : Slab.warn,
+                  top: hidden ? '••' : '${(share * 100).round()}%',
+                  bottom: a.isLiability ? 'of limit' : 'set aside',
+                ),
+          stats: [
+            if (a.isLiability && left != null)
+              SlabStat.money(label: left.isNegative ? 'Over limit' : 'Limit left', amount: left.abs(), color: left.isNegative ? Slab.bad : null),
+            if (!a.isLiability && SetAsideLine.shows(balance)) ...[
+              SlabStat.money(label: 'Set aside', amount: balance.earmarked),
+              SlabStat.money(label: 'Free', amount: balance.available, color: balance.available.isNegative ? Slab.bad : Slab.good),
+            ],
           ],
+        ),
+        const SizedBox(height: Sp.md),
+        LedgerButton(
+          label: 'Transfer',
+          icon: LucideIcons.arrowLeftRight,
+          variant: LedgerButtonVariant.secondary,
+          expand: true,
+          onPressed: a.isArchived
+              ? null
+              : () => showTransferSheet(
+                  context,
+                  fromAccountId: a.isLiability ? null : a.id,
+                  toAccountId: a.isLiability ? a.id : null,
+                ),
         ),
       ],
     );

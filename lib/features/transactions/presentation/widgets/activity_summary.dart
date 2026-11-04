@@ -88,8 +88,8 @@ class ActivitySummary extends ConsumerWidget {
 // Money in / money out
 // ---------------------------------------------------------------------------
 
-/// Two figures that read like tabs: tap one to list only that type, tap it
-/// again for everything. The chosen one carries an ink underline.
+/// Two Bahi cards that read like tabs: tap one to list only that type, tap
+/// it again for everything. The chosen one carries an indigo edge.
 class _FlowTabs extends StatelessWidget {
   const _FlowTabs({
     required this.income,
@@ -107,12 +107,9 @@ class _FlowTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ink;
     final t = context.type;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: c.line)),
-      ),
+    return IntrinsicHeight(
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
             child: _FlowTab(
@@ -126,6 +123,7 @@ class _FlowTabs extends StatelessWidget {
                 decimals: DecimalDisplay.none,
                 fit: true,
                 style: t.figureL.copyWith(
+                  fontSize: 26,
                   color: income.isZero ? c.ink : c.green,
                 ),
               ),
@@ -133,7 +131,7 @@ class _FlowTabs extends StatelessWidget {
               onTap: () => onPick(TransactionType.income),
             ),
           ),
-          const SizedBox(width: Sp.lg),
+          const SizedBox(width: Sp.md),
           Expanded(
             child: _FlowTab(
               key: const ValueKey('activity-type:expense'),
@@ -144,7 +142,7 @@ class _FlowTabs extends StatelessWidget {
                 expense,
                 decimals: DecimalDisplay.none,
                 fit: true,
-                style: t.figureL,
+                style: t.figureL.copyWith(fontSize: 26),
               ),
               spoken: expense,
               onTap: () => onPick(TransactionType.expense),
@@ -190,30 +188,31 @@ class _FlowTab extends StatelessWidget {
           ? 'Showing only these. Double tap to show everything'
           : 'Double tap to show only these',
       excludeSemantics: true,
-      child: InkWell(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(Rad.sm)),
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            AnimatedOpacity(
+      child: AnimatedContainer(
+        duration: motion.fast,
+        curve: motion.standard,
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: Rad.rMd,
+          border: Border.all(color: selected ? c.brand : c.line, width: selected ? 2 : 1),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: Rad.rMd,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onTap();
+            },
+            child: AnimatedOpacity(
               opacity: dimmed ? 0.45 : 1,
               duration: motion.fast,
               child: Padding(
-                padding: const EdgeInsets.only(top: Sp.xs, bottom: Sp.md),
+                padding: EdgeInsets.fromLTRB(Sp.md, Sp.sm + (selected ? 1 : 2), Sp.md, Sp.sm + (selected ? 1 : 2)),
                 child: LedgerStat(label: label, value: amount),
               ),
             ),
-            AnimatedContainer(
-              duration: motion.fast,
-              curve: motion.standard,
-              height: 2,
-              color: selected ? c.brand : Colors.transparent,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -309,8 +308,8 @@ class _StoryLine extends StatelessWidget {
 // Where it went
 // ---------------------------------------------------------------------------
 
-/// One bar of the biggest categories in an ink ramp, the rest in a light
-/// tone, and a chip per named category that filters the list to it.
+/// Monsoon category bars for the biggest categories, each in its own hue
+/// with its amount; tapping one filters the list to it.
 class _WhereItWent extends ConsumerWidget {
   const _WhereItWent({required this.feed, required this.cats});
 
@@ -354,11 +353,6 @@ class _WhereItWent extends ConsumerWidget {
       return cat == null ? c.inkSoft : c.tint(cat.colorIndex).$1;
     }
 
-    final parts = [
-      for (var i = 0; i < top.length; i++)
-        BarPart(top[i].amount.paise / total, hue(top[i].categoryId)),
-      if (rest > 0) BarPart(rest / total, c.sunken),
-    ];
     final spoken = [
       for (final s in top)
         '${name(s.categoryId)} ${pct(s.amount.paise)} percent',
@@ -366,48 +360,46 @@ class _WhereItWent extends ConsumerWidget {
     ].join(', ');
     final title = incomeMode ? 'Where it came from' : 'Where it went';
 
+    final hidden = AmountVisibility.hiddenOf(context);
     return Padding(
-      padding: const EdgeInsets.only(top: Sp.xl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: t.labelStrong),
-          const SizedBox(height: Sp.sm + 2),
-          LedgerStackBar(
-            parts: parts,
-            gapColor: c.paper,
-            semanticLabel: '$title: $spoken',
-          ),
-          const SizedBox(height: Sp.md),
-          // One line that scrolls sideways: the legend never pushes the
-          // list down by more than a chip's height.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
-            child: Row(
-              children: [
-                for (var i = 0; i < top.length; i++) ...[
-                  if (i > 0) const SizedBox(width: Sp.sm),
-                  LedgerChip(
-                    key: ValueKey('pulse-legend:${top[i].categoryId}'),
-                    label:
-                        '${name(top[i].categoryId)}  ${pct(top[i].amount.paise)}%',
-                    dot: f.categoryIds.contains(top[i].categoryId)
-                        ? null
-                        : hue(top[i].categoryId),
-                    selected: f.categoryIds.contains(top[i].categoryId),
-                    semanticLabel:
-                        '${name(top[i].categoryId)}, ${pct(top[i].amount.paise)} percent. '
-                        '${f.categoryIds.contains(top[i].categoryId) ? 'Filtered. Double tap to remove' : 'Double tap to show only this'}',
-                    onTap: () => ref
-                        .read(transactionFilterProvider.notifier)
-                        .toggleCategory(top[i].categoryId),
+      padding: const EdgeInsets.only(top: Sp.lg),
+      child: MonsoonCard(
+        padding: const EdgeInsets.fromLTRB(Sp.sm + 2, Sp.md, Sp.sm + 2, Sp.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Text(title, style: t.labelStrong, semanticsLabel: '$title: $spoken'),
+            ),
+            const SizedBox(height: Sp.xs),
+            MonsoonBars(
+              bars: [
+                for (final s in top)
+                  MonsoonBar(
+                    name(s.categoryId),
+                    s.amount.paise.toDouble(),
+                    hue(s.categoryId),
+                    key: ValueKey('pulse-legend:${s.categoryId}'),
+                    selected: f.categoryIds.contains(s.categoryId),
+                    semanticLabel: '${name(s.categoryId)}, ${pct(s.amount.paise)} percent. '
+                        '${f.categoryIds.contains(s.categoryId) ? 'Filtered. Double tap to remove' : 'Double tap to show only this'}',
+                    trailing: Text.rich(
+                      TextSpan(children: [
+                        if (!hidden)
+                          TextSpan(
+                            text: MoneyFormatter.format(s.amount, decimals: DecimalDisplay.none),
+                            style: t.figureSmall.copyWith(color: c.ink),
+                          ),
+                        TextSpan(text: '  ${pct(s.amount.paise)}%', style: t.small),
+                      ]),
+                    ),
+                    onTap: () => ref.read(transactionFilterProvider.notifier).toggleCategory(s.categoryId),
                   ),
-                ],
               ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

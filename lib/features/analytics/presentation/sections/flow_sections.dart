@@ -90,8 +90,8 @@ class _DayByDay extends StatelessWidget {
           : '$above of ${data.elapsedDays} days were above your average',
       subtitle: noSpend == 0 ? null : '$noSpend no-spend day${noSpend == 1 ? '' : 's'}',
       legend: [
-        LegendEntry('Normal day', c.lineStrong),
-        LegendEntry('Above average', c.brand),
+        LegendEntry('Normal day', c.rain.withValues(alpha: 0.3)),
+        LegendEntry('Above average', c.rain),
         LegendEntry('Your average', c.inkSoft, dashed: true),
       ],
       howCalculated: 'Each bar adds up the completed expenses on that day, including EMIs and settlements. '
@@ -118,8 +118,8 @@ class _MonthByMonth extends StatelessWidget {
           ? '$above of ${data.activeMonths.length} months cost more than usual'
           : 'Spending each month',
       legend: [
-        LegendEntry('Usual month', c.lineStrong),
-        LegendEntry('Pricier month', c.brand),
+        LegendEntry('Usual month', c.rain.withValues(alpha: 0.3)),
+        LegendEntry('Pricier month', c.rain),
         LegendEntry('Your average', c.inkSoft, dashed: true),
       ],
       howCalculated: 'Each bar is the total of completed expenses in that month. The average uses months that '
@@ -217,8 +217,8 @@ List<Widget> cashFlowSection(BuildContext context, InsightsData data) {
       heading: 'Month by month',
       title: data.incomeVsExpenseHeadline,
       legend: [
-        LegendEntry('Income', c.green),
-        LegendEntry('Spending', c.ink),
+        LegendEntry('Income', c.jade),
+        LegendEntry('Spending', c.rain),
         LegendEntry('Avg spending', c.inkSoft, dashed: true),
       ],
       howCalculated: 'Income is money received in each calendar month. Spending is every completed expense, '
@@ -232,7 +232,7 @@ List<Widget> cashFlowSection(BuildContext context, InsightsData data) {
       heading: 'Left over',
       title: data.netHeadline((x) => moneyText(context, x)),
       legend: [
-        LegendEntry('Saved', c.green),
+        LegendEntry('Saved', c.jade),
         LegendEntry('Overspent', c.red),
         LegendEntry('Your average', c.inkSoft, dashed: true),
       ],

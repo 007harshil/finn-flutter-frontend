@@ -208,11 +208,6 @@ class _LoanPaymentSheetState extends ConsumerState<LoanPaymentSheet> {
           const SizedBox(height: LedgerForm.gap),
           LedgerSwitchRow(
             title: 'Record as cash movement',
-            subtitle: _recordCash
-                ? (borrowed
-                      ? 'Adds an expense and lowers your balance.'
-                      : 'Adds income and raises your balance.')
-                : 'Off: paid outside FiNN. The loan updates; balance unchanged.',
             value: _recordCash,
             onChanged: (b) => setState(() => _recordCash = b),
           ),

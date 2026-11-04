@@ -114,6 +114,7 @@ class _ChapterSlivers extends ConsumerWidget {
             child: LedgerSection(
               title: DateFormats.weekdayDayMonth.format(d.key),
               child: LedgerPanel(
+                khata: true,
                 dividerIndent: Sp.lg + 40 + Sp.md + 2,
                 children: [for (final e in d.value) _EventRow(key: ValueKey(e.id), event: e)],
               ),

@@ -6,8 +6,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
-import '../../../core/money/money.dart';
-import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../kit/kit.dart';
 import '../../auth/application/auth_controller.dart';
@@ -84,28 +82,36 @@ class _Identity extends StatelessWidget {
     final name = profile?.displayName.trim() ?? '';
     final email = session?.email;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ProfileAvatar(name: name, email: email, size: 72),
-        const SizedBox(height: Sp.md),
-        Semantics(
-          header: true,
-          child: Text(
-            name.isEmpty ? 'Set up your profile' : name,
-            style: t.title,
-            textAlign: TextAlign.center,
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: Sp.xl, horizontal: Sp.lg),
+          decoration: BoxDecoration(gradient: c.deepGradient, borderRadius: Rad.rLg),
+          child: Column(
+            children: [
+              ProfileAvatar(name: name, email: email, size: 72),
+              const SizedBox(height: Sp.md),
+              Semantics(
+                header: true,
+                child: Text(
+                  name.isEmpty ? 'Set up your profile' : name,
+                  style: t.title.wide(114).copyWith(color: c.heroFigure),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              if (email != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  email,
+                  style: t.label.copyWith(color: Slab.soft),
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ],
           ),
         ),
-        if (email != null) ...[
-          const SizedBox(height: 2),
-          Text(
-            email,
-            style: t.label.copyWith(color: c.inkSoft),
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-        const SizedBox(height: Sp.lg),
+        const SizedBox(height: Sp.md),
         LedgerButton(
           key: const ValueKey('edit-profile'),
           label: profile == null ? 'Set up profile' : 'Edit profile',
@@ -130,49 +136,42 @@ class _FinancialSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.type;
+    final c = context.ink;
     final p = profile;
     void edit() => context.push(AppRoutes.profile);
-    Widget amount(Money m) =>
-        AmountText(m, style: t.figureSmall, decimals: DecimalDisplay.none);
     return LedgerSection(
       title: 'Financial profile',
-      child: LedgerPanel(
-        children: p == null
-            ? [
+      child: p == null
+          ? LedgerPanel(
+              children: [
                 LedgerRow(
                   leading: const IconWell(icon: LucideIcons.userRoundPlus),
                   title: 'Add your details',
                   chevron: true,
                   onTap: edit,
                 ),
-              ]
-            : [
-                LedgerRow(
-                  title: 'Opening balance',
-                  trailing: amount(p.openingBalance),
-                  onTap: edit,
-                ),
-                LedgerRow(
-                  title: 'Tracking since',
-                  trailing: Text(
-                    DateFormats.dayMonthYear.format(p.openingDate),
-                    style: t.figureSmall,
-                  ),
-                  onTap: edit,
-                ),
-                LedgerRow(
-                  title: 'Monthly income',
-                  trailing: p.monthlyIncomeEstimate == null
-                      ? Text(
-                          'Not set',
-                          style: t.body.copyWith(color: context.ink.inkSoft),
-                        )
-                      : amount(p.monthlyIncomeEstimate!),
-                  onTap: edit,
-                ),
               ],
-      ),
+            )
+          : StatGrid(
+              tiles: [
+                StatTile.money(label: 'Opening balance', amount: p.openingBalance, icon: LucideIcons.flagTriangleRight, onTap: edit),
+                StatTile.text(
+                  label: 'Tracking since',
+                  text: DateFormats.dayMonthYear.format(p.openingDate),
+                  icon: LucideIcons.calendar,
+                  onTap: edit,
+                ),
+                p.monthlyIncomeEstimate == null
+                    ? StatTile.text(label: 'Monthly income', text: 'Not set', icon: LucideIcons.trendingUp, onTap: edit)
+                    : StatTile.money(
+                        label: 'Monthly income',
+                        amount: p.monthlyIncomeEstimate!,
+                        icon: LucideIcons.trendingUp,
+                        color: c.green,
+                        onTap: edit,
+                      ),
+              ],
+            ),
     );
   }
 }

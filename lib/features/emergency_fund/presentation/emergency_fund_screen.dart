@@ -63,7 +63,7 @@ class _Body extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        PageColumn(top: Sp.xl, child: _Hero(status: s, configured: configured)),
+        PageColumn(top: Sp.lg, child: _Hero(status: s, configured: configured)),
         if (configured) PageColumn(top: Sp.section, child: _PlanSection(status: s)),
         HeldOnSection(
           type: SavingsBucketType.emergencyFund,
@@ -89,7 +89,6 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = status;
-    final c = context.ink;
     final t = context.type;
     final hidden = AmountVisibility.hiddenOf(context);
     final coverage = s.coverageMonths;
@@ -100,96 +99,71 @@ class _Hero extends StatelessWidget {
     } else {
       line = '${formatBps(s.progressBps, decimals: 0)} of target saved';
     }
-    // Amber while below plan, green once met, red only when nearly empty.
-    final color = switch (s.level) {
-      EmergencyFundLevel.critical => c.red,
-      EmergencyFundLevel.building => c.amber,
-      EmergencyFundLevel.funded => c.green,
+    // Marigold while below plan, green once met, red only when nearly empty.
+    final tone = switch (s.level) {
+      EmergencyFundLevel.critical => SlabTone.bad,
+      EmergencyFundLevel.building => SlabTone.warn,
+      EmergencyFundLevel.funded => SlabTone.good,
       EmergencyFundLevel.notConfigured => null,
     };
+    final fill = tone == null ? Slab.good : slabToneColor(tone);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        KhataPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  if (configured) ...[
-                    KhataRing(
-                      value: s.progress,
-                      size: 112,
-                      stroke: 11,
-                      color: color,
-                      semanticLabel: 'Emergency fund, ${s.level.label}. $line'
-                          '${hidden ? '' : '. ${AmountText.spokenLabel(s.saved)} of ${AmountText.spokenLabel(s.target)} saved'}',
-                      center: Column(
-                        mainAxisSize: MainAxisSize.min,
+        BahiSlab(
+          leading: LucideIcons.shield,
+          label: 'Set aside',
+          figure: SlabFigure(s.saved),
+          caption: configured ? 'of ${savingsMoney(context, s.target)}' : null,
+          stamp: tone == null ? null : SlabStamp(label: s.level.label, tone: tone),
+          visual: !configured
+              ? null
+              : SlabRing(
+                  value: s.progress,
+                  size: 100,
+                  color: fill,
+                  top: coverage == null ? formatBps(s.progressBps, decimals: 0) : _tenths(coverage),
+                  bottom: coverage == null ? 'saved' : 'months',
+                  semanticLabel: 'Emergency fund, ${s.level.label}. $line'
+                      '${hidden ? '' : '. ${AmountText.spokenLabel(s.saved)} of ${AmountText.spokenLabel(s.target)} saved'}',
+                ),
+          footer: !configured || months == null || months <= 0
+              ? null
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // One box per planned month, filled as far as savings cover.
+                    ExcludeSemantics(
+                      child: Row(
                         children: [
-                          Text(coverage == null ? formatBps(s.progressBps, decimals: 0) : _tenths(coverage),
-                              style: t.figure.copyWith(fontSize: 20)),
-                          Text(coverage == null ? 'saved' : 'months', style: t.small),
+                          for (var i = 0; i < months; i++)
+                            Expanded(
+                              child: Container(
+                                height: 24,
+                                margin: const EdgeInsets.symmetric(horizontal: 2),
+                                decoration: BoxDecoration(
+                                  color: Slab.track,
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                alignment: Alignment.centerLeft,
+                                child: FractionallySizedBox(
+                                  widthFactor: ((coverage ?? 0) - i).clamp(0.0, 1.0),
+                                  heightFactor: 1,
+                                  child: ColoredBox(color: fill),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: Sp.lg),
+                    const SizedBox(height: Sp.sm),
+                    Text(line, style: t.small.copyWith(color: Slab.soft)),
                   ],
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Set aside', style: t.label),
-                        const SizedBox(height: 2),
-                        AnimatedAmount(s.saved, style: t.figureL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
-                        if (configured) Text('of ${savingsMoney(context, s.target)}', style: t.figureSmall),
-                        if (color != null) ...[
-                          const SizedBox(height: Sp.sm),
-                          KhataStamp(label: s.level.label, color: color),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              if (configured && months != null && months > 0) ...[
-                const SizedBox(height: Sp.lg),
-                // One box per planned month, filled as far as savings cover.
-                ExcludeSemantics(
-                  child: Row(
-                    children: [
-                      for (var i = 0; i < months; i++)
-                        Expanded(
-                          child: Container(
-                            height: 22,
-                            margin: const EdgeInsets.symmetric(horizontal: 2),
-                            decoration: BoxDecoration(
-                              color: c.isDark ? c.sunken : c.surface,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: c.khataRule),
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            alignment: Alignment.centerLeft,
-                            child: FractionallySizedBox(
-                              widthFactor: ((coverage ?? 0) - i).clamp(0.0, 1.0),
-                              heightFactor: 1,
-                              child: ColoredBox(color: color ?? c.brand),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
                 ),
-              ],
-              if (configured) ...[
-                const SizedBox(height: Sp.md),
-                Text(line, style: t.label.copyWith(color: s.level == EmergencyFundLevel.funded ? c.green : null)),
-              ],
-            ],
-          ),
         ),
         if (configured) ...[
-          const SizedBox(height: Sp.xl),
+          const SizedBox(height: Sp.md),
           Row(
             children: [
               Expanded(
@@ -241,43 +215,33 @@ class _PlanSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = status;
     final plan = s.plan!;
-    final t = context.type;
+    final c = context.ink;
     final suggestion = s.suggestedEssentialMonthly;
     return LedgerSection(
       title: 'Plan',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: LedgerStat(
-                  label: plan.targetOverride == null ? 'Target' : 'Custom target',
-                  value: AmountText(s.target, style: t.figure, decimals: DecimalDisplay.none),
-                ),
+          StatGrid(
+            tiles: [
+              StatTile.money(
+                label: plan.targetOverride == null ? 'Target' : 'Custom target',
+                amount: s.target,
+                icon: LucideIcons.flag,
               ),
-              const SizedBox(width: Sp.md),
-              Expanded(
-                child: LedgerStat(
-                  label: 'Monthly expenses',
-                  value: AmountText(plan.essentialMonthlyExpenses, style: t.figure, decimals: DecimalDisplay.none),
+              StatTile.money(label: 'Monthly expenses', amount: plan.essentialMonthlyExpenses, icon: LucideIcons.receipt),
+              s.remaining.isPositive
+                  ? StatTile.money(label: 'To go', amount: s.remaining, icon: LucideIcons.hourglass, color: c.amber)
+                  : StatTile.text(label: 'To go', text: 'Target reached', icon: LucideIcons.circleCheck, color: c.green),
+              if (s.suggestionDiffersFromPlan && suggestion != null)
+                StatTile.money(
+                  label: 'Essentials, 3-month avg',
+                  amount: suggestion,
+                  icon: LucideIcons.chartLine,
+                  color: c.rain,
                 ),
-              ),
             ],
           ),
-          const SizedBox(height: Sp.md),
-          Text(
-            s.remaining.isPositive ? '${savingsMoney(context, s.remaining)} to go' : 'Target reached',
-            style: t.body,
-          ),
-          if (s.suggestionDiffersFromPlan && suggestion != null) ...[
-            const SizedBox(height: Sp.lg),
-            LedgerNote(
-              text: 'Your essentials averaged ${savingsMoney(context, suggestion)} a month over the last '
-                  '3 months. You may want to review your plan.',
-            ),
-          ],
           const SizedBox(height: Sp.lg),
           LedgerButton(
             label: 'Edit plan',
@@ -314,18 +278,20 @@ class _History extends StatelessWidget {
       title: 'History',
       count: movements.isEmpty ? null : movements.length,
       child: movements.isEmpty
-          ? Text('Nothing set aside yet', style: t.label)
+          ? const LedgerEmpty(icon: LucideIcons.piggyBank, title: 'Nothing set aside yet')
           : LedgerPanel(
+              khata: true,
+              dividerIndent: 0,
               children: [
                 for (final e in groups.entries) ...[
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.md),
+                    padding: const EdgeInsets.fromLTRB(70, Sp.md, Sp.lg, Sp.sm),
                     child: Row(
                       children: [
                         Expanded(
                           child: Semantics(
                             header: true,
-                            child: Text(DateFormats.monthYear.format(e.key.start), style: t.labelStrong),
+                            child: Text(DateFormats.monthYear.format(e.key.start), style: t.labelStrong.copyWith(color: c.red)),
                           ),
                         ),
                         AmountText(
@@ -342,6 +308,8 @@ class _History extends StatelessWidget {
                       key: ValueKey(m.id),
                       leading: IconWell(
                         icon: m.kind == SavingsMovementKind.contribution ? LucideIcons.plus : LucideIcons.minus,
+                        color: m.kind == SavingsMovementKind.contribution ? c.green : c.ink,
+                        background: m.kind == SavingsMovementKind.contribution ? c.greenSoft : c.sunken,
                       ),
                       title: m.kind == SavingsMovementKind.contribution ? 'Added' : 'Withdrawn',
                       subtitle: [

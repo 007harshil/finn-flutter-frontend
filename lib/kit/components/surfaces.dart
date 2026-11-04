@@ -73,7 +73,7 @@ class LedgerAppBar extends StatelessWidget implements PreferredSizeWidget {
               onPressed: () => Navigator.of(context).maybePop(),
             )
           : null,
-      title: Text(title, style: t.bodyStrong.copyWith(fontSize: 17), maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: Text(title, style: t.heading, maxLines: 1, overflow: TextOverflow.ellipsis),
       actions: [...actions, const SizedBox(width: Sp.sm)],
     );
   }
@@ -217,12 +217,16 @@ class LedgerSection extends StatelessWidget {
   }
 }
 
-/// White panel with a hairline edge (dark mode: a raised tone, no edge).
+/// White panel with a hairline edge, 14 px corners, no shadow.
 /// Holds rows; never nested.
 class LedgerPanel extends StatelessWidget {
-  const LedgerPanel({super.key, required this.children, this.dividerIndent = Sp.lg, this.padding});
+  const LedgerPanel({super.key, required this.children, this.dividerIndent = Sp.lg, this.padding, this.khata = false});
 
   final List<Widget> children;
+
+  /// Bahi ledger paper: warm fill, ruled dividers and the red double
+  /// margin line between the icon column and the text (history lists).
+  final bool khata;
 
   /// Left inset of the hairline between rows (align it with row text).
   final double dividerIndent;
@@ -231,25 +235,52 @@ class LedgerPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ink;
+    final column = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0)
+            khata
+                ? Padding(
+                    padding: EdgeInsetsDirectional.only(start: dividerIndent),
+                    child: Container(height: 1, color: c.khataRule),
+                  )
+                : LedgerDivider(indent: dividerIndent),
+          children[i],
+        ],
+      ],
+    );
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: Rad.rLg,
-        border: c.isDark ? null : Border.all(color: c.line),
+        color: khata ? c.khata : c.surface,
+        borderRadius: Rad.rMd,
+        border: Border.all(color: khata ? c.khataRule : c.line),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var i = 0; i < children.length; i++) ...[
-            if (i > 0) LedgerDivider(indent: dividerIndent),
-            children[i],
-          ],
-        ],
-      ),
+      child: khata
+          ? CustomPaint(painter: _MarginPainter(c.khataMargin), child: Material(type: MaterialType.transparency, child: column))
+          : column,
     );
   }
+}
+
+class _MarginPainter extends CustomPainter {
+  const _MarginPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = 1.2;
+    const x = 60.0;
+    canvas.drawLine(const Offset(x, 0), Offset(x, size.height), p);
+    canvas.drawLine(const Offset(x + 3, 0), Offset(x + 3, size.height), p);
+  }
+
+  @override
+  bool shouldRepaint(_MarginPainter old) => old.color != color;
 }
 
 class LedgerDivider extends StatelessWidget {

@@ -81,10 +81,13 @@ class BurnChart extends StatelessWidget {
                     endLabel: DateFormats.dayMonth.format(burn.period.end),
                     selected: selected,
                     reveal: reveal,
-                    ink: c.ink,
+                    // Monsoon: running total in rain with a wash, daily
+                    // spends as a light rain, pace in saffron, limit in red.
+                    ink: c.rain,
                     soft: c.inkSoft,
+                    pace: c.saffron,
                     red: c.red,
-                    sunken: c.sunken,
+                    sunken: c.rain.withValues(alpha: 0.28),
                     line: c.line,
                     surface: c.surface,
                     labelStyle: t.small,
@@ -111,6 +114,7 @@ class _BurnPainter extends CustomPainter {
     required this.reveal,
     required this.ink,
     required this.soft,
+    required this.pace,
     required this.red,
     required this.sunken,
     required this.line,
@@ -128,6 +132,7 @@ class _BurnPainter extends CustomPainter {
   final double reveal;
   final Color ink;
   final Color soft;
+  final Color pace;
   final Color red;
   final Color sunken;
   final Color line;
@@ -183,8 +188,8 @@ class _BurnPainter extends CustomPainter {
       ..strokeWidth = 1);
     final limitY = y(limit);
     _dashed(canvas, Offset(0, limitY), Offset(w, limitY), Paint()
-      ..color = soft
-      ..strokeWidth = 1);
+      ..color = red.withValues(alpha: 0.75)
+      ..strokeWidth = 1.2);
     // Right end, clear of the running total: above the line unless the
     // projection ends above it, then below.
     _text(canvas, limitLabel, Offset(w, projected > limit ? limitY + 4 : limitY - 18), align: TextAlign.right);
@@ -193,9 +198,9 @@ class _BurnPainter extends CustomPainter {
       Offset(0, y(0)),
       Offset(w, limitY),
       Paint()
-        ..color = soft.withValues(alpha: 0.7)
-        ..strokeWidth = 1,
-      dash: 2,
+        ..color = pace
+        ..strokeWidth = 1.4,
+      dash: 3,
       gap: 4,
     );
 
@@ -226,10 +231,18 @@ class _BurnPainter extends CustomPainter {
         ..lineTo(x(last), y(0))
         ..lineTo(x(0), y(0))
         ..close();
-      canvas.drawPath(area, Paint()..color = ink.withValues(alpha: 0.05));
+      canvas.drawPath(
+        area,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [ink.withValues(alpha: 0.26), ink.withValues(alpha: 0)],
+          ).createShader(Rect.fromLTRB(0, _top, w, y(0))),
+      );
       final stroke = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
+        ..strokeWidth = 2.6
         ..strokeJoin = StrokeJoin.round
         ..strokeCap = StrokeCap.round
         ..color = ink;
@@ -248,8 +261,8 @@ class _BurnPainter extends CustomPainter {
           Offset(x(last), y(spentToday)),
           Offset(x(n - 1), y(projected)),
           Paint()
-            ..color = projected > limit ? red : soft
-            ..strokeWidth = 1.5
+            ..color = projected > limit ? red : pace
+            ..strokeWidth = 1.6
             ..strokeCap = StrokeCap.round,
           dash: 3,
           gap: 4,
@@ -365,7 +378,7 @@ class HistoryBars extends StatelessWidget {
                                         decoration: BoxDecoration(
                                           color: points[i].isOver
                                               ? c.red
-                                              : (points[i].isCurrent || selected == i ? c.brand : c.lineStrong),
+                                              : (points[i].isCurrent || selected == i ? c.rain : c.rain.withValues(alpha: 0.3)),
                                           borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                                         ),
                                       ),
@@ -380,7 +393,7 @@ class HistoryBars extends StatelessWidget {
                                   child: Text(
                                     label(points[i]),
                                     style: t.small.copyWith(
-                                      color: points[i].isCurrent || selected == i ? c.brand : c.inkSoft,
+                                      color: points[i].isCurrent || selected == i ? c.rain : c.inkSoft,
                                     ),
                                   ),
                                 ),

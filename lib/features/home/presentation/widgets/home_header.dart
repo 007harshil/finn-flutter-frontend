@@ -15,11 +15,8 @@ import '../../../../kit/kit.dart';
 class HomeHeader extends ConsumerWidget {
   const HomeHeader({super.key});
 
-  static String greetingFor(int hour) {
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
+  /// Bahi greets the same way all day.
+  static String greetingFor(int hour) => 'Namaste';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -64,7 +61,7 @@ class HomeHeader extends ConsumerWidget {
         const SizedBox(height: 2),
         Semantics(
           header: true,
-          child: Text(title, style: t.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+          child: Text(title, style: t.title.wide(116), maxLines: 2, overflow: TextOverflow.ellipsis),
         ),
       ],
     );

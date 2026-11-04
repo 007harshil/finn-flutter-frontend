@@ -479,9 +479,10 @@ class FinnIdCard extends StatelessWidget {
     final t = context.type;
     final id = finnId;
     final shown = id == null ? '····-····' : FinnId.format(id);
+    // Bahi: the ID in marigold on the indigo slab, like a ledger number.
     return Container(
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.sm, Sp.md),
-      decoration: BoxDecoration(color: c.sunken, borderRadius: Rad.rMd),
+      decoration: BoxDecoration(gradient: c.deepGradient, borderRadius: Rad.rMd),
       child: Row(
         children: [
           Expanded(
@@ -492,6 +493,7 @@ class FinnIdCard extends StatelessWidget {
                 shown,
                 key: const ValueKey('my-finn-id'),
                 style: t.figureL.copyWith(
+                  color: c.heroFigure,
                   letterSpacing: 3,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
@@ -499,9 +501,9 @@ class FinnIdCard extends StatelessWidget {
               ),
             ),
           ),
-          LedgerIconButton(
+          IconButton(
             key: const ValueKey('copy-finn-id'),
-            icon: LucideIcons.copy,
+            icon: const Icon(LucideIcons.copy, size: 21, color: Slab.ink),
             tooltip: 'Copy FiNN ID',
             onPressed: id == null
                 ? null

@@ -20,19 +20,47 @@ class ProfileEntryCard extends ConsumerWidget {
     final email = ref.watch(authControllerProvider)?.email;
     final name = ref.watch(profileStreamProvider).value?.displayName.trim();
     final hasName = name != null && name.isNotEmpty;
-    return LedgerPanel(
+    final c = context.ink;
+    final t = context.type;
+    // Bahi: the signed-in person on a small indigo slab.
+    return Semantics(
       key: const ValueKey('profile-entry'),
-      children: [
-        LedgerRow(
-          leading: ProfileAvatar(name: name, email: email, size: 40),
-          title: hasName ? name : 'Your profile',
-          subtitle: email ?? 'Account and sign-in',
-          chevron: true,
-          semanticLabel:
-              'Profile, ${hasName ? name : 'not set up'}${email == null ? '' : ', $email'}. Open',
+      button: true,
+      label: 'Profile, ${hasName ? name : 'not set up'}${email == null ? '' : ', $email'}. Open',
+      excludeSemantics: true,
+      child: Material(
+        color: c.deep,
+        borderRadius: Rad.rMd,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
           onTap: onTap ?? () => context.push(AppRoutes.account),
+          child: Padding(
+            padding: const EdgeInsets.all(Sp.md + 2),
+            child: Row(
+              children: [
+                ProfileAvatar(name: name, email: email, size: 44),
+                const SizedBox(width: Sp.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hasName ? name : 'Your profile',
+                        style: t.bodyStrong.copyWith(color: Slab.ink),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (email != null)
+                        Text(email, style: t.small.copyWith(color: Slab.soft), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Slab.soft),
+              ],
+            ),
+          ),
         ),
-      ],
+      ),
     );
   }
 }

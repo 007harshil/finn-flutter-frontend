@@ -213,7 +213,6 @@ class _FormatSection extends StatelessWidget {
               key: ValueKey('format-${f.name}'),
               leading: IconWell(icon: _icon(f)),
               title: f.label,
-              subtitle: f.description,
               selected: f == selected,
               onTap: () => onChanged(f),
             ),
@@ -345,8 +344,8 @@ class _ModulesSection extends StatelessWidget {
   }
 
   static String _moduleSubtitle(ExportModule m, int? n) {
-    if (n == null) return m.description;
-    return '${m.description} · ${n == 1 ? '1 record' : '$n records'}';
+    if (n == null) return '';
+    return n == 1 ? '1 record' : '$n records';
   }
 }
 

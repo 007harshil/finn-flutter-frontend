@@ -70,7 +70,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         children: [
           const AuthHeader(
             title: 'Sign in or sign up',
-            body: Text('Enter your email and we\'ll send you a 6-digit code. No password needed.'),
           ),
           const SizedBox(height: Sp.xl),
           LedgerTextField(

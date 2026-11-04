@@ -180,35 +180,30 @@ class _Body extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         PageColumn(
-          top: Sp.xl,
+          top: Sp.lg,
           child: _Hero(detail: d, onMarkPaid: onMarkPaid, onSkip: onSkip, onResume: onResume),
         ),
         PageColumn(
-          top: Sp.section,
-          child: LedgerSection(
-            title: 'Details',
-            child: LedgerPanel(
-              dividerIndent: Sp.lg,
-              children: [
-                if (s.frequency != Frequency.monthly)
-                  LedgerFact(label: 'Per month', value: AmountText(s.monthlyEquivalent, style: t.figure)),
-                LedgerFact(label: 'Per year', value: AmountText(s.annualized, style: t.figure)),
-                LedgerFact(label: 'Category', text: d.category?.name ?? 'Uncategorised'),
-                LedgerFact(
-                  label: 'Usually charged to',
-                  text: s.accountId == null
-                      ? 'Not set'
-                      : (ref.watch(financeSnapshotProvider).value?.account(s.accountId!)?.name ?? 'Unknown account'),
-                ),
-                LedgerFact(label: 'Renews automatically', text: s.autoRenews ? 'Yes' : 'No'),
-                if (s.startDate != null) LedgerFact(label: 'Started', text: DateFormats.dayMonthYear.format(s.startDate!)),
-                if (s.isActive && later.isNotEmpty)
-                  LedgerFact(label: 'Then', text: later.map(DateFormats.dayMonthYear.format).join(', ')),
-                if (note.isNotEmpty) LedgerFact(label: 'Notes', text: note, stacked: true),
-              ],
-            ),
+          top: Sp.lg,
+          child: FactTags(
+            tags: [
+              d.category?.name ?? 'Uncategorised',
+              s.accountId == null
+                  ? 'No account'
+                  : (ref.watch(financeSnapshotProvider).value?.account(s.accountId!)?.name ?? 'Unknown account'),
+              s.autoRenews ? 'Auto-renews' : 'Manual renewal',
+              if (s.startDate != null) 'Since ${DateFormats.dayMonthYear.format(s.startDate!)}',
+            ],
+            highlight: {if (s.autoRenews) 'Auto-renews'},
           ),
         ),
+        if (s.isActive && later.isNotEmpty)
+          PageColumn(
+            top: Sp.section,
+            child: LedgerSection(title: 'Coming renewals', child: _DateStrip(dates: later)),
+          ),
+        if (note.isNotEmpty)
+          PageColumn(top: Sp.md, child: LedgerNote(icon: LucideIcons.stickyNote, text: note)),
         PageColumn(
           top: Sp.section,
           child: LedgerSection(
@@ -216,8 +211,9 @@ class _Body extends ConsumerWidget {
             count: d.payments.isEmpty ? null : d.payments.length,
             trailing: d.payments.isEmpty ? null : AmountText(d.paidTotal, style: t.figureSmall),
             child: d.payments.isEmpty
-                ? Text('No payments recorded yet.', style: t.label)
+                ? const LedgerEmpty(icon: LucideIcons.receipt, title: 'No payments yet')
                 : LedgerPanel(
+                    khata: true,
                     dividerIndent: Sp.lg + 40 + Sp.md + 2,
                     children: [
                       for (final p in d.payments)
@@ -236,8 +232,44 @@ class _Body extends ConsumerWidget {
   }
 }
 
-/// Amount and cycle as the one number, the next charge beneath it, then the
-/// action: mark paid (or resume when paused or cancelled).
+/// Upcoming renewal dates as small khata date blocks.
+class _DateStrip extends StatelessWidget {
+  const _DateStrip({required this.dates});
+
+  final List<DateTime> dates;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ink;
+    final t = context.type;
+    return Wrap(
+      spacing: Sp.sm,
+      runSpacing: Sp.sm,
+      children: [
+        for (final d in dates.take(8))
+          Container(
+            width: 64,
+            padding: const EdgeInsets.symmetric(vertical: Sp.sm),
+            decoration: BoxDecoration(
+              color: c.khata,
+              borderRadius: Rad.rMd,
+              border: Border.all(color: c.khataRule),
+            ),
+            child: Column(
+              children: [
+                Text('${d.day}', style: t.figureL.copyWith(fontSize: 24, height: 1)),
+                const SizedBox(height: 2),
+                Text(DateFormats.shortMonth.format(d), style: t.small),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Amount and cycle as the one number on the slab, the next charge and
+/// the yearly cost under it, then the action: mark paid (or resume).
 class _Hero extends StatelessWidget {
   const _Hero({required this.detail, required this.onMarkPaid, required this.onSkip, required this.onResume});
 
@@ -248,8 +280,6 @@ class _Hero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.ink;
-    final t = context.type;
     final d = detail;
     final s = d.subscription;
     final next = subscriptionNextCharge(context, s, d.today);
@@ -257,61 +287,46 @@ class _Hero extends StatelessWidget {
     final cycleDays = s.frequency.months == 0 ? 7 : s.frequency.months * 30;
     final daysLeft = daysBetween(d.today, s.nextDueDate);
     final cycle = (1 - daysLeft / cycleDays).clamp(0.0, 1.0);
+    final soon = next.color != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        KhataPanel(
-          child: Row(
-            children: [
-              // How far through the current billing cycle we are.
-              KhataRing(
-                value: s.isActive ? cycle : 0,
-                size: 104,
-                stroke: 11,
-                color: next.color ?? c.brand,
-                center: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(s.isActive ? '${daysLeft < 0 ? 0 : daysLeft}' : '—', style: t.figure.copyWith(fontSize: 22)),
-                    Text(daysLeft == 1 ? 'day left' : 'days left', style: t.small),
-                  ],
+        Semantics(
+          container: true,
+          label: '${s.name}, ${MoneyFormatter.spoken(s.amount)} ${s.frequency.label.toLowerCase()}, ${s.status.label}',
+          child: BahiSlab(
+            leading: LucideIcons.repeat,
+            label: d.category?.name ?? 'Uncategorised',
+            figure: SlabFigure(s.amount),
+            caption: 'per ${s.frequency.unit}',
+            stamp: SlabStamp(
+              label: s.status.label,
+              tone: paused ? SlabTone.warn : (s.isActive ? SlabTone.good : SlabTone.neutral),
+            ),
+            // How far through the current billing cycle we are.
+            visual: SlabRing(
+              value: s.isActive ? cycle : 0,
+              size: 96,
+              color: soon ? Slab.bad : Slab.cool,
+              top: s.isActive ? '${daysLeft < 0 ? 0 : daysLeft}' : '—',
+              bottom: daysLeft == 1 ? 'day left' : 'days left',
+            ),
+            stats: [
+              if (s.isActive)
+                SlabStat(
+                  label: 'Next renewal',
+                  value: Text(
+                    DateFormats.dayMonthYear.format(s.nextDueDate),
+                    style: context.type.figure.copyWith(color: soon ? Slab.bad : Slab.ink),
+                  ),
                 ),
-              ),
-              const SizedBox(width: Sp.lg),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(d.category?.name ?? 'Uncategorised', style: t.label),
-                    const SizedBox(height: 2),
-                    Semantics(
-                      container: true,
-                      label:
-                          '${s.name}, ${MoneyFormatter.spoken(s.amount)} ${s.frequency.label.toLowerCase()}, ${s.status.label}',
-                      excludeSemantics: true,
-                      child: AnimatedAmount(s.amount, style: t.figureL, fit: true, animateOnMount: true),
-                    ),
-                    Text('per ${s.frequency.unit}', style: t.figureSmall),
-                    const SizedBox(height: Sp.sm),
-                    KhataStamp(
-                      label: s.status.label,
-                      color: paused ? c.amber : (s.isActive ? c.green : c.inkSoft),
-                    ),
-                  ],
-                ),
-              ),
+              if (s.frequency != Frequency.monthly) SlabStat.money(label: 'Per month', amount: s.monthlyEquivalent),
+              SlabStat.money(label: 'Per year', amount: s.annualized, color: Slab.warn),
             ],
           ),
         ),
         const SizedBox(height: Sp.md),
-        if (s.isActive) ...[
-          Text('Next renewal', style: t.label),
-          const SizedBox(height: 2),
-          Text(
-            '${DateFormats.dayMonthYear.format(s.nextDueDate)}, ${DateFormats.dueIn(s.nextDueDate, d.today)}',
-            style: t.bodyStrong.copyWith(color: next.color),
-          ),
-          const SizedBox(height: Sp.xl),
+        if (s.isActive)
           Row(
             children: [
               Expanded(
@@ -333,22 +348,14 @@ class _Hero extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-        ] else ...[
-          LedgerNote(
-            icon: paused ? LucideIcons.pause : LucideIcons.circleX,
-            text: paused
-                ? 'Paused'
-                : 'Cancelled',
-          ),
-          const SizedBox(height: Sp.lg),
+          )
+        else
           LedgerButton(
             label: paused ? 'Resume' : 'Reactivate',
             icon: LucideIcons.play,
             expand: true,
             onPressed: onResume,
           ),
-        ],
       ],
     );
   }

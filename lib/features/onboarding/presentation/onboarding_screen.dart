@@ -1,3 +1,4 @@
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,27 +11,29 @@ import '../../accounts/domain/money_account.dart';
 import '../../settings/domain/financial_profile.dart';
 
 class _IntroPage {
-  const _IntroPage(this.title, this.body, this.points);
+  const _IntroPage(this.title, this.icon, this.points);
   final String title;
-  final String body;
-  final List<String> points;
+  final IconData icon;
+
+  /// (icon, text) lines on the khata page.
+  final List<(IconData, String)> points;
 }
 
 const _intro = [
   _IntroPage(
     'See where your money stands',
-    'One calm view of what you can spend, what is set aside, and what is coming up.',
-    ['Available to spend, explained', 'EMIs, renewals and dues ahead of time'],
+    LucideIcons.wallet,
+    [(LucideIcons.coins, 'Available to spend'), (LucideIcons.calendarClock, 'EMIs, renewals and dues ahead')],
   ),
   _IntroPage(
     'Plan with intention',
-    'Budgets, goals, loans and an emergency fund that work together, not in silos.',
-    ['Budgets that warn before you overspend', 'Goals and a safety net that grow steadily'],
+    LucideIcons.target,
+    [(LucideIcons.chartPie, 'Budgets that warn early'), (LucideIcons.shield, 'Goals and a safety net')],
   ),
   _IntroPage(
     'Your data, kept private',
-    'No bank logins, no ads, no selling your data. You decide what to record.',
-    ['Saved securely to your FiNN account', 'Export a copy or delete your account anytime'],
+    LucideIcons.lock,
+    [(LucideIcons.ban, 'No bank logins, no ads'), (LucideIcons.download, 'Export or delete anytime')],
   ),
 ];
 
@@ -175,7 +178,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         excludeSemantics: true,
                         child: Row(
                           children: [
-                            Expanded(child: LedgerBar(value: (_page + 1) / total, height: 4)),
+                            Expanded(child: LedgerBar(value: (_page + 1) / total, height: 4, color: context.ink.marigold)),
                             const SizedBox(width: Sp.md),
                             Text('${_page + 1} of $total', style: t.small),
                           ],
@@ -280,20 +283,55 @@ class _IntroView extends StatelessWidget {
     final c = context.ink;
     final t = context.type;
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(Sp.gutter + Sp.xs, Sp.xl, Sp.gutter + Sp.xs, Sp.xl),
+      padding: const EdgeInsets.fromLTRB(Sp.gutter + Sp.xs, Sp.lg, Sp.gutter + Sp.xs, Sp.xl),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Semantics(header: true, child: Text(page.title, style: t.title)),
-          const SizedBox(height: Sp.sm),
-          Text(page.body, style: t.body.copyWith(color: c.inkSoft)),
+          // Bahi illustration: the page's mark in a marigold seal on the
+          // indigo slab.
+          ExcludeSemantics(
+            child: Container(
+              height: 180,
+              decoration: BoxDecoration(gradient: c.deepGradient, borderRadius: Rad.rLg),
+              child: Center(
+                child: Container(
+                  width: 112,
+                  height: 112,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: c.heroFigure.withValues(alpha: 0.35), width: 10),
+                  ),
+                  child: Center(
+                    child: Container(
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(color: c.heroFigure, shape: BoxShape.circle),
+                      child: Icon(page.icon, size: 32, color: const Color(0xFF2A1A00)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: Sp.xl),
+          Semantics(header: true, child: Text(page.title, style: t.title.wide(114).copyWith(fontSize: 30))),
+          const SizedBox(height: Sp.md),
+          Container(width: 44, height: 4, decoration: BoxDecoration(color: c.marigold, borderRadius: Rad.pill)),
           const SizedBox(height: Sp.xl),
           LedgerPanel(
+            khata: true,
+            dividerIndent: 0,
             children: [
-              for (final text in page.points)
+              for (final (icon, text) in page.points)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md + 2),
-                  child: Text(text, style: t.bodyStrong),
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md),
+                  child: Row(
+                    children: [
+                      IconWell(icon: icon, size: 36, color: c.brand, background: c.surface),
+                      const SizedBox(width: Sp.md + 10),
+                      Expanded(child: Text(text, style: t.bodyStrong)),
+                    ],
+                  ),
                 ),
             ],
           ),

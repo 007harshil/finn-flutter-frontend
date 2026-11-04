@@ -202,7 +202,7 @@ class _LoanFormSheetState extends ConsumerState<LoanFormSheet> {
           if (locked) ...[
             const LedgerNote(
               icon: LucideIcons.lock,
-              text: 'Payments exist, so amount, rate, dates and tenure are locked.',
+              text: 'Locked: payments exist',
             ),
             const SizedBox(height: LedgerForm.groupGap),
           ],

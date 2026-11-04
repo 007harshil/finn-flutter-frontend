@@ -67,8 +67,8 @@ final spendPulseProvider = Provider.family<AsyncValue<SpendPulse>, MonthKey>((re
   return ref.watch(transactionsStreamProvider).whenData((txs) => SpendPulse.build(txs, month, today));
 });
 
-/// "Pulse": this month's running spend (teal) against last month's
-/// (dashed). Drag or long-press across it to read any day; the reading
+/// Monsoon "Pulse": this month's running spend (rain, with a wash)
+/// against last month's (soft line). Drag or long-press across it to read any day; the reading
 /// pins above the chart, never under the finger.
 class SpendPulseCard extends ConsumerWidget {
   const SpendPulseCard({super.key, required this.month});
@@ -94,8 +94,8 @@ class SpendPulseCard extends ConsumerWidget {
       heading: 'Month so far',
       title: title,
       legend: [
-        LegendEntry(DateFormats.monthName.format(month.start), c.brand),
-        LegendEntry(prevName, c.inkSoft, dashed: true),
+        LegendEntry(DateFormats.monthName.format(month.start), c.rain),
+        LegendEntry(prevName, c.inkSoft),
       ],
       howCalculated: 'Each line adds up completed expenses day by day, including EMIs and settlements. '
           'Transfers between your own accounts are not spending.',
@@ -105,10 +105,14 @@ class SpendPulseCard extends ConsumerWidget {
 }
 
 class SpendPulseChart extends StatefulWidget {
-  const SpendPulseChart({super.key, required this.pulse, this.height = 168});
+  const SpendPulseChart({super.key, required this.pulse, this.height = 168, this.readout = true});
 
   final SpendPulse pulse;
   final double height;
+
+  /// The pinned reading above the chart; off where the card already shows
+  /// the totals (it still appears while scrubbing).
+  final bool readout;
 
   @override
   State<SpendPulseChart> createState() => _SpendPulseChartState();
@@ -159,7 +163,7 @@ class _SpendPulseChartState extends State<SpendPulseChart> {
               Text(DateFormats.dayMonth.format(date), style: t.small),
               AmountText(
                 Money.fromPaise(has ? p.thisMonth[day - 1] : 0),
-                style: t.figure.copyWith(fontSize: 18, color: has ? c.brand : c.inkFaint),
+                style: t.figure.copyWith(fontSize: 18, color: has ? c.rain : c.inkFaint),
                 decimals: DecimalDisplay.none,
               ),
             ],
@@ -181,8 +185,7 @@ class _SpendPulseChartState extends State<SpendPulseChart> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          readout,
-          const SizedBox(height: Sp.md),
+          if (widget.readout || _day != null) ...[readout, const SizedBox(height: Sp.md)],
           LayoutBuilder(
             builder: (context, box) => GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -204,9 +207,9 @@ class _SpendPulseChartState extends State<SpendPulseChart> {
                     pulse: p,
                     reveal: reveal,
                     cursor: _day,
-                    line: c.brand,
-                    fill: c.brand.withValues(alpha: c.isDark ? 0.18 : 0.12),
-                    previous: c.inkSoft.withValues(alpha: 0.7),
+                    line: c.rain,
+                    fill: c.rain.withValues(alpha: c.isDark ? 0.30 : 0.26),
+                    previous: c.inkSoft.withValues(alpha: 0.5),
                     grid: c.line,
                     cursorColor: c.ink,
                     dot: c.surface,
@@ -270,7 +273,7 @@ class _PulsePainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(0, 0, size.width * reveal, size.height));
 
-    // Last month, dashed.
+    // Last month, a soft solid line.
     final prev = Path();
     final n = math.min(pulse.lastMonth.length, days);
     for (var d = 1; d <= n; d++) {
@@ -281,11 +284,7 @@ class _PulsePainter extends CustomPainter {
       ..color = previous
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.6;
-    for (final m in prev.computeMetrics()) {
-      for (var at = 0.0; at < m.length; at += 9) {
-        canvas.drawPath(m.extractPath(at, math.min(at + 5, m.length)), dash);
-      }
-    }
+    canvas.drawPath(prev, dash..strokeJoin = StrokeJoin.round);
 
     // This month, solid with a soft wash underneath.
     final cur = pulse.thisMonth;

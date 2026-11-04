@@ -249,7 +249,7 @@ class _CategoryFormState extends ConsumerState<_CategoryForm> {
           if (_system) ...[
             const LedgerNote(
               icon: LucideIcons.lock,
-              text: 'Managed by FiNN for loans, settlements and uncategorised entries. You can change its icon.',
+              text: 'Managed by FiNN',
             ),
             const SizedBox(height: LedgerForm.gap),
           ],

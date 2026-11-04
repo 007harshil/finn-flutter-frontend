@@ -213,7 +213,7 @@ class _AccountTile extends StatelessWidget {
                     Container(
                       width: 28,
                       height: 28,
-                      decoration: const BoxDecoration(color: _Tile.well, shape: BoxShape.circle),
+                      decoration: const BoxDecoration(color: _Tile.well, borderRadius: BorderRadius.all(Radius.circular(8))),
                       child: Icon(accountIcon(a.kind), size: 14, color: _Tile.ink),
                     ),
                     const SizedBox(width: Sp.sm),
@@ -262,9 +262,9 @@ class _AccountTile extends StatelessWidget {
 /// Fills and text on the deep slab (the same in light and dark mode).
 abstract final class _Tile {
   static const ink = Color(0xFFFFFFFF);
-  static const soft = Color(0xD9FFFFFF);
+  static const soft = Color(0xFFC5C8F0);
   static const fill = Color(0x14FFFFFF);
   static const well = Color(0x1FFFFFFF);
   static const line = Color(0x1FFFFFFF);
-  static const over = Color(0xFFFFA494);
+  static const over = Color(0xFFFF8A80);
 }

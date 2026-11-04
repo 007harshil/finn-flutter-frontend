@@ -16,7 +16,7 @@ String profileInitials(String? name, String? email) {
   return e.isEmpty ? '?' : e.characters.first.toUpperCase();
 }
 
-/// Initials in a sunken circle.
+/// Initials in a marigold circle (Bahi).
 class ProfileAvatar extends StatelessWidget {
   const ProfileAvatar({
     super.key,
@@ -38,11 +38,11 @@ class ProfileAvatar extends StatelessWidget {
         width: size,
         height: size,
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: c.sunken, shape: BoxShape.circle),
+        decoration: BoxDecoration(color: c.marigold, shape: BoxShape.circle),
         child: Text(
           profileInitials(name, email),
           style: t.title.copyWith(
-            color: c.ink,
+            color: const Color(0xFF2A1A00),
             fontSize: size * 0.36,
             fontWeight: FontWeight.w600,
           ),

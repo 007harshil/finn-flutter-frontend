@@ -54,19 +54,19 @@ abstract final class Radii {
 abstract final class Elevation {
   static const List<BoxShadow> none = [];
   static const List<BoxShadow> sm = [
-    BoxShadow(color: Color(0x0D0F172A), blurRadius: 2, offset: Offset(0, 1)),
+    BoxShadow(color: Color(0x0D191B3F), blurRadius: 2, offset: Offset(0, 1)),
   ];
   static const List<BoxShadow> md = [
-    BoxShadow(color: Color(0x0F0F172A), blurRadius: 6, offset: Offset(0, 2)),
-    BoxShadow(color: Color(0x0A0F172A), blurRadius: 2, offset: Offset(0, 1)),
+    BoxShadow(color: Color(0x0F191B3F), blurRadius: 6, offset: Offset(0, 2)),
+    BoxShadow(color: Color(0x0A191B3F), blurRadius: 2, offset: Offset(0, 1)),
   ];
   static const List<BoxShadow> lg = [
-    BoxShadow(color: Color(0x140F172A), blurRadius: 16, spreadRadius: -4, offset: Offset(0, 8)),
-    BoxShadow(color: Color(0x0A0F172A), blurRadius: 4, offset: Offset(0, 2)),
+    BoxShadow(color: Color(0x14191B3F), blurRadius: 16, spreadRadius: -4, offset: Offset(0, 8)),
+    BoxShadow(color: Color(0x0A191B3F), blurRadius: 4, offset: Offset(0, 2)),
   ];
   static const List<BoxShadow> xl = [
-    BoxShadow(color: Color(0x1F0F172A), blurRadius: 32, spreadRadius: -8, offset: Offset(0, 16)),
-    BoxShadow(color: Color(0x0D0F172A), blurRadius: 6, offset: Offset(0, 3)),
+    BoxShadow(color: Color(0x1F191B3F), blurRadius: 32, spreadRadius: -8, offset: Offset(0, 16)),
+    BoxShadow(color: Color(0x0D191B3F), blurRadius: 6, offset: Offset(0, 3)),
   ];
 
   static List<BoxShadow> tinted(Color color, {double alpha = 0.25}) => [

@@ -203,8 +203,8 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget _badged(Widget icon, int count) => count == 0 ? icon : CountBadge(count: count, child: icon);
 }
 
-/// Solid bottom navigation with five equal slots: Home, Activity, a teal
-/// "add" button at the true centre, Budgets and Goals. Labels are always
+/// Solid bottom navigation with five equal slots: Home, Activity, an
+/// indigo "add" key at the true centre, Budgets and Goals. Labels are always
 /// shown and the bar never hides, so it is always where people expect it.
 class _BottomBar extends StatelessWidget {
   const _BottomBar({
@@ -263,7 +263,7 @@ class _BottomBar extends StatelessWidget {
   }
 }
 
-/// One tab: icon in a soft teal pill when selected, label underneath.
+/// One tab: icon in a marigold wash when selected, label underneath.
 class _NavTab extends StatelessWidget {
   const _NavTab({required this.tab, required this.selected, required this.onTap, this.badge = 0});
 
@@ -277,7 +277,7 @@ class _NavTab extends StatelessWidget {
     final c = context.ink;
     final t = context.type;
     final motion = context.motion;
-    final color = selected ? c.brand : c.inkSoft;
+    final color = selected ? c.ink : c.inkSoft;
     Widget icon = Icon(tab.icon, size: 22, color: color);
     if (badge > 0) icon = CountBadge(count: badge, child: icon);
     return Semantics(
@@ -298,8 +298,8 @@ class _NavTab extends StatelessWidget {
               width: selected ? 56 : 40,
               height: 30,
               decoration: BoxDecoration(
-                color: selected ? c.brandSoft : Colors.transparent,
-                borderRadius: Rad.pill,
+                color: selected ? c.marigoldSoft : Colors.transparent,
+                borderRadius: Rad.rChip,
               ),
               alignment: Alignment.center,
               child: icon,
@@ -345,17 +345,19 @@ class _AddButton extends ConsumerWidget {
             haptic: ref.watch(settingsProvider.select((s) => s.hapticsEnabled)),
             onTap: onTap,
             onLongPress: onLongPress,
-            child: Container(
-              width: 56,
-              height: 44,
-              decoration: BoxDecoration(
-                color: c.brand,
-                borderRadius: Rad.rMd,
-                boxShadow: c.isDark
-                    ? null
-                    : [BoxShadow(color: c.brand.withValues(alpha: 0.28), blurRadius: 10, offset: const Offset(0, 3))],
+            // Bahi: a raised key on a 4 px edge.
+            child: Transform.translate(
+              offset: const Offset(0, -6),
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: c.brand,
+                  borderRadius: const BorderRadius.all(Radius.circular(16)),
+                  boxShadow: [BoxShadow(color: c.edge, offset: const Offset(0, 4))],
+                ),
+                child: Icon(LucideIcons.plus, color: c.onBrand, size: 26),
               ),
-              child: Icon(LucideIcons.plus, color: c.onBrand, size: 26),
             ),
           ),
         ),
@@ -385,7 +387,11 @@ class _RailAddButton extends StatelessWidget {
           child: Container(
             width: Dimens.fabSize,
             height: Dimens.fabSize,
-            decoration: BoxDecoration(color: c.brand, borderRadius: Rad.rLg, boxShadow: Elevation.md),
+            decoration: BoxDecoration(
+              color: c.brand,
+              borderRadius: const BorderRadius.all(Radius.circular(16)),
+              boxShadow: [BoxShadow(color: c.edge, offset: const Offset(0, 4))],
+            ),
             child: Icon(LucideIcons.plus, color: c.onBrand, size: 26),
           ),
         ),

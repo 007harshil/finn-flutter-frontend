@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/finn_theme.dart';
 import '../tokens/finn_colors.dart';
 import '../tokens/tokens.dart';
+import '../../kit/tokens.dart' show LedgerColors;
 import 'cards.dart';
 import 'tone.dart';
 
@@ -126,6 +127,19 @@ class FinnButton extends StatelessWidget {
       style: style,
       child: content,
     );
+    // Bahi: the primary button sits on a 3 px pressable edge.
+    if (variant == FinnButtonVariant.primary && enabled) {
+      button = Padding(
+        padding: const EdgeInsets.only(bottom: 3),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: Radii.rLg,
+            boxShadow: [BoxShadow(color: LedgerColors.of(context).edge, offset: const Offset(0, 3))],
+          ),
+          child: button,
+        ),
+      );
+    }
     if (expand) button = SizedBox(width: double.infinity, child: button);
     if (loading) button = Semantics(label: 'Loading', child: button);
     return PressableScale(enabled: enabled, child: button);

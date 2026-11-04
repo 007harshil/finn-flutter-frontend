@@ -101,44 +101,40 @@ class _MonthFlow extends ConsumerWidget {
   }
 }
 
-/// Spending week by week as short columns; the costliest week in teal.
-class _WeekColumns extends ConsumerWidget {
-  const _WeekColumns({required this.month});
+/// Monsoon pulse: running spend this month (rain) against last month
+/// (soft line). Drag across it to read any day.
+class _MonthPulse extends ConsumerWidget {
+  const _MonthPulse({required this.month});
 
   final MonthKey month;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.ink;
     final pulse = ref.watch(spendPulseProvider(month)).value;
-    if (pulse == null || pulse.spent <= 0) return const SizedBox.shrink();
-    final running = pulse.thisMonth;
-    final weeks = <int>[];
-    for (var start = 0; start < pulse.days; start += 7) {
-      final end = (start + 7).clamp(0, pulse.days);
-      if (start >= running.length) {
-        weeks.add(0);
-        continue;
-      }
-      final last = running[(end - 1).clamp(0, running.length - 1)];
-      weeks.add(last - (start == 0 ? 0 : running[start - 1]));
-    }
-    final peak = weeks.indexOf(weeks.reduce((x, y) => x > y ? x : y));
+    if (pulse == null || (pulse.spent <= 0 && (pulse.lastMonth.lastOrNull ?? 0) <= 0)) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(top: Sp.md),
-      child: KhataColumns(
-        height: 36,
-        semanticLabel: 'Spending in each week of the month',
-        columns: [
-          for (var w = 0; w < weeks.length; w++)
-            KhataColumn('${w * 7 + 1}–${((w + 1) * 7).clamp(0, pulse.days)}', weeks[w].toDouble(), highlight: w == peak),
+      padding: const EdgeInsets.only(top: Sp.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SpendPulseChart(pulse: pulse, height: 120, readout: false),
+          const SizedBox(height: Sp.sm),
+          Wrap(
+            spacing: Sp.lg,
+            children: [
+              ChartDot(color: c.rain, label: DateFormats.shortMonth.format(month.start)),
+              ChartDot(color: c.inkSoft.withValues(alpha: 0.5), label: DateFormats.shortMonth.format(month.previous.start)),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// In, out and kept side by side on one khata panel, the weekly
-/// spending columns under them. In and out open Activity filtered.
+/// In, out and kept side by side on one Monsoon card, the running-spend
+/// pulse under them. In and out open Activity filtered.
 class _FlowPanel extends StatelessWidget {
   const _FlowPanel({required this.summary, required this.before, required this.month, required this.isCurrent});
 
@@ -154,7 +150,7 @@ class _FlowPanel extends StatelessWidget {
     final hidden = AmountVisibility.hiddenOf(context);
     final s = summary;
     if (s.income.isZero && s.expense.isZero) {
-      return KhataPanel(
+      return MonsoonCard(
         child: Row(
           children: [
             Icon(LucideIcons.notebookPen, size: 18, color: c.inkSoft),
@@ -178,8 +174,8 @@ class _FlowPanel extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         );
-    return KhataPanel(
-      padding: const EdgeInsets.fromLTRB(KhataPanel.margin + Sp.md, Sp.md, Sp.md, Sp.md),
+    return MonsoonCard(
+      padding: const EdgeInsets.all(Sp.md + 2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -228,7 +224,7 @@ class _FlowPanel extends StatelessWidget {
               ),
             ],
           ),
-          _WeekColumns(month: month),
+          _MonthPulse(month: month),
         ],
       ),
     );

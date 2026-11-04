@@ -11,6 +11,7 @@ import '../../../core/time/dates.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/async_view.dart';
+import '../../../shared/presentation/category_icons.dart';
 import '../../../shared/presentation/transaction_row.dart';
 import '../application/budget_actions.dart';
 import '../application/budget_history.dart';
@@ -146,8 +147,7 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
               text: 'Past months are read-only',
             ),
           ),
-        PageBlock(top: p.isPast ? Sp.xl : Sp.md, child: _Hero(pace: p)),
-        PageBlock(top: Sp.xl, child: _Stats(pace: p)),
+        PageBlock(top: p.isPast ? Sp.lg : Sp.md, child: _Hero(pace: p)),
         if (burn != null) ...[
           PageBlock(
             top: Sp.section,
@@ -160,7 +160,6 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
   }
 
   Widget _spending(BuildContext context, BudgetBurn burn) {
-    final t = context.type;
     final all = burn.transactions;
     var shown = all.where((tx) {
       if (_payee != null && payeeOf(tx) != _payee) return false;
@@ -222,15 +221,13 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
             const SizedBox(height: Sp.md),
           ],
           if (shown.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: Sp.sm),
-              child: Text(
-                all.isEmpty ? 'No spending in this category yet this period.' : 'Nothing matches these filters.',
-                style: t.label,
-              ),
+            LedgerEmpty(
+              icon: all.isEmpty ? LucideIcons.notebookPen : LucideIcons.searchX,
+              title: all.isEmpty ? 'No spending yet' : 'Nothing matches',
             )
           else
             LedgerPanel(
+              khata: true,
               // Align hairlines with the row text (padding + 40pt mark + gap).
               dividerIndent: Sp.lg + 40 + Sp.md + 2,
               children: [
@@ -256,172 +253,91 @@ class _Hero extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.ink;
-    final t = context.type;
     final p = pace;
     final u = p.usage;
     final hidden = AmountVisibility.hiddenOf(context);
     final category = ref.watch(categoryProvider(u.budget.categoryId));
     final paused = p.state == BudgetState.paused;
     final over = u.isOver;
-    final verdictColor = switch (p.state) {
-      BudgetState.over => c.red,
-      BudgetState.risk => c.amber,
-      _ => c.ink,
-    };
+    final projected = paused ? null : p.projected;
     final note = u.budget.note;
+    final tone = switch (p.state) {
+      BudgetState.over => SlabTone.bad,
+      BudgetState.risk => SlabTone.warn,
+      BudgetState.paused => SlabTone.neutral,
+      BudgetState.onTrack => SlabTone.good,
+    };
+    final runsOut = !p.isPast && !paused && !over ? p.runsOutOn : null;
+    final tags = <(IconData, String, Color, Color)>[
+      if (runsOut != null) (LucideIcons.hourglass, 'Runs out ~${DateFormats.dayMonth.format(runsOut)}', c.amber, c.amberSoft),
+      if (u.committed.isPositive)
+        (LucideIcons.repeat, '${budgetMoney(context, u.committed)} subscriptions to come', c.lilac, c.sunken),
+      if (paused) (LucideIcons.pause, 'No alerts while paused', c.inkSoft, c.sunken),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            CategoryMark(category: category, size: 32),
-            const SizedBox(width: Sp.md),
-            Expanded(
-              child: Text(
-                paused ? 'Paused, ${periodLabel(u.period)}' : periodLabel(u.period),
-                style: t.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: Sp.lg),
-        KhataPanel(
-          child: Row(
-            children: [
-              KhataRing(
-                value: p.used,
-                marker: p.isPast || paused ? null : p.elapsed,
-                size: 112,
-                color: switch (p.state) {
-                  BudgetState.over => c.red,
-                  BudgetState.risk => c.amber,
-                  BudgetState.paused => c.inkFaint,
-                  BudgetState.onTrack => c.brand,
-                },
-                semanticLabel: '${formatBps(u.utilizationBps, decimals: 0)} of the limit used, '
-                    '${formatBps(u.elapsedBps, decimals: 0)} of the period gone',
-                center: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(hidden ? '••' : formatBps(u.utilizationBps, decimals: 0), style: t.figure.copyWith(fontSize: 20)),
-                    Text('used', style: t.small),
-                  ],
-                ),
-              ),
-              const SizedBox(width: Sp.lg),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(over ? 'Over by' : 'Left', style: t.label.copyWith(color: over ? c.red : null)),
-                    const SizedBox(height: 2),
-                    AnimatedAmount(
-                      u.remaining.abs(),
-                      style: t.figureL.copyWith(color: over && !hidden ? c.red : c.ink),
-                      decimals: DecimalDisplay.none,
-                      fit: true,
-                      animateOnMount: true,
-                    ),
-                    Text('of ${budgetMoney(context, u.budget.limit)}', style: t.label),
-                    const SizedBox(height: Sp.sm),
-                    KhataStamp(
-                      label: p.state.label,
-                      color: switch (p.state) {
-                        BudgetState.over => c.red,
-                        BudgetState.risk => c.amber,
-                        BudgetState.paused => c.inkSoft,
-                        BudgetState.onTrack => c.green,
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
+        BahiSlab(
+          leading: category == null ? LucideIcons.tag : CategoryIcons.of(category.iconKey),
+          label: over ? 'Over by' : 'Left',
+          figure: SlabFigure(u.remaining.abs(), color: over && !hidden ? Slab.bad : null),
+          caption: 'of ${budgetMoney(context, u.budget.limit)} · ${paused ? 'Paused, ' : ''}${periodLabel(u.period)}',
+          stamp: SlabStamp(label: p.state.label, tone: tone),
+          visual: SlabRing(
+            value: p.used,
+            marker: p.isPast || paused ? null : p.elapsed,
+            size: 100,
+            color: slabToneColor(tone),
+            top: hidden ? '••' : formatBps(u.utilizationBps, decimals: 0),
+            bottom: 'used',
+            semanticLabel: '${formatBps(u.utilizationBps, decimals: 0)} of the limit used, '
+                '${formatBps(u.elapsedBps, decimals: 0)} of the period gone',
           ),
+          stats: p.isPast
+              ? [
+                  SlabStat.money(label: 'Spent', amount: u.spent, color: u.isOver ? Slab.bad : null),
+                  SlabStat.money(label: 'Daily average', amount: u.spent.scale(1, u.period.dayCount)),
+                  SlabStat.money(label: 'Limit then', amount: u.budget.limit),
+                ]
+              : [
+                  SlabStat.money(label: 'Spent', amount: u.spent, color: u.isOver ? Slab.bad : null),
+                  p.safePerDay == null
+                      ? SlabStat.text(label: 'Safe per day', text: '—')
+                      : SlabStat.money(label: 'Safe per day', amount: p.safePerDay!),
+                  projected == null
+                      ? SlabStat.text(label: 'At this pace', text: '—')
+                      : SlabStat.money(
+                          label: 'At this pace',
+                          amount: projected,
+                          color: projected > u.budget.limit ? Slab.bad : null,
+                        ),
+                ],
         ),
-        const SizedBox(height: Sp.md),
-        Text(_verdict(context, p), style: t.label.copyWith(color: verdictColor)),
-        if (u.committed.isPositive) ...[
-          const SizedBox(height: Sp.xs),
-          Text(
-            '${budgetMoney(context, u.committed)} in subscriptions still to come, '
-            '${budgetMoney(context, u.remainingAfterCommitted)} left after',
-            style: t.label,
+        if (tags.isNotEmpty) ...[
+          const SizedBox(height: Sp.md),
+          Wrap(
+            spacing: Sp.sm,
+            runSpacing: Sp.sm,
+            children: [
+              for (final (icon, text, fg, bg) in tags)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.sm + 2, vertical: 6),
+                  decoration: BoxDecoration(color: bg, borderRadius: Rad.rChip),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 14, color: fg),
+                      const SizedBox(width: 6),
+                      Text(text, style: context.type.small.copyWith(color: fg, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+            ],
           ),
         ],
         if (note != null && note.trim().isNotEmpty) ...[
-          const SizedBox(height: Sp.xs),
-          Text(note, style: t.label),
-        ],
-      ],
-    );
-  }
-
-  String _verdict(BuildContext context, BudgetPace p) {
-    final u = p.usage;
-    String m(Money x) => budgetMoney(context, x);
-    return switch (p.state) {
-      BudgetState.over when p.isPast => 'Went ${m(-u.remaining)} over the limit that month.',
-      _ when p.isPast => 'Stayed within the limit with ${m(u.remaining)} left unspent.',
-      BudgetState.paused => 'Paused. No warnings or alerts until you resume.',
-      BudgetState.over => 'You are ${m(-u.remaining)} over. Anything more here adds to the overspend.',
-      _ when p.runsOutOn != null => 'At this pace the limit runs out around ${DateFormats.dayMonth.format(p.runsOutOn!)}. '
-          'Keep to ${p.safePerDay == null ? 'less' : '${m(p.safePerDay!)} a day'} to stay within it.',
-      BudgetState.risk => 'Used ${formatBps(u.utilizationBps, decimals: 0)} already.'
-          '${p.safePerDay == null ? '' : ' Up to ${m(p.safePerDay!)} a day keeps you within the limit.'}',
-      _ when p.projected != null => 'On pace to finish with about ${m(u.budget.limit - p.projected!)} to spare.',
-      _ => 'Plenty of room this period.',
-    };
-  }
-}
-
-/// Three figures under the hero: spent, safe per day, where the period
-/// ends at this pace (a past month: spent, daily average, the limit then).
-class _Stats extends StatelessWidget {
-  const _Stats({required this.pace});
-
-  final BudgetPace pace;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.ink;
-    final t = context.type;
-    final p = pace;
-    final u = p.usage;
-    final paused = p.state == BudgetState.paused;
-    final projected = paused ? null : p.projected;
-    final safe = p.safePerDay;
-    Widget money(Money? m, {Color? color, bool exact = false}) => m == null
-        ? Text('—', style: t.figure)
-        : AmountText(
-            m,
-            style: t.figure,
-            color: color,
-            fit: true,
-            decimals: exact ? DecimalDisplay.auto : DecimalDisplay.none,
-          );
-    final stats = p.isPast
-        ? [
-            LedgerStat(label: 'Spent', value: money(u.spent, color: u.isOver ? c.red : null, exact: true)),
-            LedgerStat(label: 'Daily average', value: money(u.spent.scale(1, u.period.dayCount))),
-            LedgerStat(label: 'Limit then', value: money(u.budget.limit)),
-          ]
-        : [
-            LedgerStat(label: 'Spent', value: money(u.spent, color: u.isOver ? c.red : null, exact: true)),
-            LedgerStat(label: 'Safe per day', value: money(safe)),
-            LedgerStat(
-              label: 'At this pace',
-              value: money(projected, color: projected != null && projected > u.budget.limit ? c.red : null),
-            ),
-          ];
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < stats.length; i++) ...[
-          if (i > 0) const SizedBox(width: Sp.md),
-          Expanded(child: stats[i]),
+          const SizedBox(height: Sp.md),
+          LedgerNote(icon: LucideIcons.stickyNote, text: note),
         ],
       ],
     );
@@ -452,7 +368,7 @@ class _ChartSectionState extends ConsumerState<_ChartSection> {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.type;
+    final c = context.ink;
     final u = widget.pace.usage;
     final history =
         ref.watch(budgetHistoryProvider((u.budget.id, u.period.start.monthKey))).value ?? const <BudgetPeriodPoint>[];
@@ -469,31 +385,33 @@ class _ChartSectionState extends ConsumerState<_ChartSection> {
           onChanged: (v) => setState(() => _view = v),
         ),
         const SizedBox(height: Sp.md),
-        LedgerPanel(
-          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.md),
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                showHistory ? _historyReadout(context, history) : _periodReadout(context),
-                const SizedBox(height: Sp.lg),
-                if (showHistory)
-                  HistoryBars(points: history, selected: _bar, onSelect: (i) => setState(() => _bar = i))
-                else
-                  BurnChart(
-                    burn: widget.burn,
-                    limit: u.budget.limit,
-                    selected: widget.day,
-                    onSelect: widget.onDay,
-                  ),
+        MonsoonCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              showHistory ? _historyReadout(context, history) : _periodReadout(context),
+              const SizedBox(height: Sp.lg),
+              if (showHistory)
+                HistoryBars(points: history, selected: _bar, onSelect: (i) => setState(() => _bar = i))
+              else ...[
+                BurnChart(
+                  burn: widget.burn,
+                  limit: u.budget.limit,
+                  selected: widget.day,
+                  onSelect: widget.onDay,
+                ),
                 const SizedBox(height: Sp.sm),
-                Text(
-                  showHistory ? 'Tap a bar to read that month.' : 'Tap or drag across the chart to read a day.',
-                  style: t.small,
+                Wrap(
+                  spacing: Sp.lg,
+                  children: [
+                    ChartDot(color: c.rain, label: 'Spent'),
+                    ChartDot(color: c.saffron, label: 'Even pace'),
+                    ChartDot(color: c.red, label: 'Limit'),
+                  ],
                 ),
               ],
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );

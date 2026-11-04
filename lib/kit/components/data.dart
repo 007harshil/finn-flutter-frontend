@@ -7,7 +7,7 @@ import '../../features/categories/domain/category.dart';
 import '../../shared/presentation/category_icons.dart';
 import '../tokens.dart';
 
-/// Round icon well. Monochrome by default; pass [color] only when the
+/// Square icon tile (soft corners). Monochrome by default; pass [color] only when the
 /// colour means something (overdue, over the limit).
 class IconWell extends StatelessWidget {
   const IconWell({super.key, required this.icon, this.color, this.background, this.size = 40});
@@ -23,7 +23,8 @@ class IconWell extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(color: background ?? c.sunken, shape: BoxShape.circle),
+      // Bahi: square tiles with soft corners, like a ledger stamp pad.
+      decoration: BoxDecoration(color: background ?? c.sunken, borderRadius: BorderRadius.circular(size * 0.26)),
       child: Icon(icon, size: size * 0.48, color: color ?? c.ink),
     );
   }
@@ -259,7 +260,7 @@ class _BarPainter extends CustomPainter {
     final bar = Rect.fromLTWH(0, top, size.width, barHeight);
     canvas.drawRRect(RRect.fromRectAndRadius(bar, r), Paint()..color = track);
     if (value > 0) {
-      final w = (size.width * value).clamp(barHeight, size.width);
+      final w = (size.width * value).clamp(barHeight < size.width ? barHeight : size.width, size.width);
       canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0, top, w, barHeight), r), Paint()..color = fill);
     }
     final m = marker;

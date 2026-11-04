@@ -9,6 +9,7 @@ import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../core/money/money.dart';
 import '../../../kit/kit.dart';
+import '../../../shared/presentation/category_icons.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../application/transaction_actions.dart';
@@ -133,7 +134,6 @@ class _DetailsState extends ConsumerState<_Details> {
   Widget build(BuildContext context) {
     final t = widget.transaction;
     final c = context.ink;
-    final type = context.type;
     final category = ref.watch(categoryProvider(t.categoryId));
     final title = t.displayTitle ?? category?.name ?? 'Transaction';
     final route = _sourceRoute(t);
@@ -141,117 +141,54 @@ class _DetailsState extends ConsumerState<_Details> {
         t.version > 1 ||
         t.updatedAt.isAfter(t.createdAt.add(const Duration(seconds: 1)));
 
+    final account = ref.watch(financeSnapshotProvider).value?.account(t.accountId)?.name ?? 'Unknown account';
+    final who = (t.counterparty ?? '').trim();
+    final note = (t.note ?? '').trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         PageColumn(
-          top: Sp.xl,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CategoryMark(category: category, size: 44),
-              const SizedBox(width: Sp.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: type.heading,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: Sp.xs),
-                    Text(
-                      t.isIncome ? 'Money in' : 'Money out',
-                      style: type.label,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          top: Sp.lg,
+          child: Semantics(
+            container: true,
+            label: '$title. ${t.isIncome ? 'Received' : 'Spent'} ${MoneyFormatter.spoken(t.amount)}',
+            child: BahiSlab(
+              leading: category == null ? LucideIcons.tag : CategoryIcons.of(category.iconKey),
+              label: t.isIncome ? 'Money in' : 'Money out',
+              figure: SlabFigure(t.signedAmount, sign: SignDisplay.always, color: t.isIncome ? Slab.good : null),
+              caption: title,
+              stats: [
+                SlabStat.text(label: 'Date', text: DateFormats.dayMonthYear.format(t.date)),
+                SlabStat.text(label: 'Account', text: account),
+              ],
+            ),
           ),
         ),
         PageColumn(
           top: Sp.lg,
-          child: AmountText(
-            t.signedAmount,
-            sign: SignDisplay.always,
-            fit: true,
-            style: type.figureXL.copyWith(color: t.isIncome ? c.green : c.ink),
-            semanticsLabel:
-                '${t.isIncome ? 'Received' : 'Spent'} ${MoneyFormatter.spoken(t.amount)}',
+          child: FactTags(
+            tags: [
+              category?.name ?? 'Deleted category',
+              if (who.isNotEmpty) '${t.isIncome ? 'From' : 'To'} $who',
+              if ((t.channel ?? '').isNotEmpty) t.channel!,
+              t.origin.label,
+              'Recorded ${DateFormats.timestamp.format(t.createdAt)}',
+              if (edited) 'Edited ${DateFormats.timestamp.format(t.updatedAt)}',
+            ],
+            highlight: {category?.name ?? ''},
           ),
         ),
+        if (note.isNotEmpty) PageColumn(top: Sp.md, child: LedgerNote(icon: LucideIcons.stickyNote, text: note)),
         PageColumn(top: Sp.lg, child: _CategoryContext(transaction: t, name: category?.name ?? 'This category')),
         if (t.isLinked)
           PageColumn(
-            top: Sp.xl,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                LedgerNote(
-                  icon: LucideIcons.link2,
-                  text: 'Created by ${t.origin.label}. Edit it from the ${_sourceName(t.origin)}.',
-                ),
-                if (route != null) ...[
-                  const SizedBox(height: Sp.md),
-                  LedgerButton(
-                    label: 'Open ${_sourceName(t.origin)}',
-                    variant: LedgerButtonVariant.secondary,
-                    expand: true,
-                    onPressed: () => context.push(route),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        PageColumn(
-          top: Sp.section,
-          child: LedgerPanel(
-            children: [
-              LedgerFact(
-                label: 'Category',
-                text: category?.name ?? 'Deleted category',
-              ),
-              LedgerFact(
-                label: 'Date',
-                text:
-                    '${DateFormats.weekdayDayMonth.format(t.date)} ${t.date.year}',
-              ),
-              LedgerFact(
-                label: 'Account',
-                text:
-                    ref.watch(financeSnapshotProvider).value?.account(t.accountId)?.name ??
-                    'Unknown account',
-              ),
-              if ((t.channel ?? '').isNotEmpty)
-                LedgerFact(label: 'Channel', text: t.channel!),
-              if ((t.counterparty ?? '').trim().isNotEmpty)
-                LedgerFact(
-                  label: t.isIncome ? 'Received from' : 'Paid to',
-                  text: t.counterparty!,
-                ),
-              LedgerFact(label: 'Source', text: t.origin.label),
-              LedgerFact(
-                label: 'Recorded',
-                text: DateFormats.timestamp.format(t.createdAt),
-              ),
-              if (edited)
-                LedgerFact(
-                  label: 'Last edited',
-                  text: DateFormats.timestamp.format(t.updatedAt),
-                ),
-            ],
-          ),
-        ),
-        if ((t.note ?? '').trim().isNotEmpty)
-          PageColumn(
             top: Sp.lg,
-            child: LedgerPanel(
-              children: [
-                LedgerFact(label: 'Note', text: t.note!, stacked: true),
-              ],
+            child: LedgerButton(
+              label: route == null ? 'From ${t.origin.label}' : 'Open ${_sourceName(t.origin)}',
+              icon: LucideIcons.link2,
+              variant: LedgerButtonVariant.secondary,
+              expand: true,
+              onPressed: route == null ? null : () => context.push(route),
             ),
           ),
         if (!t.isLinked)
@@ -299,7 +236,7 @@ class _CategoryContext extends ConsumerWidget {
     if (monthTotal <= 0) return const SizedBox.shrink();
     final share = tx.amount.paise / monthTotal;
     final hidden = AmountVisibility.hiddenOf(context);
-    return KhataPanel(
+    return MonsoonCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -309,7 +246,7 @@ class _CategoryContext extends ConsumerWidget {
                 value: share,
                 size: 84,
                 stroke: 9,
-                color: tx.isIncome ? c.green : c.brand,
+                color: tx.isIncome ? c.green : c.rain,
                 center: Text(hidden ? '••' : '${(share * 100).round()}%', style: t.figure.copyWith(fontSize: 17)),
               ),
               const SizedBox(width: Sp.lg),
@@ -317,10 +254,9 @@ class _CategoryContext extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Share of $name in ${DateFormats.monthName.format(month.start)}', style: t.label),
+                    Text('$name · ${DateFormats.monthName.format(month.start)}', style: t.label),
                     const SizedBox(height: 2),
-                    AmountText(Money.fromPaise(monthTotal), style: t.figure, decimals: DecimalDisplay.none),
-                    Text('in total that month', style: t.small),
+                    AmountText(Money.fromPaise(monthTotal), style: t.figureL.copyWith(fontSize: 26), decimals: DecimalDisplay.none),
                   ],
                 ),
               ),

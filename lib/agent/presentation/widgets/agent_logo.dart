@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../design_system/design_system.dart';
 import '../../../kit/kit.dart' show LedgerContext;
 
-/// The FiNN agent mark: a fin cresting a wave on a deep teal disc, with a small
+/// The FiNN agent mark: a fin cresting a wave on a deep indigo disc, with a small
 /// spark for "assistant". Flat ink and paper like the rest of the ledger kit,
 /// deliberately not a gradient, sparkle or robot.
 ///
@@ -89,7 +89,7 @@ class _MarkPainter extends CustomPainter {
 
 /// The animated agent orb used as the centre button of the navigation bar.
 ///
-/// A rotating green ring, a pulse halo and a flowing wave make it read as
+/// A rotating marigold ring, a pulse halo and a flowing wave make it read as
 /// "alive" and catch the eye. Idle, it plays an attention burst
 /// ([idleLoops] loops) when it appears and again whenever [attentionKey]
 /// changes (e.g. on tab switches), then rests, so it never drains the
@@ -169,7 +169,7 @@ class _AgentOrbState extends State<AgentOrb> with SingleTickerProviderStateMixin
   Widget build(BuildContext context) {
     final c = context.ink;
     final size = widget.size;
-    final ringColors = [c.green.withValues(alpha: 0), c.green, c.green.withValues(alpha: 0)];
+    final ringColors = [c.marigold.withValues(alpha: 0), c.marigold, c.marigold.withValues(alpha: 0)];
     return RepaintBoundary(
       child: AnimatedBuilder(
         animation: _loop,
@@ -197,13 +197,13 @@ class _AgentOrbState extends State<AgentOrb> with SingleTickerProviderStateMixin
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: c.green.withValues(alpha: (1 - pulse) * glow),
+                          color: c.marigold.withValues(alpha: (1 - pulse) * glow),
                           width: 2,
                         ),
                       ),
                     ),
                   ),
-                // Rotating green arc.
+                // Rotating marigold arc.
                 Transform.rotate(
                   angle: spin * 2 * math.pi,
                   child: Container(

@@ -76,9 +76,16 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # Variable font (wght 200–800) used by the lib/kit design system. The
-  # kit sets the `wght` axis explicitly (see kit/tokens.dart).
+  # Bahi type: Anek Latin + Anek Devanagari (Ek Type, OFL), variable
+  # wght 100–800 / wdth 75–125. The kit sets both axes explicitly (see
+  # kit/tokens.dart). Manrope stays as a glyph fallback (→).
   fonts:
+    - family: AnekLatin
+      fonts:
+        - asset: assets/fonts/AnekLatin.ttf
+    - family: AnekDevanagari
+      fonts:
+        - asset: assets/fonts/AnekDevanagari.ttf
     - family: Manrope
       fonts:
         - asset: assets/fonts/Manrope.ttf

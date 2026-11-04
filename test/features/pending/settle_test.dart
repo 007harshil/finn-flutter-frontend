@@ -125,7 +125,7 @@ void main() {
       final v = await item('Concert tickets');
       await env.pumpWidget(tester, PendingDetailScreen(id: v.payment.id));
       await tester.pumpAndSettle();
-      expect(find.text('You have not paid Rahul Verma back yet. 24 days have passed.'), findsOneWidget);
+      expect(find.text('Waiting'), findsOneWidget);
       expect(find.text('Settle'), findsOneWidget);
       expect(find.textContaining('Creating this did not change your balance'), findsNothing);
       expect(find.text('₹2,000 left'), findsOneWidget, reason: 'remaining after the settlement');

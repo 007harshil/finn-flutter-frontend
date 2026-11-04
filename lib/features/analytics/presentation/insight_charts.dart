@@ -44,10 +44,9 @@ class InsightChartCard extends StatelessWidget {
     final sub = subtitle;
     return LedgerSection(
       title: heading,
-      child: LedgerPanel(
+      child: MonsoonCard(
         padding: EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, how == null ? Sp.lg : 0),
-        children: [
-          Column(
+        child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(title, style: t.bodyStrong),
@@ -70,8 +69,7 @@ class InsightChartCard extends StatelessWidget {
                 HowCalculated(text: how),
               ],
             ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -363,8 +361,8 @@ class IncomeExpenseBarChart extends StatelessWidget {
                     x: i,
                     barsSpace: 3,
                     barRods: [
-                      BarChartRodData(toY: months[i].income.toDouble() * t, color: c.green, width: rodWidth, borderRadius: _top),
-                      BarChartRodData(toY: months[i].expense.toDouble() * t, color: c.ink, width: rodWidth, borderRadius: _top),
+                      BarChartRodData(toY: months[i].income.toDouble() * t, color: c.jade, width: rodWidth, borderRadius: _top),
+                      BarChartRodData(toY: months[i].expense.toDouble() * t, color: c.rain, width: rodWidth, borderRadius: _top),
                     ],
                   ),
               ],
@@ -437,7 +435,7 @@ class NetCashFlowChart extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: values[i] * t,
-                        color: values[i] < 0 ? c.red : c.green,
+                        color: values[i] < 0 ? c.red : c.jade,
                         width: months.length > 6 ? 10 : 16,
                         borderRadius: values[i] < 0 ? const BorderRadius.vertical(bottom: Radius.circular(3)) : _top,
                       ),
@@ -518,7 +516,7 @@ class DailySpendChart extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: days[i].amount.toDouble() * t,
-                        color: avg > 0 && days[i].amount.toDouble() > avg ? c.brand : c.lineStrong,
+                        color: avg > 0 && days[i].amount.toDouble() > avg ? c.rain : c.rain.withValues(alpha: 0.3),
                         width: 5,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
                         backDrawRodData: BackgroundBarChartRodData(
@@ -588,7 +586,7 @@ class MonthlySpendChart extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: months[i].expense.toDouble() * t,
-                        color: avg > 0 && months[i].expense.toDouble() > avg * 1.1 ? c.brand : c.lineStrong,
+                        color: avg > 0 && months[i].expense.toDouble() > avg * 1.1 ? c.rain : c.rain.withValues(alpha: 0.3),
                         width: months.length > 6 ? 12 : 20,
                         borderRadius: _top,
                       ),
@@ -657,7 +655,7 @@ class WeekdayChart extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: values[i] * t,
-                        color: i == peak ? c.brand : c.lineStrong,
+                        color: i == peak ? c.rain : c.rain.withValues(alpha: 0.3),
                         width: 18,
                         borderRadius: _top,
                       ),

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,7 +7,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/di/data_providers.dart';
 import '../../../app/router/routes.dart';
-import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
 import '../../../kit/kit.dart';
@@ -115,7 +116,7 @@ class _BodyState extends State<_Body> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        PageColumn(top: Sp.xl, child: _Hero(state: s)),
+        PageColumn(top: Sp.lg, child: _Hero(state: s)),
         if (s.warning != null)
           PageColumn(
             top: Sp.lg,
@@ -126,7 +127,7 @@ class _BodyState extends State<_Body> {
             top: Sp.section,
             child: LedgerSection(
               title: 'Next payment',
-              child: LedgerPanel(children: [_NextDueRow(state: s, row: next)]),
+              child: _NextDueCard(state: s, row: next),
             ),
           ),
         if (s.schedule.isNotEmpty && !s.isClosed)
@@ -138,7 +139,11 @@ class _BodyState extends State<_Body> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  _ScheduleColumns(rows: s.schedule.take(12).toList()),
+                  const SizedBox(height: Sp.md),
                   LedgerPanel(
+                    khata: true,
+                    dividerIndent: 0,
                     children: [
                       for (final r in schedule)
                         _ScheduleRowTile(key: ValueKey('row-${r.number}'), row: r, today: s.today),
@@ -167,68 +172,164 @@ class _BodyState extends State<_Body> {
             title: l.isBorrowed ? 'Payments' : 'Repayments received',
             count: s.payments.isEmpty ? null : s.payments.length,
             child: s.payments.isEmpty
-                ? LedgerNote(
-                    text: l.isBorrowed
-                        ? 'No payments yet'
-                        : 'Nothing received yet',
+                ? LedgerEmpty(
+                    icon: LucideIcons.receipt,
+                    title: l.isBorrowed ? 'No payments yet' : 'Nothing received yet',
                   )
                 : LedgerPanel(
+                    khata: true,
+                    dividerIndent: 70,
                     children: [for (final p in s.payments) _PaymentRow(key: ValueKey(p.id), payment: p, loan: l)],
                   ),
           ),
         ),
         PageColumn(
           top: Sp.section,
-          child: LedgerSection(title: 'Terms', child: LedgerPanel(children: _terms(context, s))),
+          child: LedgerSection(title: 'Terms', child: _terms(context, s)),
         ),
       ],
     );
   }
 
-  List<Widget> _terms(BuildContext context, LoanState s) {
+  /// Tags for what the loan is, tiles for its numbers.
+  Widget _terms(BuildContext context, LoanState s) {
     final l = s.loan;
-    final t = context.type;
-    Widget money(Money m) => AmountText(m, style: t.figure);
-    Widget text(String v) => Text(v, style: t.body, textAlign: TextAlign.end);
-    return [
-      LedgerFact(label: l.isBorrowed ? 'Lender' : 'Borrower', value: text(l.counterparty)),
-      LedgerFact(label: 'Type', value: text(l.structure.label)),
-      LedgerFact(label: 'Principal', value: money(l.principal)),
-      LedgerFact(label: 'Interest rate', value: text('${l.rate.label} p.a.')),
-      LedgerFact(label: 'Repayment', value: text(l.frequency.label)),
-      LedgerFact(
-        label: l.isAmortizing ? 'Current EMI' : 'Interest per ${l.frequency.unit}',
-        value: money(s.currentInstallment),
-      ),
-      LedgerFact(label: 'Started', value: text(DateFormats.dayMonthYear.format(l.startDate))),
-      if (l.isAmortizing) ...[
-        LedgerFact(label: 'Tenure', value: text('${l.tenureInstallments ?? 0} instalments')),
-        LedgerFact(label: 'Paid', value: text('${s.periodsPaid} instalments')),
-        if (!s.isClosed && s.remainingInstallments != null)
-          LedgerFact(label: 'Remaining', value: text('${s.remainingInstallments} instalments (projected)')),
-        LedgerFact(label: 'After a prepayment', value: text(l.prepaymentStrategy.label)),
-      ],
-      if (s.projectedEndDate != null && !s.isClosed)
-        LedgerFact(
-          label: l.isAmortizing ? 'Projected end' : 'Principal due',
-          value: text(DateFormats.dayMonthYear.format(s.projectedEndDate!)),
+    final c = context.ink;
+    final end = s.projectedEndDate;
+    final note = l.note?.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FactTags(
+          tags: [
+            '${l.isBorrowed ? 'Lender' : 'Borrower'}: ${l.counterparty}',
+            l.structure.label,
+            '${l.rate.label} p.a.',
+            l.frequency.label,
+            'Since ${DateFormats.dayMonthYear.format(l.startDate)}',
+            if (l.isAmortizing) l.prepaymentStrategy.label,
+          ],
         ),
-      if (!l.isAmortizing && l.maturityDate == null) LedgerFact(label: 'Principal due', value: text('No fixed date')),
-      LedgerFact(label: l.isBorrowed ? 'Interest paid' : 'Interest received', value: money(s.interestPaid)),
-      if (l.isAmortizing && !s.isClosed) LedgerFact(label: 'Total interest cost', value: money(s.totalInterestCost)),
-      if (l.note != null && l.note!.trim().isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md + 2),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        const SizedBox(height: Sp.md),
+        StatGrid(
+          tiles: [
+            StatTile.money(label: 'Principal', amount: l.principal, icon: LucideIcons.landmark),
+            StatTile.money(
+              label: l.isAmortizing ? 'Current EMI' : 'Interest per ${l.frequency.unit}',
+              amount: s.currentInstallment,
+              icon: LucideIcons.calendarClock,
+            ),
+            if (l.isAmortizing) ...[
+              StatTile.text(
+                label: 'Paid',
+                text: '${s.periodsPaid} of ${l.tenureInstallments ?? 0}',
+                icon: LucideIcons.listChecks,
+              ),
+              if (!s.isClosed && s.remainingInstallments != null)
+                StatTile.text(label: 'Remaining', text: '${s.remainingInstallments} left', icon: LucideIcons.hourglass),
+            ],
+            if (end != null && !s.isClosed)
+              StatTile.text(
+                label: l.isAmortizing ? 'Projected end' : 'Principal due',
+                text: DateFormats.dayMonthYear.format(end),
+                icon: LucideIcons.flag,
+              ),
+            if (!l.isAmortizing && l.maturityDate == null)
+              StatTile.text(label: 'Principal due', text: 'No fixed date', icon: LucideIcons.flag),
+            StatTile.money(
+              label: l.isBorrowed ? 'Interest paid' : 'Interest received',
+              amount: s.interestPaid,
+              icon: LucideIcons.percent,
+              color: c.saffron,
+            ),
+            if (l.isAmortizing && !s.isClosed)
+              StatTile.money(label: 'Total interest cost', amount: s.totalInterestCost, icon: LucideIcons.coins, color: c.saffron),
+          ],
+        ),
+        if (note != null && note.isNotEmpty) ...[
+          const SizedBox(height: Sp.md),
+          LedgerNote(icon: LucideIcons.stickyNote, text: note),
+        ],
+      ],
+    );
+  }
+}
+
+/// Next instalments as stacked columns: principal (rain) under interest
+/// (saffron), so the interest share shrinking over time is visible.
+class _ScheduleColumns extends StatelessWidget {
+  const _ScheduleColumns({required this.rows});
+
+  final List<ScheduleRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ink;
+    final t = context.type;
+    if (rows.length < 2) return const SizedBox.shrink();
+    final maxV = rows.fold<int>(0, (m, r) => math.max(m, r.payment.paise));
+    if (maxV <= 0) return const SizedBox.shrink();
+    return MonsoonCard(
+      padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, Sp.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            label: 'Next ${rows.length} payments split into principal and interest',
+            excludeSemantics: true,
+            child: SizedBox(
+              height: 96,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  for (final r in rows)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: FractionallySizedBox(
+                          heightFactor: (r.payment.paise / maxV).clamp(0.05, 1.0),
+                          alignment: Alignment.bottomCenter,
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
+                            child: Column(
+                              children: [
+                                Expanded(
+                                  flex: math.max(1, r.interest.paise),
+                                  child: Container(color: c.saffron),
+                                ),
+                                Expanded(
+                                  flex: math.max(1, r.principal.paise),
+                                  child: Container(color: c.rain),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: Sp.xs),
+          Row(
             children: [
-              Text('Notes', style: t.label),
-              const SizedBox(height: Sp.xs),
-              Text(l.note!, style: t.body),
+              Text(DateFormats.shortMonth.format(rows.first.dueDate), style: t.small),
+              const Spacer(),
+              Text(DateFormats.shortMonth.format(rows.last.dueDate), style: t.small),
             ],
           ),
-        ),
-    ];
+          const SizedBox(height: Sp.xs),
+          Wrap(
+            spacing: Sp.lg,
+            children: [
+              ChartDot(color: c.rain, label: 'Principal'),
+              ChartDot(color: c.saffron, label: 'Interest'),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -241,78 +342,48 @@ class _Hero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.ink;
-    final t = context.type;
     final s = state;
     final l = s.loan;
     final due = loanDueStatus(context, s);
     final pct = s.repaidBps ~/ 100;
+    final total = s.principalRepaid.paise + s.outstanding.paise + s.interestPaid.paise;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        KhataPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  // Principal repaid, principal left and interest paid so far.
-                  KhataDonut(
-                    size: 112,
-                    stroke: 15,
-                    parts: [
-                      BarPart(s.principalRepaid.paise.toDouble(), c.green),
-                      BarPart(s.outstanding.paise.toDouble(), c.brand),
-                      BarPart(s.interestPaid.paise.toDouble(), c.marigold),
-                    ],
-                    semanticLabel: '${l.direction.repaidVerb} $pct% of principal',
-                    center: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('$pct%', style: t.figure.copyWith(fontSize: 20)),
-                        Text('repaid', style: t.small),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: Sp.lg),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(l.direction.sentence(l.counterparty), style: t.label, maxLines: 2, overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 2),
-                        AnimatedAmount(s.outstanding, style: t.figureL, fit: true, animateOnMount: true),
-                        Text(s.isClosed ? 'Fully repaid' : 'Outstanding principal', style: t.label),
-                        const SizedBox(height: Sp.sm),
-                        KhataStamp(
-                          label: s.isClosed ? 'Closed' : (due.overdue ? 'Overdue' : 'Running'),
-                          color: s.isClosed ? c.green : (due.overdue ? c.red : c.brand),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: Sp.md),
-              KhataKey(
-                color: c.green,
-                label: l.direction.repaidVerb,
-                value: AmountText(s.principalRepaid, style: t.figureSmall.copyWith(color: c.ink), decimals: DecimalDisplay.none),
-              ),
-              KhataKey(
-                color: c.marigold,
-                label: 'Interest',
-                value: AmountText(s.interestPaid, style: t.figureSmall.copyWith(color: c.ink), decimals: DecimalDisplay.none),
-              ),
-              const SizedBox(height: Sp.sm),
-              Text('$pct% ${l.direction.repaidVerb.toLowerCase()} of ${maskedAmount(context, l.principal)}', style: t.label),
-              const SizedBox(height: Sp.xs),
-              Text(due.label, style: t.label.copyWith(color: due.color)),
-            ],
+        BahiSlab(
+          leading: LucideIcons.landmark,
+          label: s.isClosed ? 'Fully repaid' : 'Outstanding principal',
+          figure: SlabFigure(s.outstanding, decimals: DecimalDisplay.auto),
+          caption: '${l.direction.sentence(l.counterparty)} · of ${maskedAmount(context, l.principal)}',
+          stamp: SlabStamp(
+            label: s.isClosed ? 'Closed' : (due.overdue ? 'Overdue' : 'Running'),
+            tone: s.isClosed ? SlabTone.good : (due.overdue ? SlabTone.bad : SlabTone.neutral),
           ),
+          visual: SlabRing(
+            value: pct / 100,
+            size: 96,
+            color: Slab.good,
+            top: '$pct%',
+            bottom: l.direction.repaidVerb.toLowerCase(),
+            semanticLabel: '${l.direction.repaidVerb} $pct% of principal',
+          ),
+          stats: [
+            SlabStat.money(label: l.direction.repaidVerb, amount: s.principalRepaid, color: Slab.good),
+            SlabStat.money(label: 'Interest', amount: s.interestPaid, color: Slab.warn),
+          ],
+          footer: total <= 0
+              ? null
+              : SlabBar(
+                  parts: [
+                    (s.principalRepaid.paise / total, Slab.good),
+                    (s.interestPaid.paise / total, Slab.warn),
+                    (s.outstanding.paise / total, Slab.lilac),
+                  ],
+                  semanticLabel: 'Repaid, interest and outstanding',
+                ),
         ),
         if (!s.isClosed) ...[
-          const SizedBox(height: Sp.xl),
+          const SizedBox(height: Sp.md),
           LedgerButton(
             label: l.isBorrowed ? 'Record a payment' : 'Record money received',
             icon: LucideIcons.circleCheck,
@@ -325,8 +396,10 @@ class _Hero extends StatelessWidget {
   }
 }
 
-class _NextDueRow extends StatelessWidget {
-  const _NextDueRow({required this.state, required this.row});
+/// The next instalment: amount, due date tag, and its interest/principal
+/// split as one bar.
+class _NextDueCard extends StatelessWidget {
+  const _NextDueCard({required this.state, required this.row});
 
   final LoanState state;
   final ScheduleRow row;
@@ -338,13 +411,46 @@ class _NextDueRow extends StatelessWidget {
     final l = state.loan;
     final due = loanDueStatus(context, state);
     final title = l.isAmortizing ? 'EMI #${row.number}' : (row.isFinal ? 'Final payment' : 'Interest #${row.number}');
-    return LedgerRow(
-      title: title,
-      subtitle: '${DateFormats.dayMonthYear.format(row.dueDate)}, ${DateFormats.dueIn(row.dueDate, state.today)}\n'
-          '${maskedAmount(context, row.interest)} interest, ${maskedAmount(context, row.principal)} principal',
-      subtitleColor: due.overdue ? c.red : null,
-      subtitleLines: 3,
-      trailing: AmountText(row.payment, style: t.figure),
+    final total = row.interest.paise + row.principal.paise;
+    return MonsoonCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(title, style: t.labelStrong)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 4),
+                decoration: BoxDecoration(color: due.overdue ? c.redSoft : c.marigoldSoft, borderRadius: Rad.rChip),
+                child: Text(
+                  '${DateFormats.dayMonth.format(row.dueDate)} · ${DateFormats.dueIn(row.dueDate, state.today)}',
+                  style: t.small.copyWith(color: due.overdue ? c.red : c.marigoldInk, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Sp.sm),
+          AmountText(row.payment, style: t.figureL.copyWith(fontSize: 30), decimals: DecimalDisplay.none),
+          const SizedBox(height: Sp.md),
+          LedgerStackBar(
+            height: 10,
+            parts: [
+              BarPart(total <= 0 ? 0 : row.principal.paise / total, c.rain),
+              BarPart(total <= 0 ? 0 : row.interest.paise / total, c.saffron),
+            ],
+            semanticLabel: '${maskedAmount(context, row.principal)} principal, ${maskedAmount(context, row.interest)} interest',
+          ),
+          const SizedBox(height: Sp.sm),
+          Wrap(
+            spacing: Sp.lg,
+            runSpacing: Sp.xs,
+            children: [
+              ChartDot(color: c.rain, label: 'Principal ${maskedAmount(context, row.principal)}'),
+              ChartDot(color: c.saffron, label: 'Interest ${maskedAmount(context, row.interest)}'),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

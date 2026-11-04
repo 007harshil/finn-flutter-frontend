@@ -6,11 +6,148 @@ import '../../design_system/motion/motion.dart';
 import '../tokens.dart';
 import 'data.dart' show BarPart;
 
-/// Bahi visuals: chart-first summaries drawn like a shopkeeper's khata.
+/// Bahi visuals: chart-first summaries drawn like a shopkeeper's khata,
+/// coloured with the Monsoon data hues (rain = the main series, saffron =
+/// getting close, red = over).
 /// Warm ruled paper with a red margin line ([KhataPanel]), ring gauges
 /// ([KhataRing]), share donuts ([KhataDonut]), ruled columns
 /// ([KhataColumns]) and a tilted status stamp ([KhataStamp]). Every chart
 /// draws in once (≈600 ms) and appears instantly under reduced motion.
+
+/// Monsoon chart card (light): white, 20 px corners, a hairline edge, no
+/// shadow. Holds chart-led content so data reads before text.
+class MonsoonCard extends StatelessWidget {
+  const MonsoonCard({super.key, required this.child, this.padding = const EdgeInsets.all(Sp.lg)});
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ink;
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: const BorderRadius.all(Radius.circular(20)),
+        border: Border.all(color: c.line),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// One labelled bar of [MonsoonBars].
+@immutable
+class MonsoonBar {
+  const MonsoonBar(this.label, this.value, this.color,
+      {this.trailing, this.onTap, this.key, this.selected = false, this.semanticLabel});
+
+  final String label;
+  final double value;
+  final Color color;
+
+  /// The figure on the right (usually an AmountText).
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final Key? key;
+
+  /// Marked with a marigold wash (an active filter).
+  final bool selected;
+  final String? semanticLabel;
+}
+
+/// Monsoon category bars: name and figure on one line, a coloured bar
+/// under it scaled to the largest value. One hue per meaning.
+class MonsoonBars extends StatelessWidget {
+  const MonsoonBars({super.key, required this.bars, this.semanticLabel});
+
+  final List<MonsoonBar> bars;
+  final String? semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxV = bars.fold<double>(0, (m, b) => math.max(m, b.value));
+    double grow(double p, int i) => ((p * bars.length - i * 0.4) / (bars.length - i * 0.4)).clamp(0.0, 1.0);
+    return Semantics(
+      label: semanticLabel,
+      child: _Reveal(
+        valueKey: Object.hashAll(bars.map((b) => b.value.round())),
+        builder: (p) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < bars.length; i++)
+              _MonsoonBarRow(
+                key: bars[i].key,
+                bar: bars[i],
+                fill: maxV <= 0 ? 0 : (bars[i].value / maxV * grow(p, i)).clamp(0.0, 1.0),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MonsoonBarRow extends StatelessWidget {
+  const _MonsoonBarRow({super.key, required this.bar, required this.fill});
+
+  final MonsoonBar bar;
+  final double fill;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ink;
+    final t = context.type;
+    return Semantics(
+      button: bar.onTap != null,
+      selected: bar.selected,
+      label: bar.semanticLabel,
+      excludeSemantics: bar.semanticLabel != null,
+      child: Material(
+        color: bar.selected ? c.marigoldSoft : Colors.transparent,
+        borderRadius: Rad.rSm,
+        child: InkWell(
+          onTap: bar.onTap,
+          borderRadius: Rad.rSm,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: Text(bar.label, style: t.labelStrong, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    ?bar.trailing,
+                  ],
+                ),
+                const SizedBox(height: 5),
+                ClipRRect(
+                  borderRadius: Rad.pill,
+                  child: SizedBox(
+                    height: 7,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(child: ColoredBox(color: c.sunken)),
+                        FractionallySizedBox(
+                          widthFactor: fill,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(color: bar.color, borderRadius: Rad.pill),
+                            child: const SizedBox.expand(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// Draws [builder] with a 0→1 reveal that runs once per [valueKey].
 class _Reveal extends StatelessWidget {
@@ -49,8 +186,8 @@ class KhataPanel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: c.khata,
-        borderRadius: Rad.rLg,
-        border: c.isDark ? null : Border.all(color: c.khataRule),
+        borderRadius: Rad.rMd,
+        border: Border.all(color: c.khataRule),
       ),
       clipBehavior: Clip.antiAlias,
       child: CustomPaint(
@@ -90,8 +227,8 @@ class _RulePainter extends CustomPainter {
 }
 
 /// Ring gauge: fills clockwise from 12 o'clock to [value] (may pass 1).
-/// Colour follows meaning unless [color] is given: teal, amber from 85 %,
-/// red past 100 %. [marker] is the "should be here by now" tick. Small
+/// Colour follows meaning unless [color] is given: rain, saffron from
+/// 85 %, red past 100 %. [marker] is the "should be here by now" tick. Small
 /// ledger ticks ring the track.
 class KhataRing extends StatelessWidget {
   const KhataRing({
@@ -116,7 +253,7 @@ class KhataRing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ink;
-    final fill = color ?? (value > 1 ? c.red : (value >= 0.85 ? c.amber : c.brand));
+    final fill = color ?? (value > 1 ? c.red : (value >= 0.85 ? c.saffron : c.rain));
     return Semantics(
       label: semanticLabel,
       excludeSemantics: semanticLabel != null,
@@ -297,7 +434,7 @@ class KhataColumn {
 }
 
 /// Short ruled column chart (months, weeks): bars grow from the baseline
-/// with a small stagger; the highlighted one is teal, the rest soft ink.
+/// with a small stagger; the highlighted one is rain, the rest a rain wash.
 class KhataColumns extends StatelessWidget {
   const KhataColumns({super.key, required this.columns, this.height = 96, this.semanticLabel});
 
@@ -338,7 +475,7 @@ class KhataColumns extends StatelessWidget {
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 color: columns[i].color ??
-                                    (columns[i].highlight ? c.brand : c.inkSoft.withValues(alpha: 0.35)),
+                                    (columns[i].highlight ? c.rain : c.rain.withValues(alpha: 0.28)),
                                 borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                               ),
                             ),
@@ -425,6 +562,26 @@ class KhataStamp extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Small legend: a colour dot and a short label.
+class ChartDot extends StatelessWidget {
+  const ChartDot({super.key, required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
+        Text(label, style: context.type.small),
+      ],
     );
   }
 }

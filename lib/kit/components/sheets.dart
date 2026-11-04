@@ -126,7 +126,15 @@ class FinnSheetScaffold extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (heading != null) Semantics(header: true, child: Text(heading, style: t.heading)),
+                            if (heading != null) ...[
+                              Semantics(header: true, child: Text(heading, style: t.heading.wide(112).copyWith(fontSize: 21))),
+                              const SizedBox(height: Sp.sm),
+                              Container(
+                                width: 32,
+                                height: 3,
+                                decoration: BoxDecoration(color: c.marigold, borderRadius: Rad.pill),
+                              ),
+                            ],
                             if (desc != null) ...[const SizedBox(height: Sp.xs), Text(desc, style: t.label)],
                           ],
                         ),
