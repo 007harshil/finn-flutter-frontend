@@ -289,7 +289,7 @@ class _RestoreDismissed extends ConsumerWidget {
       expand: true,
       onPressed: () async {
         try {
-          await ref.read(alertInboxControllerProvider).restoreAll();
+          await runWithLoader(context, () => ref.read(alertInboxControllerProvider).restoreAll());
         } on AppFailure catch (f) {
           if (context.mounted)
             FinnToast.error(

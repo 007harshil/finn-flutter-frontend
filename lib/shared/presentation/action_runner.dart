@@ -15,9 +15,10 @@ import '../../kit/kit.dart';
 String newIdempotencyKey() => 'ui_${DateTime.now().microsecondsSinceEpoch}_${identityHashCode(Object())}';
 
 /// UI glue around [OperationDispatcher]:
-/// 1. dispatches the action;
-/// 2. if confirmation is needed, shows the preview in a review sheet and
-///    re-dispatches with the matching fingerprint;
+/// 1. dispatches the action behind a blocking loader ([runWithLoader]);
+/// 2. if confirmation is needed, shows the preview in a review sheet that
+///    stays open, with a spinner on its approve button, until the
+///    confirmed dispatch has a response;
 /// 3. shows success/error feedback.
 ///
 /// Returns the result value, or null when cancelled or rejected. Field
@@ -37,23 +38,38 @@ Future<O?> runAction<I extends ActionInput, O>(
 }) async {
   final dispatcher = ref.read(actionDispatcherProvider);
   final haptics = ref.read(settingsProvider).hapticsEnabled;
-  var outcome = await dispatcher.dispatch(action, input, idempotencyKey: idempotencyKey);
+  var outcome = await runWithLoader(
+    context,
+    () => dispatcher.dispatch(action, input, idempotencyKey: idempotencyKey),
+  );
 
   if (outcome is ActionNeedsConfirmation<O>) {
     if (!context.mounted) return null;
+    final preview = outcome.preview;
+    ActionOutcome<O>? confirmed;
     final approved = await showActionReview(
       context,
-      outcome.preview,
+      preview,
       confirmLabel: confirmLabel,
       destructive: destructive,
+      onApprove: () async {
+        try {
+          confirmed = await dispatcher.dispatch(
+            action,
+            input,
+            idempotencyKey: idempotencyKey,
+            confirmation: ActionConfirmation(preview.fingerprint),
+          );
+        } catch (e) {
+          confirmed = ActionRejected(
+            AppFailure(FailureCode.unknown, 'Something went wrong. Please try again.', retryable: true),
+          );
+        }
+      },
     );
-    if (!approved || !context.mounted) return null;
-    outcome = await dispatcher.dispatch(
-      action,
-      input,
-      idempotencyKey: idempotencyKey,
-      confirmation: ActionConfirmation(outcome.preview.fingerprint),
-    );
+    final result = confirmed;
+    if (!approved || result == null) return null;
+    outcome = result;
   }
   if (!context.mounted) return null;
 
@@ -87,20 +103,76 @@ Future<O?> runAction<I extends ActionInput, O>(
 /// Review sheet for consequential operations: shows exactly what will
 /// happen and asks for explicit approval. [destructive] draws the approve
 /// button in red outline (like [showFinnConfirm]) for irreversible deletes.
+///
+/// With [onApprove] the sheet stays open after approval, with a spinner on
+/// the approve button and dismissal blocked, until that work completes.
 Future<bool> showActionReview(
   BuildContext context,
   ActionPreview preview, {
   String confirmLabel = 'Confirm',
   bool destructive = false,
+  Future<void> Function()? onApprove,
 }) async {
   final result = await showFinnSheet<bool>(
     context,
-    builder: (ctx) {
-      final t = ctx.type;
-      final c = ctx.ink;
-      return FinnSheetScaffold(
+    // Drag-to-close skips PopScope; the close button and barrier respect it.
+    enableDrag: onApprove == null,
+    builder: (_) => _ActionReviewSheet(
+      preview: preview,
+      confirmLabel: confirmLabel,
+      destructive: destructive,
+      onApprove: onApprove,
+    ),
+  );
+  return result ?? false;
+}
+
+class _ActionReviewSheet extends StatefulWidget {
+  const _ActionReviewSheet({
+    required this.preview,
+    required this.confirmLabel,
+    required this.destructive,
+    required this.onApprove,
+  });
+
+  final ActionPreview preview;
+  final String confirmLabel;
+  final bool destructive;
+  final Future<void> Function()? onApprove;
+
+  @override
+  State<_ActionReviewSheet> createState() => _ActionReviewSheetState();
+}
+
+class _ActionReviewSheetState extends State<_ActionReviewSheet> {
+  bool _busy = false;
+
+  Future<void> _approve() async {
+    final work = widget.onApprove;
+    if (_busy) return;
+    if (work == null) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await work();
+    } finally {
+      if (mounted) Navigator.of(context).pop(true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.type;
+    final c = context.ink;
+    final preview = widget.preview;
+    return PopScope(
+      canPop: !_busy,
+      child: FinnSheetScaffold(
         title: preview.title,
         description: preview.lines.isEmpty && preview.warnings.isEmpty ? null : preview.summary,
+        onClose: _busy ? () {} : null,
         footer: Row(
           children: [
             Expanded(
@@ -108,18 +180,19 @@ Future<bool> showActionReview(
                 label: 'Cancel',
                 variant: LedgerButtonVariant.secondary,
                 expand: true,
-                onPressed: () => Navigator.of(ctx).pop(false),
+                onPressed: _busy ? null : () => Navigator.of(context).pop(false),
               ),
             ),
             const SizedBox(width: Sp.md),
             Expanded(
               flex: 2,
               child: LedgerButton(
-                label: confirmLabel,
+                label: widget.confirmLabel,
                 expand: true,
-                variant: destructive ? LedgerButtonVariant.secondary : LedgerButtonVariant.primary,
-                color: destructive ? c.red : null,
-                onPressed: () => Navigator.of(ctx).pop(true),
+                variant: widget.destructive ? LedgerButtonVariant.secondary : LedgerButtonVariant.primary,
+                color: widget.destructive ? c.red : null,
+                loading: _busy,
+                onPressed: _approve,
               ),
             ),
           ],
@@ -146,8 +219,7 @@ Future<bool> showActionReview(
             if (preview.lines.isEmpty && preview.warnings.isEmpty) Text(preview.summary, style: t.body),
           ],
         ),
-      );
-    },
-  );
-  return result ?? false;
+      ),
+    );
+  }
 }

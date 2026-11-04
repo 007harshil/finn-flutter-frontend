@@ -105,7 +105,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
 
   Future<void> _restore() async {
     try {
-      await ref.read(alertInboxControllerProvider).restoreAll();
+      await runWithLoader(context, () => ref.read(alertInboxControllerProvider).restoreAll());
     } on AppFailure catch (f) {
       if (mounted)
         FinnToast.error(

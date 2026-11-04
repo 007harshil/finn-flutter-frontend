@@ -87,7 +87,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final message = await change();
+      final message = await runWithLoader(context, change);
       if (!mounted) return;
       FinnToast.success(context, message);
     } on AppFailure catch (f) {

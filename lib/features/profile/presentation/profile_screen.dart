@@ -281,7 +281,7 @@ class _SecuritySectionState extends ConsumerState<_SecuritySection> {
     // this one. The local session is cleared even if the provider fails.
     FinnToast.success(context, 'Signed out', subtitle: 'See you soon.');
     try {
-      await ref.read(authControllerProvider.notifier).signOut();
+      await runWithLoader(context, () => ref.read(authControllerProvider.notifier).signOut());
     } catch (_) {
       // Already signed out locally.
     }

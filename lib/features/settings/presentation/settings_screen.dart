@@ -254,7 +254,7 @@ class _DataGroup extends ConsumerWidget {
     );
     if (!ok || !context.mounted) return;
     try {
-      await ref.read(dataResetServiceProvider).loadSampleData();
+      await runWithLoader(context, () => ref.read(dataResetServiceProvider).loadSampleData());
       if (context.mounted) FinnToast.success(context, 'Sample data loaded');
     } on AppFailure catch (f) {
       if (context.mounted) {
@@ -279,7 +279,7 @@ class _DataGroup extends ConsumerWidget {
     );
     if (!ok || !context.mounted) return;
     try {
-      await ref.read(dataResetServiceProvider).eraseEverything();
+      await runWithLoader(context, () => ref.read(dataResetServiceProvider).eraseEverything());
     } on AppFailure catch (f) {
       if (context.mounted) {
         FinnToast.error(context, 'Could not erase your data', subtitle: f.message);

@@ -70,7 +70,7 @@ class _AgentHistorySheetState extends ConsumerState<AgentHistorySheet> {
     );
     if (!ok || !mounted) return;
     try {
-      await ref.read(agentHistoryProvider).clear();
+      await runWithLoader(context, () => ref.read(agentHistoryProvider).clear());
       if (mounted) await _load(reset: true);
     } on AppFailure catch (f) {
       if (mounted) FinnToast.error(context, f.message);

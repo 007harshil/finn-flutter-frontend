@@ -13,6 +13,7 @@ import '../../features/alerts/domain/alert.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/domain/auth_session.dart';
 import '../../features/settings/domain/app_settings.dart';
+import '../../kit/components/busy.dart' show runWithLoader;
 import 'remote_providers.dart';
 import 'sync_engine.dart';
 
@@ -184,7 +185,13 @@ class _RemoteSessionScopeState extends ConsumerState<RemoteSessionScope> with Wi
     await _backend.prefs.setBool(_offeredKey(userId), true);
     if (!upload) return;
     try {
-      await _backend.importer.upload(idempotencyKey: 'import_${userId}_${DateTime.now().millisecondsSinceEpoch}');
+      final key = 'import_${userId}_${DateTime.now().millisecondsSinceEpoch}';
+      Future<void> upload() => _backend.importer.upload(idempotencyKey: key);
+      if (ctx.mounted) {
+        await runWithLoader(ctx, upload);
+      } else {
+        await upload();
+      }
       _toast((c) => FinnToast.success(c, 'Your data was uploaded'));
     } on AppFailure catch (f) {
       if (f.code == FailureCode.conflict) {

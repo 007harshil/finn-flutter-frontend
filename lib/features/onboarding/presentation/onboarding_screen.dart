@@ -82,34 +82,36 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     setState(() => _busy = true);
     try {
-      final repos = ref.read(financeRepositoriesProvider);
-      final today = ref.read(clockProvider).today();
-      // Connected: the account is the dataset; only the profile is written
-      // (through the `profile.update` action endpoint).
-      final remote = ref.read(remoteModeProvider);
-      if (_mode == _StartMode.fresh) {
-        if (!remote) await ref.read(localDataStoreProvider).reseed(DataScenario.empty, today);
-        await repos.profile.set(FinancialProfile(displayName: name, openingBalance: balance!, openingDate: today));
-        if (!remote) {
-          // The ledger reads the Cash account; the server does this itself.
-          final cash = await repos.moneyAccounts.getById(cashAccountId);
-          if (cash != null) {
-            await repos.moneyAccounts.save(cash.copyWith(
-              opening: balance,
-              openingDate: today,
-              updatedAt: DateTime.now(),
-              version: cash.version + 1,
-            ));
+      await runWithLoader(context, () async {
+        final repos = ref.read(financeRepositoriesProvider);
+        final today = ref.read(clockProvider).today();
+        // Connected: the account is the dataset; only the profile is written
+        // (through the `profile.update` action endpoint).
+        final remote = ref.read(remoteModeProvider);
+        if (_mode == _StartMode.fresh) {
+          if (!remote) await ref.read(localDataStoreProvider).reseed(DataScenario.empty, today);
+          await repos.profile.set(FinancialProfile(displayName: name, openingBalance: balance!, openingDate: today));
+          if (!remote) {
+            // The ledger reads the Cash account; the server does this itself.
+            final cash = await repos.moneyAccounts.getById(cashAccountId);
+            if (cash != null) {
+              await repos.moneyAccounts.save(cash.copyWith(
+                opening: balance,
+                openingDate: today,
+                updatedAt: DateTime.now(),
+                version: cash.version + 1,
+              ));
+            }
           }
+        } else {
+          final existing = repos.profile.current;
+          await repos.profile.set(
+            existing?.copyWith(displayName: name) ??
+                FinancialProfile(displayName: name, openingBalance: Money.zero, openingDate: today),
+          );
         }
-      } else {
-        final existing = repos.profile.current;
-        await repos.profile.set(
-          existing?.copyWith(displayName: name) ??
-              FinancialProfile(displayName: name, openingBalance: Money.zero, openingDate: today),
-        );
-      }
-      await ref.read(settingsProvider.notifier).update((s) => s.copyWith(onboardingComplete: true));
+        await ref.read(settingsProvider.notifier).update((s) => s.copyWith(onboardingComplete: true));
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() => _busy = false);

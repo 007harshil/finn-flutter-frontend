@@ -172,6 +172,9 @@ class FinnSheetScaffold extends StatelessWidget {
 /// [destructive] draws the confirm button as red text on a red outline
 /// (never a red slab): the user should read the consequence, not be
 /// pushed towards it.
+///
+/// With [onConfirm] the dialog stays open after the tap, with a spinner on
+/// the confirm button and dismissal blocked, until that work completes.
 Future<bool> showFinnConfirm(
   BuildContext context, {
   required String title,
@@ -180,14 +183,73 @@ Future<bool> showFinnConfirm(
   String cancelLabel = 'Cancel',
   bool destructive = false,
   Widget? details,
+  Future<void> Function()? onConfirm,
 }) async {
   final result = await showDialog<bool>(
     context: context,
     barrierColor: context.ink.scrim,
-    builder: (ctx) {
-      final c = ctx.ink;
-      final t = ctx.type;
-      return Dialog(
+    builder: (_) => _ConfirmDialog(
+      title: title,
+      message: message,
+      confirmLabel: confirmLabel,
+      cancelLabel: cancelLabel,
+      destructive: destructive,
+      details: details,
+      onConfirm: onConfirm,
+    ),
+  );
+  return result ?? false;
+}
+
+class _ConfirmDialog extends StatefulWidget {
+  const _ConfirmDialog({
+    required this.title,
+    required this.message,
+    required this.confirmLabel,
+    required this.cancelLabel,
+    required this.destructive,
+    required this.details,
+    required this.onConfirm,
+  });
+
+  final String title;
+  final String message;
+  final String confirmLabel;
+  final String cancelLabel;
+  final bool destructive;
+  final Widget? details;
+  final Future<void> Function()? onConfirm;
+
+  @override
+  State<_ConfirmDialog> createState() => _ConfirmDialogState();
+}
+
+class _ConfirmDialogState extends State<_ConfirmDialog> {
+  bool _busy = false;
+
+  Future<void> _confirm() async {
+    final work = widget.onConfirm;
+    if (_busy) return;
+    if (work == null) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await work();
+    } finally {
+      if (mounted) Navigator.of(context).pop(true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ink;
+    final t = context.type;
+    final details = widget.details;
+    return PopScope(
+      canPop: !_busy,
+      child: Dialog(
         backgroundColor: c.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
@@ -204,9 +266,9 @@ Future<bool> showFinnConfirm(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Semantics(header: true, child: Text(title, style: t.heading)),
+                Semantics(header: true, child: Text(widget.title, style: t.heading)),
                 const SizedBox(height: Sp.sm),
-                Text(message, style: t.body.copyWith(color: c.inkSoft)),
+                Text(widget.message, style: t.body.copyWith(color: c.inkSoft)),
                 if (details != null) ...[const SizedBox(height: Sp.lg), details],
                 const SizedBox(height: Sp.xl),
                 OverflowBar(
@@ -217,15 +279,16 @@ Future<bool> showFinnConfirm(
                   overflowSpacing: Sp.sm,
                   children: [
                     LedgerButton(
-                      label: cancelLabel,
+                      label: widget.cancelLabel,
                       variant: LedgerButtonVariant.secondary,
-                      onPressed: () => Navigator.of(ctx).pop(false),
+                      onPressed: _busy ? null : () => Navigator.of(context).pop(false),
                     ),
                     LedgerButton(
-                      label: confirmLabel,
-                      variant: destructive ? LedgerButtonVariant.secondary : LedgerButtonVariant.primary,
-                      color: destructive ? c.red : null,
-                      onPressed: () => Navigator.of(ctx).pop(true),
+                      label: widget.confirmLabel,
+                      variant: widget.destructive ? LedgerButtonVariant.secondary : LedgerButtonVariant.primary,
+                      color: widget.destructive ? c.red : null,
+                      loading: _busy,
+                      onPressed: _confirm,
                     ),
                   ],
                 ),
@@ -233,10 +296,9 @@ Future<bool> showFinnConfirm(
             ),
           ),
         ),
-      );
-    },
-  );
-  return result ?? false;
+      ),
+    );
+  }
 }
 
 /// One entry in [showFinnActionMenu].
