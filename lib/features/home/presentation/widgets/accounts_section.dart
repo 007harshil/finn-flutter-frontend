@@ -90,7 +90,7 @@ class HeroAccountsStrip extends ConsumerWidget {
             padding: EdgeInsets.fromLTRB(inset, Sp.xs, inset - Sp.sm, Sp.xs),
             child: Row(
               children: [
-                Flexible(
+                Expanded(
                   child: Semantics(
                     header: true,
                     child: Text.rich(
@@ -109,7 +109,6 @@ class HeroAccountsStrip extends ConsumerWidget {
                     ),
                   ),
                 ),
-                const Spacer(),
                 _ManageLink(onTap: () => context.push(AppRoutes.accounts)),
               ],
             ),

@@ -206,42 +206,133 @@ class _MonthHero extends StatelessWidget {
     final over = o.isOver;
     final safe = o.safePerDay;
     final days = o.daysLeft;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          over ? 'Over by' : (o.isPast ? 'Left unspent' : 'Left to spend'),
-          style: t.label.copyWith(color: over ? c.red : null),
-        ),
-        const SizedBox(height: Sp.xs),
-        AnimatedAmount(
-          o.remaining.abs(),
-          style: t.figureXL.copyWith(color: over && !hidden ? c.red : c.ink),
-          decimals: DecimalDisplay.none,
-          fit: true,
-          animateOnMount: true,
-        ),
-        const SizedBox(height: Sp.xs),
-        Text('of ${budgetMoney(context, o.limit)}', style: t.label),
-        const SizedBox(height: Sp.lg),
-        LedgerBar(
-          key: ValueKey(o.month),
-          value: o.used,
-          marker: o.isPast ? null : o.elapsed,
-          semanticLabel: hidden ? null : '${(o.used * 100).round()} percent of the total limit spent',
-        ),
-        if (!o.isPast && safe != null) ...[
+    final counts = o.counts;
+    final pct = (o.used * 100).round();
+    final (stamp, stampColor) = over
+        ? ('Over limit', c.red)
+        : (counts[BudgetState.over] ?? 0) > 0 || (counts[BudgetState.risk] ?? 0) > 0
+            ? ('Watch', c.amber)
+            : ('On track', c.green);
+    return KhataPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              KhataRing(
+                key: ValueKey(o.month),
+                value: o.used,
+                marker: o.isPast ? null : o.elapsed,
+                size: 116,
+                semanticLabel: hidden ? null : '$pct percent of the total limit spent',
+                center: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(hidden ? '••' : '$pct%', style: t.figure.copyWith(fontSize: 20)),
+                    Text('used', style: t.small),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      over ? 'Over by' : (o.isPast ? 'Left unspent' : 'Left to spend'),
+                      style: t.label.copyWith(color: over ? c.red : null),
+                    ),
+                    const SizedBox(height: 2),
+                    AnimatedAmount(
+                      o.remaining.abs(),
+                      style: t.figureL.copyWith(color: over && !hidden ? c.red : c.ink),
+                      decimals: DecimalDisplay.none,
+                      fit: true,
+                      animateOnMount: true,
+                    ),
+                    Text('of ${budgetMoney(context, o.limit)}', style: t.label),
+                    const SizedBox(height: Sp.sm),
+                    KhataStamp(label: stamp, color: stampColor),
+                  ],
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: Sp.md),
-          Text(
-            '${budgetMoney(context, safe)} a day for $days ${days == 1 ? 'day' : 'days'}',
-            style: t.label.copyWith(color: c.ink),
+          // How many budgets are in each state, as one counted strip.
+          _StateStrip(counts: counts),
+          if (!o.isPast && safe != null) ...[
+            const SizedBox(height: Sp.md),
+            Text(
+              '${budgetMoney(context, safe)} a day for $days ${days == 1 ? 'day' : 'days'}',
+              style: t.label.copyWith(color: c.ink),
+            ),
+          ],
+          if (o.committed.isPositive) ...[
+            SizedBox(height: !o.isPast && safe != null ? Sp.xs : Sp.md),
+            Text('${budgetMoney(context, o.committed)} in subscriptions still to come', style: t.label),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One pip per budget, grouped and coloured by state (over, at risk, on
+/// track, paused), with the counts underneath.
+class _StateStrip extends StatelessWidget {
+  const _StateStrip({required this.counts});
+
+  final Map<BudgetState, int> counts;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ink;
+    final t = context.type;
+    Color colorOf(BudgetState s) => switch (s) {
+      BudgetState.over => c.red,
+      BudgetState.risk => c.amber,
+      BudgetState.onTrack => c.green,
+      BudgetState.paused => c.lineStrong,
+    };
+    final shown = [for (final s in BudgetState.values) if ((counts[s] ?? 0) > 0) s];
+    if (shown.isEmpty) return const SizedBox.shrink();
+    return Semantics(
+      label: [for (final s in shown) '${counts[s]} ${s.label.toLowerCase()}'].join(', '),
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              for (final s in shown)
+                for (var i = 0; i < counts[s]!; i++)
+                  Expanded(
+                    child: Container(
+                      height: 10,
+                      margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                      decoration: BoxDecoration(color: colorOf(s), borderRadius: BorderRadius.circular(3)),
+                    ),
+                  ),
+            ],
+          ),
+          const SizedBox(height: Sp.xs + 2),
+          Wrap(
+            spacing: Sp.md,
+            children: [
+              for (final s in shown)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 8, height: 8, decoration: BoxDecoration(color: colorOf(s), shape: BoxShape.circle)),
+                    const SizedBox(width: 5),
+                    Text('${counts[s]} ${s.label.toLowerCase()}', style: t.small),
+                  ],
+                ),
+            ],
           ),
         ],
-        if (o.committed.isPositive) ...[
-          SizedBox(height: !o.isPast && safe != null ? Sp.xs : Sp.md),
-          Text('${budgetMoney(context, o.committed)} in subscriptions still to come', style: t.label),
-        ],
-      ],
+      ),
     );
   }
 }

@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/money/money_format.dart';
 import '../../../core/time/dates.dart';
+import '../../../core/money/money.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../domain/loan_calculator.dart';
@@ -155,28 +156,70 @@ class _Hero extends StatelessWidget {
           value: AmountText(o.dueIn30Days, style: t.figure, decimals: DecimalDisplay.none),
         ),
     ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(owe ? 'I owe' : 'Owed to me', style: t.label),
-        const SizedBox(height: Sp.xs),
-        AnimatedAmount(main, style: t.figureXL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
-        if (stats.isNotEmpty) ...[
-          const SizedBox(height: Sp.lg),
+    final mine = [for (final l in o.active) if (l.loan.isBorrowed == owe) l];
+    final repaid = mine.fold<int>(0, (sum, l) => sum + l.principalRepaid.paise);
+    final left = mine.fold<int>(0, (sum, l) => sum + l.outstanding.paise);
+    final share = repaid + left <= 0 ? 0.0 : repaid / (repaid + left);
+    final hidden = AmountVisibility.hiddenOf(context);
+    return KhataPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Row(
             children: [
-              for (var i = 0; i < stats.length; i++) ...[
-                if (i > 0) const SizedBox(width: Sp.xl),
-                stats[i],
-              ],
+              // Principal repaid (green) against what is still left (teal).
+              KhataDonut(
+                size: 112,
+                stroke: 15,
+                parts: [BarPart(repaid.toDouble(), c.green), BarPart(left.toDouble(), c.brand)],
+                semanticLabel: hidden ? null : '${mine.length} loans, ${(share * 100).round()} percent of principal repaid',
+                center: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(hidden ? '••' : '${(share * 100).round()}%', style: t.figure.copyWith(fontSize: 20)),
+                    Text('repaid', style: t.small),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(owe ? 'I owe' : 'Owed to me', style: t.label),
+                    const SizedBox(height: 2),
+                    AnimatedAmount(main, style: t.figureL, decimals: DecimalDisplay.none, fit: true, animateOnMount: true),
+                    const SizedBox(height: Sp.sm),
+                    KhataStamp(
+                      label: o.dueIn30DaysCount > 0 ? '${o.dueIn30DaysCount} due soon' : 'All calm',
+                      color: o.dueIn30DaysCount > 0 ? c.amber : c.green,
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
-        ] else if (o.active.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: Sp.md),
-            child: Text('Nothing due in the next 30 days', style: t.label.copyWith(color: c.inkSoft)),
+          const SizedBox(height: Sp.md),
+          KhataKey(
+            color: c.green,
+            label: 'Principal repaid',
+            value: AmountText(Money.fromPaise(repaid), style: t.figureSmall.copyWith(color: c.ink), decimals: DecimalDisplay.none),
           ),
-      ],
+          KhataKey(
+            color: c.brand,
+            label: 'Still to repay',
+            value: AmountText(Money.fromPaise(left), style: t.figureSmall.copyWith(color: c.ink), decimals: DecimalDisplay.none),
+          ),
+          if (stats.isNotEmpty) ...[
+            const SizedBox(height: Sp.md),
+            Wrap(spacing: Sp.xl, runSpacing: Sp.sm, children: stats),
+          ] else if (o.active.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: Sp.md),
+              child: Text('Nothing due in the next 30 days', style: t.label.copyWith(color: c.inkSoft)),
+            ),
+        ],
+      ),
     );
   }
 }

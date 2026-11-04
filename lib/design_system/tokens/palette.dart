@@ -126,6 +126,17 @@ abstract final class Hue {
   static const nightInfo = Color(0xFF8DB8F5);
   static const nightInfoSoft = Color(0xFF15253D);
 
+  // Bahi khata: warm ruled paper with a red margin line and marigold ink,
+  // used behind chart-led summaries.
+  static const khata = Color(0xFFFFF7E3);
+  static const khataRule = Color(0xFFEADFC2);
+  static const khataMargin = Color(0xFFE7A49C);
+  static const marigold = Color(0xFFF4A51C);
+  static const nightKhata = Color(0xFF1E2224);
+  static const nightKhataRule = Color(0xFF2C3133);
+  static const nightKhataMargin = Color(0xFF6E3A35);
+  static const nightMarigold = Color(0xFFFFC24B);
+
   /// Chart hues, one per meaning (light / dark).
   static const chartLight = [
     current,

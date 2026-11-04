@@ -91,3 +91,10 @@ Done so far:
 - Capture tool also shoots `63b_insights_spending`.
 
 NEXT: review remaining screens in after/ screenshots (goals, loans, pending, settings, onboarding, assistant) for leftover ink-heavy fills; consider "Today/Yesterday/Pick" date chips in add form; README/ARCHITECTURE design notes; commit when the user asks.
+
+## Bahi visual screens (2026-11-04, user: "half screens Bahi type, more visuals than text")
+- Kit `lib/kit/components/visuals.dart` (exported by kit.dart): `KhataPanel` (warm ruled paper + double red margin line), `KhataRing` (ledger-ticked ring gauge, pace marker, teal/amber 85%/red 100% unless colour given), `KhataDonut` (gapped share donut), `KhataColumns` (ruled column chart, staggered grow), `KhataStamp` (tilted double-edge status stamp), `KhataKey` (legend row). All draw in ~650 ms once; instant under reduced motion.
+- Tokens: `Hue.khata/khataRule/khataMargin/marigold` (+ night variants) → `LedgerColors.khata, khataRule, khataMargin, marigold`.
+- Heroes rebuilt as khata pages: Budgets (`_MonthHero`: used ring with pace tick + stamp + `_StateStrip` one pip per budget by state), Goals (`_Hero`: overall ring + stamp + mini ring per active goal, goal tint), Loans (`_Hero`: repaid vs left donut + keys + stats in Wrap), Subscriptions (`_Hero`: plan-share donut + top-4 keys + next-30-days weekly columns).
+- Full suite green: 809 pass. Light screenshots refreshed.
+- NEXT for Bahi half: Net worth, Accounts (donut of balances), Emergency fund (months-covered ring), Pending (keep balance beam, add khata panel), Home "This month" (weekly KhataColumns). Recapture dark.

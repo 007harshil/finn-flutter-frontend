@@ -18,4 +18,5 @@ export 'components/forms.dart';
 export 'components/panel_slice.dart';
 export 'components/sheets.dart';
 export 'components/surfaces.dart';
+export 'components/visuals.dart';
 export 'tokens.dart';

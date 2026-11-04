@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_format.dart';
+import '../../../core/time/dates.dart';
 import '../../../kit/kit.dart';
 import '../../../shared/presentation/async_view.dart';
 import '../domain/subscription.dart';
@@ -146,40 +147,90 @@ class _Hero extends StatelessWidget {
     final o = overview;
     final share = o.incomeShareBps;
     final impact = o.incomeImpact;
-    return MergeSemantics(
+    final hidden = AmountVisibility.hiddenOf(context);
+    // Biggest plans first, by price per charge.
+    final plans = [...o.active]..sort((x, y) => y.amount.paise.compareTo(x.amount.paise));
+    final top = plans.take(4).toList();
+    final rest = plans.skip(4).fold<int>(0, (sum, x) => sum + x.amount.paise);
+    final hues = [for (var i = 0; i < top.length; i++) c.tint(i * 3 + 2).$1];
+    // Next 30 days in four weeks.
+    final weeks = List<int>.filled(4, 0);
+    for (final e in o.upcoming) {
+      final w = (daysBetween(o.today, e.date) ~/ 7).clamp(0, 3);
+      weeks[w] += e.subscription.amount.paise;
+    }
+    final peak = weeks.indexOf(weeks.reduce((x, y) => x > y ? x : y));
+    return KhataPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Per month', style: t.label),
-          const SizedBox(height: Sp.xs),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Flexible(
-                child: AnimatedAmount(
-                  o.monthly,
-                  style: t.figureXL,
-                  decimals: DecimalDisplay.none,
-                  fit: true,
-                  animateOnMount: true,
+          MergeSemantics(
+            child: Row(
+              children: [
+                KhataDonut(
+                  size: 112,
+                  stroke: 15,
+                  parts: [
+                    for (var i = 0; i < top.length; i++) BarPart(top[i].amount.paise.toDouble(), hues[i]),
+                    if (rest > 0) BarPart(rest.toDouble(), c.lineStrong),
+                  ],
+                  center: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('${o.active.length}', style: t.figure.copyWith(fontSize: 22)),
+                      Text(o.active.length == 1 ? 'plan' : 'plans', style: t.small),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: Sp.sm),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 5),
-                child: Text('${o.active.length} ${o.active.length == 1 ? 'plan' : 'plans'}', style: t.figureSmall),
-              ),
-            ],
+                const SizedBox(width: Sp.lg),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Per month', style: t.label),
+                      const SizedBox(height: 2),
+                      AnimatedAmount(
+                        o.monthly,
+                        style: t.figureL,
+                        decimals: DecimalDisplay.none,
+                        fit: true,
+                        animateOnMount: true,
+                      ),
+                      const SizedBox(height: Sp.xs),
+                      _Figure(label: 'Per year', amount: o.annual),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: Sp.lg),
-          Row(
-            children: [
-              Expanded(child: _Figure(label: 'Per year', amount: o.annual)),
-              Expanded(child: _Figure(label: 'Next 30 days', amount: o.upcomingTotal)),
-            ],
-          ),
-          if (share != null && impact != null) ...[
+          const SizedBox(height: Sp.md),
+          for (var i = 0; i < top.length; i++)
+            KhataKey(
+              color: hues[i],
+              label: top[i].name,
+              value: AmountText(top[i].amount, style: t.figureSmall.copyWith(color: c.ink), decimals: DecimalDisplay.none),
+            ),
+          if (o.upcoming.isNotEmpty) ...[
             const SizedBox(height: Sp.lg),
+            Row(
+              children: [
+                Expanded(child: Text('Next 30 days', style: t.labelStrong)),
+                AmountText(o.upcomingTotal, style: t.figureSmall.copyWith(color: c.ink), decimals: DecimalDisplay.none),
+              ],
+            ),
+            const SizedBox(height: Sp.sm),
+            KhataColumns(
+              height: 72,
+              semanticLabel: hidden ? null : 'Charges in each of the next four weeks',
+              columns: [
+                for (var w = 0; w < 4; w++)
+                  KhataColumn(w == 0 ? 'This week' : 'Week ${w + 1}', weeks[w].toDouble(), highlight: w == peak),
+              ],
+            ),
+          ],
+          if (share != null && impact != null) ...[
+            const SizedBox(height: Sp.md),
             Text(
               "${(share / 100).toStringAsFixed(1)}% of last month's income",
               style: t.label.copyWith(color: impact.color(c)),

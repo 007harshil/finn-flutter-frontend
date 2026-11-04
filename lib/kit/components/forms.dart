@@ -701,7 +701,8 @@ Widget? _optionLeading<T>(LedgerOption<T> o, {double size = 36}) =>
     o.leading ?? (o.icon == null ? null : IconWell(icon: o.icon!, size: size));
 
 /// Opens a sheet listing [options]; resolves with the chosen value, or
-/// null when dismissed. Long lists (over 8) get a search box.
+/// null when dismissed. Long lists (over 8) get a search box pinned above
+/// the list.
 Future<T?> showLedgerPicker<T>(
   BuildContext context, {
   required String title,
@@ -741,13 +742,12 @@ class _PickerSheetState<T> extends State<_PickerSheet<T>> {
               .toList();
     return FinnSheetScaffold(
       title: widget.title,
+      header: widget.options.length > 8
+          ? LedgerSearchField(hint: widget.searchHint, onChanged: (v) => setState(() => _query = v))
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (widget.options.length > 8) ...[
-            LedgerSearchField(hint: widget.searchHint, onChanged: (v) => setState(() => _query = v)),
-            const SizedBox(height: Sp.md),
-          ],
           if (visible.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: Sp.xl),

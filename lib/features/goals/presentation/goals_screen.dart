@@ -189,40 +189,88 @@ class _Hero extends StatelessWidget {
         ? null
         : '${goalMoney(context, need)} a month keeps every dated goal on time. '
             '${plan.isPositive ? 'You put in about ${goalMoney(context, plan)}.' : 'No monthly amounts are planned yet.'}';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('Saved for goals', style: t.label),
-        const SizedBox(height: Sp.xs),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Flexible(
-              child: AnimatedAmount(
-                b.saved,
-                style: t.figureXL,
-                decimals: DecimalDisplay.none,
-                fit: true,
-                animateOnMount: true,
+    final hidden = AmountVisibility.hiddenOf(context);
+    final goals = b.active.take(4).toList();
+    return KhataPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              KhataRing(
+                value: b.progress,
+                size: 112,
+                stroke: 11,
+                color: c.green,
+                semanticLabel: hidden ? null : '${goalPercent(b.progress)} of all targets saved',
+                center: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(hidden ? '••' : goalPercent(b.progress), style: t.figure.copyWith(fontSize: 20)),
+                    Text('saved', style: t.small),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: Sp.sm),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 5),
-              child: Text('of ${goalMoney(context, b.target)}', style: t.figureSmall),
+              const SizedBox(width: Sp.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Saved for goals', style: t.label),
+                    const SizedBox(height: 2),
+                    AnimatedAmount(
+                      b.saved,
+                      style: t.figureL,
+                      decimals: DecimalDisplay.none,
+                      fit: true,
+                      animateOnMount: true,
+                    ),
+                    Text('of ${goalMoney(context, b.target)}', style: t.figureSmall),
+                    const SizedBox(height: Sp.sm),
+                    KhataStamp(label: short ? 'Behind plan' : 'On plan', color: short ? c.amber : c.green),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (goals.length > 1) ...[
+            const SizedBox(height: Sp.lg),
+            Row(
+              children: [
+                for (final g in goals)
+                  Expanded(
+                    child: Column(
+                      children: [
+                        KhataRing(
+                          value: g.progress,
+                          size: 56,
+                          stroke: 6,
+                          color: c.tint(g.goal.colorIndex).$1,
+                          center: Text(
+                            hidden ? '•' : '${(g.progress * 100).round()}%',
+                            style: t.small.copyWith(fontSize: 11.5, color: c.ink, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        const SizedBox(height: Sp.xs),
+                        Text(
+                          g.goal.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: t.small.copyWith(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
           ],
-        ),
-        const SizedBox(height: Sp.lg),
-        LedgerBar(
-          value: b.progress,
-          semanticLabel: AmountVisibility.hiddenOf(context) ? null : '${goalPercent(b.progress)} of all targets saved',
-        ),
-        if (sentence != null) ...[
-          const SizedBox(height: Sp.md),
-          Text(sentence, style: t.label.copyWith(color: short ? c.amber : null)),
+          if (sentence != null) ...[
+            const SizedBox(height: Sp.md),
+            Text(sentence, style: t.label.copyWith(color: short ? c.amber : null)),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

@@ -59,6 +59,7 @@ class FinnSheetScaffold extends StatelessWidget {
     this.title,
     this.description,
     this.footer,
+    this.header,
     this.showClose = true,
     this.onClose,
     this.bodyPadding = LedgerSheet.bodyPadding,
@@ -71,6 +72,10 @@ class FinnSheetScaffold extends StatelessWidget {
 
   /// Sticky footer kept above the keyboard (the save button).
   final Widget? footer;
+
+  /// Pinned under the title, above the scrolling body (a search field), so
+  /// it never scrolls away with the content.
+  final Widget? header;
   final bool showClose;
 
   /// Defaults to `Navigator.maybePop`.
@@ -87,6 +92,7 @@ class FinnSheetScaffold extends StatelessWidget {
     final heading = title;
     final desc = description;
     final foot = footer;
+    final head = header;
 
     return Padding(
       padding: EdgeInsets.only(bottom: keyboard),
@@ -135,6 +141,7 @@ class FinnSheetScaffold extends StatelessWidget {
                   ],
                 ),
               ),
+            if (head != null) Padding(padding: const EdgeInsets.fromLTRB(Sp.gutter, Sp.sm, Sp.gutter, Sp.xs), child: head),
             Flexible(
               child: SingleChildScrollView(
                 padding: bodyPadding,

@@ -40,6 +40,10 @@ class LedgerColors {
     required this.amberSoft,
     required this.info,
     required this.infoSoft,
+    required this.khata,
+    required this.khataRule,
+    required this.khataMargin,
+    required this.marigold,
     required this.scrim,
   });
 
@@ -105,6 +109,13 @@ class LedgerColors {
   final Color info;
   final Color infoSoft;
 
+  /// Bahi khata paper behind chart-led summaries: warm ground, ruled
+  /// lines, a red margin line and marigold highlights.
+  final Color khata;
+  final Color khataRule;
+  final Color khataMargin;
+  final Color marigold;
+
   /// Barrier behind sheets, dialogs and overlays.
   final Color scrim;
 
@@ -139,6 +150,10 @@ class LedgerColors {
     amberSoft: Hue.nearSoft,
     info: Hue.info,
     infoSoft: Hue.infoSoft,
+    khata: Hue.khata,
+    khataRule: Hue.khataRule,
+    khataMargin: Hue.khataMargin,
+    marigold: Hue.marigold,
     scrim: Color(0x660F1F21),
   );
 
@@ -167,6 +182,10 @@ class LedgerColors {
     amberSoft: Hue.nightNearSoft,
     info: Hue.nightInfo,
     infoSoft: Hue.nightInfoSoft,
+    khata: Hue.nightKhata,
+    khataRule: Hue.nightKhataRule,
+    khataMargin: Hue.nightKhataMargin,
+    marigold: Hue.nightMarigold,
     scrim: Color(0x99000000),
   );
 
