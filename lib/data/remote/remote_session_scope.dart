@@ -77,7 +77,6 @@ class _RemoteSessionScopeState extends ConsumerState<RemoteSessionScope> with Wi
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _backend.auth.onExpired = () => ref.read(authControllerProvider.notifier).signOut();
     _serverPrefs = _engine.value(SyncValues.preferences);
     _engineSub = _engine.changes.listen((changed) {
       if (changed.contains(SyncValues.preferences)) _applyServerPreferences();
@@ -102,7 +101,6 @@ class _RemoteSessionScopeState extends ConsumerState<RemoteSessionScope> with Wi
     _engineSub?.cancel();
     _prefsDebounce?.cancel();
     _poll?.cancel();
-    _backend.auth.onExpired = null;
     super.dispose();
   }
 

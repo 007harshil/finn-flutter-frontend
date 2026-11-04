@@ -219,14 +219,18 @@ void main() {
       expect(stored['accessToken'], 'access-3');
     });
 
-    test('returns false and forgets the session on unauthenticated', () async {
+    test('returns false but keeps the session on unauthenticated, then backs off', () async {
       final h = await harness(
         (_) async => errorResponse(401, 'unauthenticated', 'Session revoked.'),
         stored: storedSession('1'),
       );
       expect(await h.auth.refresh(), isFalse);
-      expect(h.auth.session, isNull);
-      expect(h.store.value, isNull);
+      expect(h.auth.accessToken, 'access-1', reason: 'the user stays signed in');
+      expect(jsonDecode(h.store.value!), containsPair('refreshToken', 'refresh-1'));
+
+      // The rejected token is not sent again right away.
+      expect(await h.auth.refresh(), isFalse);
+      expect(h.requests, hasLength(1));
     });
 
     test('returns false without a call when signed out', () async {
@@ -326,19 +330,6 @@ void main() {
       await h.service.signOut();
       expect(h.auth.session, isNull);
       expect(h.store.value, isNull);
-    });
-
-    test('expire runs the sign-out handler, or clears the session without one', () async {
-      final h = await harness((_) async => ok(null), stored: storedSession('1'));
-      var called = 0;
-      h.auth.onExpired = () async => called++;
-      await h.auth.expire();
-      expect(called, 1);
-      expect(h.auth.session, isNotNull);
-
-      h.auth.onExpired = null;
-      await h.auth.expire();
-      expect(h.auth.session, isNull);
     });
 
     test('an unreadable stored session is discarded', () async {

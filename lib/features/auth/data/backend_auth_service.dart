@@ -96,6 +96,10 @@ class BackendAuthException implements Exception {
 /// Refresh tokens rotate: every refresh stores the new one, and refreshes
 /// are serialised (one in flight at a time) because presenting an already
 /// used refresh token revokes the whole session.
+///
+/// The session is only forgotten when the user signs out or deletes the
+/// account. A rejected refresh keeps it (and the user signed in); refresh
+/// is then retried after [rejectedRefreshBackoff].
 class BackendApiAuth implements ProactiveApiAuth {
   BackendApiAuth({
     required this.config,
@@ -104,6 +108,7 @@ class BackendApiAuth implements ProactiveApiAuth {
     http.Client? httpClient,
     this.clock = const SystemClock(),
     this.refreshMargin = const Duration(seconds: 60),
+    this.rejectedRefreshBackoff = const Duration(minutes: 2),
   }) : _http = httpClient ?? http.Client();
 
   /// SharedPreferences key where older builds kept the session in plain
@@ -128,14 +133,17 @@ class BackendApiAuth implements ProactiveApiAuth {
 
   /// How long before expiry the access token is renewed ahead of a request.
   final Duration refreshMargin;
+
+  /// How long to wait before presenting a refresh token the API rejected
+  /// again, so a dead token is not sent with every request.
+  final Duration rejectedRefreshBackoff;
   final http.Client _http;
 
   BackendSession? _session;
   Future<bool>? _refreshing;
 
-  /// Signs the user out of the app when the session cannot be recovered.
-  /// Set by the remote session scope.
-  Future<void> Function()? onExpired;
+  /// When the API last rejected the current refresh token.
+  DateTime? _rejectedAt;
 
   BackendSession? get session => _session;
 
@@ -190,12 +198,13 @@ class BackendApiAuth implements ProactiveApiAuth {
       try {
         return await store.read();
       } catch (e) {
-        if (attempt >= 2) {
+        if (attempt >= 4) {
           debugPrint('Could not read the stored session: ${e.runtimeType}');
           _restoreFailed = true;
           return null;
         }
-        await Future<void>.delayed(const Duration(milliseconds: 200));
+        // 200, 400, 800, 1600 ms: the keystore can take a moment after boot.
+        await Future<void>.delayed(Duration(milliseconds: 200 << attempt));
       }
     }
   }
@@ -203,6 +212,7 @@ class BackendApiAuth implements ProactiveApiAuth {
   /// Adopts [session] and persists it.
   Future<void> save(BackendSession session) async {
     _session = session;
+    _rejectedAt = null;
     await store.write(jsonEncode(session.toJson()));
     await prefs.remove(signedOutKey);
   }
@@ -211,6 +221,7 @@ class BackendApiAuth implements ProactiveApiAuth {
   /// a marker makes the next [restore] ignore and retry deleting it.
   Future<void> clear() async {
     _session = null;
+    _rejectedAt = null;
     await prefs.remove(storageKey);
     if (await _deleteStored()) {
       await prefs.remove(signedOutKey);
@@ -274,13 +285,16 @@ class BackendApiAuth implements ProactiveApiAuth {
   Future<bool> _doRefresh() async {
     final current = _session;
     if (current == null) return false;
+    final rejectedAt = _rejectedAt;
+    if (rejectedAt != null && clock.now().difference(rejectedAt) < rejectedRefreshBackoff) return false;
     final Object? data;
     try {
       data = await postPublic('/auth/refresh', {'refreshToken': current.refreshToken});
     } on BackendAuthException catch (e) {
       if (e.isUnauthenticated) {
-        // Invalid, expired or revoked: the session is gone for good.
-        if (identical(_session, current)) await clear();
+        // Keep the session: the user stays signed in until they sign out.
+        // Try again after the backoff.
+        if (identical(_session, current)) _rejectedAt = clock.now();
         return false;
       }
       rethrow;
@@ -303,16 +317,6 @@ class BackendApiAuth implements ProactiveApiAuth {
       await refresh();
     } catch (e) {
       debugPrint('Proactive session refresh failed: $e');
-    }
-  }
-
-  @override
-  Future<void> expire() async {
-    final handler = onExpired;
-    if (handler != null) {
-      await handler();
-    } else {
-      await clear();
     }
   }
 }

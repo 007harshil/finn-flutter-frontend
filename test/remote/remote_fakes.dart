@@ -13,7 +13,6 @@ class FakeApiAuth implements ApiAuth {
   /// Token adopted on refresh; null makes the refresh fail.
   String? refreshTo;
   int refreshCalls = 0;
-  int expireCalls = 0;
 
   @override
   String? get accessToken => token;
@@ -24,12 +23,6 @@ class FakeApiAuth implements ApiAuth {
     if (refreshTo == null) return false;
     token = refreshTo;
     return true;
-  }
-
-  @override
-  Future<void> expire() async {
-    expireCalls++;
-    token = null;
   }
 }
 

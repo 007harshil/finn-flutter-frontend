@@ -82,10 +82,9 @@ void main() {
     expect(await api.get('/x'), {'ok': true});
     expect(tokens, ['Bearer token-1', 'Bearer token-2']);
     expect(auth.refreshCalls, 1);
-    expect(auth.expireCalls, 0);
   });
 
-  test('signs out and reports notPermitted when the refreshed session is rejected too', () async {
+  test('reports notPermitted, keeping the session, when the refreshed session is rejected too', () async {
     final auth = FakeApiAuth(refreshTo: 'token-2');
     var calls = 0;
     final api = apiWith(MockClient((_) async {
@@ -96,14 +95,14 @@ void main() {
     expect(f.code, FailureCode.notPermitted);
     expect(calls, 2);
     expect(auth.refreshCalls, 1);
-    expect(auth.expireCalls, 1);
+    expect(auth.token, 'token-2', reason: 'the user is never signed out automatically');
   });
 
-  test('signs out when the refresh itself fails', () async {
+  test('keeps the session when the refresh itself fails', () async {
     final auth = FakeApiAuth();
     final api = apiWith(MockClient((_) async => http.Response('', 401)), auth: auth);
     final f = await failureOf(api.get('/x'));
     expect(f.code, FailureCode.notPermitted);
-    expect(auth.expireCalls, 1);
+    expect(auth.token, 'token-1');
   });
 }

@@ -13,11 +13,10 @@ abstract interface class ApiAuth {
   String? get accessToken;
 
   /// Refreshes the session. Returns false when it cannot be refreshed.
+  ///
+  /// A failed refresh never signs the user out: only the user's own
+  /// sign-out (or account deletion) ends a session on this device.
   Future<bool> refresh();
-
-  /// Called when the session is gone for good (refresh failed or the
-  /// refreshed token was rejected too). Signs the user out.
-  Future<void> expire();
 }
 
 /// An [ApiAuth] that can renew its token shortly before it expires, so a
@@ -28,8 +27,9 @@ abstract interface class ProactiveApiAuth implements ApiAuth {
   Future<void> ensureFresh();
 }
 
-/// Message used when the session cannot be recovered.
-const sessionExpiredMessage = 'Your session has expired. Please sign in again.';
+/// Message used when the session could not be renewed. The user stays
+/// signed in; the request can be retried later.
+const sessionExpiredMessage = 'FiNN could not verify your sign-in right now. Please try again in a moment.';
 
 /// Thin JSON client for the FiNN API (`/api/v1`).
 ///
@@ -38,7 +38,8 @@ const sessionExpiredMessage = 'Your session has expired. Please sign in again.';
 /// * Maps `{ "error": { code, message, fieldErrors, retryable } }` onto
 ///   [AppFailure] with the same [FailureCode] names.
 /// * On `unauthenticated` refreshes the session once and retries; if that
-///   fails the user is signed out and [FailureCode.notPermitted] is thrown.
+///   fails [FailureCode.notPermitted] is thrown. The user is never signed
+///   out automatically.
 /// * Timeouts, 5xx without an error body and network errors become
 ///   [FailureCode.unavailable] (retryable).
 class ApiClient {
@@ -74,7 +75,6 @@ class ApiClient {
         final second = await _attempt(method, path, query: query, body: body, headers: headers);
         if (second case _Done(:final data)) return data;
       }
-      await _expire();
       throw const AppFailure(FailureCode.notPermitted, sessionExpiredMessage);
     }
     return (first as _Done).data;
@@ -91,14 +91,6 @@ class ApiClient {
         _refreshing = null;
       }
     }();
-  }
-
-  Future<void> _expire() async {
-    try {
-      await auth.expire();
-    } catch (e) {
-      debugPrint('Sign-out after session expiry failed: $e');
-    }
   }
 
   Uri _uri(String path, Map<String, String>? query) {
