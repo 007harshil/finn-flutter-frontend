@@ -40,7 +40,8 @@ class KhataPanel extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
 
-  static const _margin = 22.0;
+  /// Distance of the red margin line from the left edge.
+  static const margin = 22.0;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +56,7 @@ class KhataPanel extends StatelessWidget {
       child: CustomPaint(
         painter: _RulePainter(rule: c.khataRule, margin: c.khataMargin),
         child: Padding(
-          padding: padding ?? const EdgeInsets.fromLTRB(_margin + Sp.md, Sp.lg, Sp.lg, Sp.lg),
+          padding: padding ?? const EdgeInsets.fromLTRB(margin + Sp.md, Sp.lg, Sp.lg, Sp.lg),
           child: child,
         ),
       ),
@@ -80,8 +81,8 @@ class _RulePainter extends CustomPainter {
     final m = Paint()
       ..color = margin
       ..strokeWidth = 1.2;
-    canvas.drawLine(const Offset(KhataPanel._margin, 0), Offset(KhataPanel._margin, size.height), m);
-    canvas.drawLine(const Offset(KhataPanel._margin + 3, 0), Offset(KhataPanel._margin + 3, size.height), m);
+    canvas.drawLine(const Offset(KhataPanel.margin, 0), Offset(KhataPanel.margin, size.height), m);
+    canvas.drawLine(const Offset(KhataPanel.margin + 3, 0), Offset(KhataPanel.margin + 3, size.height), m);
   }
 
   @override

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../core/links/legal_links.dart';
 import '../../../kit/kit.dart';
 
 /// Shared layout for the sign-in screens: wordmark bar, a narrow scrolling
@@ -87,48 +86,4 @@ class AuthHeader extends StatelessWidget {
       ],
     );
   }
-}
-
-/// "By continuing you agree to the Privacy Policy", with the policy link.
-class AuthPrivacyLink extends StatelessWidget {
-  const AuthPrivacyLink({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.type;
-    return Semantics(
-      link: true,
-      label: 'Read the privacy policy',
-      excludeSemantics: true,
-      child: InkWell(
-        onTap: () => LegalLinks.open(LegalLinks.privacyPolicy),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: Sp.xs),
-          child: Text.rich(
-            TextSpan(
-              text: 'By continuing you agree to the ',
-              children: [
-                TextSpan(
-                  text: 'Privacy Policy',
-                  style: t.small.copyWith(color: context.ink.ink, decoration: TextDecoration.underline),
-                ),
-                const TextSpan(text: '.'),
-              ],
-            ),
-            style: t.small,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// One quiet line under the auth forms.
-class AuthPrivacyNote extends StatelessWidget {
-  const AuthPrivacyNote({super.key, required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Text(text, style: context.type.small);
 }

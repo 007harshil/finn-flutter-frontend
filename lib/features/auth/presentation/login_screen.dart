@@ -87,13 +87,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             },
             onSubmitted: (_) => _submit(),
           ),
-          const SizedBox(height: Sp.lg),
-          const AuthPrivacyNote(
-            text: 'Your email is used to sign you in. Your records are saved securely to your FiNN account so you can '
-                'use them on any device.',
-          ),
-          const SizedBox(height: Sp.sm),
-          const AuthPrivacyLink(),
         ],
       ),
     );

@@ -93,21 +93,15 @@ class _MonthFlow extends ConsumerWidget {
         ? DateRange(prev.start, DateTime(prev.year, prev.month, math.min(today.day, prev.dayCount)))
         : prev.range;
     final before = ref.watch(rangeSummaryProvider(compare)).value;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _WeekColumns(month: month),
-        AsyncView<PeriodSummary>(
-          value: ref.watch(monthSummaryProvider(month)),
-          loading: const LedgerSkeleton(height: 180, radius: Rad.lg),
-          builder: (context, s) => _FlowPanel(summary: s, before: before, month: month, isCurrent: isCurrent),
-        ),
-      ],
+    return AsyncView<PeriodSummary>(
+      value: ref.watch(monthSummaryProvider(month)),
+      loading: const LedgerSkeleton(height: 132, radius: Rad.lg),
+      builder: (context, s) => _FlowPanel(summary: s, before: before, month: month, isCurrent: isCurrent),
     );
   }
 }
 
-/// Spending week by week on khata paper; the costliest week in teal.
+/// Spending week by week as short columns; the costliest week in teal.
 class _WeekColumns extends ConsumerWidget {
   const _WeekColumns({required this.month});
 
@@ -115,7 +109,6 @@ class _WeekColumns extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = context.type;
     final pulse = ref.watch(spendPulseProvider(month)).value;
     if (pulse == null || pulse.spent <= 0) return const SizedBox.shrink();
     final running = pulse.thisMonth;
@@ -131,33 +124,21 @@ class _WeekColumns extends ConsumerWidget {
     }
     final peak = weeks.indexOf(weeks.reduce((x, y) => x > y ? x : y));
     return Padding(
-      padding: const EdgeInsets.only(bottom: Sp.md),
-      child: KhataPanel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text('Spent each week', style: t.labelStrong)),
-                AmountText(Money.fromPaise(weeks[peak]), style: t.figureSmall, decimals: DecimalDisplay.none),
-              ],
-            ),
-            const SizedBox(height: Sp.sm),
-            KhataColumns(
-              height: 64,
-              semanticLabel: 'Spending in each week of the month',
-              columns: [
-                for (var w = 0; w < weeks.length; w++)
-                  KhataColumn('${w * 7 + 1}–${((w + 1) * 7).clamp(0, pulse.days)}', weeks[w].toDouble(), highlight: w == peak),
-              ],
-            ),
-          ],
-        ),
+      padding: const EdgeInsets.only(top: Sp.md),
+      child: KhataColumns(
+        height: 36,
+        semanticLabel: 'Spending in each week of the month',
+        columns: [
+          for (var w = 0; w < weeks.length; w++)
+            KhataColumn('${w * 7 + 1}–${((w + 1) * 7).clamp(0, pulse.days)}', weeks[w].toDouble(), highlight: w == peak),
+        ],
       ),
     );
   }
 }
 
+/// In, out and kept side by side on one khata panel, the weekly
+/// spending columns under them. In and out open Activity filtered.
 class _FlowPanel extends StatelessWidget {
   const _FlowPanel({required this.summary, required this.before, required this.month, required this.isCurrent});
 
@@ -173,61 +154,94 @@ class _FlowPanel extends StatelessWidget {
     final hidden = AmountVisibility.hiddenOf(context);
     final s = summary;
     if (s.income.isZero && s.expense.isZero) {
-      return LedgerPanel(
-        children: [
-          LedgerRow(
-            leading: const IconWell(icon: LucideIcons.notebookPen),
-            title: isCurrent ? 'Nothing recorded yet' : 'Nothing recorded',
-          ),
-        ],
+      return KhataPanel(
+        child: Row(
+          children: [
+            Icon(LucideIcons.notebookPen, size: 18, color: c.inkSoft),
+            const SizedBox(width: Sp.md),
+            Text(isCurrent ? 'Nothing recorded yet' : 'Nothing recorded', style: t.label),
+          ],
+        ),
       );
     }
     final kept = !s.net.isNegative;
     final rate = s.income.isPositive ? (s.net.paise.abs() / s.income.paise * 100).round() : null;
     final delta = hidden ? null : _delta(context, s.expense, before?.expense);
-    return LedgerPanel(
-      children: [
-        LedgerRow(
-          title: 'Money in',
-          semanticLabel: 'Money in, ${AmountText.spokenLabel(s.income)}. Opens these transactions.',
-          trailing: AnimatedAmount(s.income, style: t.figure.copyWith(color: c.green), sign: SignDisplay.always, decimals: DecimalDisplay.none),
-          chevron: true,
-          onTap: () => context.push(AppRoutes.transactionsFiltered(type: TransactionType.income, month: month)),
-        ),
-        LedgerRow(
-          title: 'Money out',
-          semanticLabel: 'Money out, ${AmountText.spokenLabel(s.expense)}. Opens these transactions.',
-          trailing: AnimatedAmount(s.expense, style: t.figure, decimals: DecimalDisplay.none),
-          trailingSub: delta,
-          chevron: true,
-          onTap: () => context.push(AppRoutes.transactionsFiltered(type: TransactionType.expense, month: month)),
-        ),
-        LedgerRow(
-          title: kept ? (isCurrent ? 'Kept so far' : 'Kept') : 'Overspent',
-          subtitle: rate == null || hidden
-              ? null
-              : kept
-                  ? '$rate% of what came in'
-                  : 'Spent $rate% more than came in',
-          trailing: AnimatedAmount(
-            s.net.abs(),
-            style: t.figure.copyWith(color: kept ? c.ink : c.red),
-            decimals: DecimalDisplay.none,
+    Widget figure(Money m, {Color? color, SignDisplay sign = SignDisplay.auto}) => FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: AnimatedAmount(m, style: t.figure.copyWith(color: color), sign: sign, decimals: DecimalDisplay.none),
+        );
+    Widget sub(String? text, {Color? color}) => Text(
+          text ?? '',
+          style: t.small.copyWith(color: color ?? c.inkSoft),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        );
+    return KhataPanel(
+      padding: const EdgeInsets.fromLTRB(KhataPanel.margin + Sp.md, Sp.md, Sp.md, Sp.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: LedgerStat(
+                  label: 'Money in',
+                  value: figure(s.income, color: c.green, sign: SignDisplay.always),
+                  semanticLabel: 'Money in, ${AmountText.spokenLabel(s.income)}. Opens these transactions.',
+                  onTap: () => context.push(AppRoutes.transactionsFiltered(type: TransactionType.income, month: month)),
+                ),
+              ),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LedgerStat(
+                      label: 'Money out',
+                      value: figure(s.expense),
+                      semanticLabel: 'Money out, ${AmountText.spokenLabel(s.expense)}. Opens these transactions.',
+                      onTap: () => context.push(AppRoutes.transactionsFiltered(type: TransactionType.expense, month: month)),
+                    ),
+                    if (delta != null) sub(delta.$1, color: delta.$2),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: Padding(
+                  // Tappable stats carry vertical padding; match it so labels line up.
+                  padding: const EdgeInsets.symmetric(vertical: Sp.xs),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LedgerStat(
+                        label: kept ? (isCurrent ? 'Kept so far' : 'Kept') : 'Overspent',
+                        value: figure(s.net.abs(), color: kept ? c.ink : c.red),
+                      ),
+                      if (rate != null && !hidden) sub(kept ? '$rate% of in' : '$rate% over'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
+          _WeekColumns(month: month),
+        ],
+      ),
     );
   }
 
   /// "12% less than Sep", coloured by whether that is good news.
-  Widget? _delta(BuildContext context, Money now, Money? then) {
+  (String, Color)? _delta(BuildContext context, Money now, Money? then) {
     if (then == null || !then.isPositive) return null;
     final c = context.ink;
-    final t = context.type;
     final pct = ((now.paise - then.paise) / then.paise * 100).round();
     final name = DateFormats.shortMonth.format(month.previous.start);
     final text = pct == 0 ? 'Same as $name' : '${pct.abs()}% ${pct < 0 ? 'less' : 'more'} than $name';
     final color = pct == 0 ? c.inkSoft : (pct < 0 ? c.green : c.red);
-    return Text(text, style: t.small.copyWith(color: color));
+    return (text, color);
   }
 }
