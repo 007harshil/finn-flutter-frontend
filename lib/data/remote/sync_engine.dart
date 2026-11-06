@@ -79,6 +79,9 @@ class SyncEngine {
   Future<void>? _running;
   bool _rerun = false;
 
+  /// In-memory data not yet written to the offline cache.
+  bool _dirty = false;
+
   /// The user whose data is loaded, or null when closed.
   String? get userId => _userId;
 
@@ -152,10 +155,16 @@ class SyncEngine {
   }
 
   Future<void> _runLoop() async {
-    do {
-      _rerun = false;
-      await _syncOnce();
-    } while (_rerun && _userId != null);
+    try {
+      do {
+        _rerun = false;
+        await _syncOnce();
+      } while (_rerun && _userId != null);
+    } finally {
+      // Pages applied during the run are written once, at the end (also
+      // after a failed page, so what was applied is kept).
+      if (_dirty) await _persist();
+    }
   }
 
   Future<void> _syncOnce() async {
@@ -172,8 +181,9 @@ class SyncEngine {
       final page = Map<String, Object?>.from(data);
       final changed = _applyTo(target, page);
       final next = page['cursor']?.toString();
+      final cursorMoved = next != null && next != target.cursor;
       if (next != null) target.cursor = next;
-      if (!full) _commit(changed);
+      if (!full) _commit(changed, cursorMoved: cursorMoved);
       if (page['hasMore'] != true || next == null || next == since) break;
       since = next;
     }
@@ -252,9 +262,19 @@ class SyncEngine {
     return changed;
   }
 
-  void _commit(Set<String> changed) {
+  /// Publishes [changed] and saves the offline cache.
+  ///
+  /// The whole cache is re-encoded on every save (megabytes for a long
+  /// history), so it is saved only when something changed, and only once
+  /// per [sync] run instead of once per page. A run with no changes (the
+  /// common 30-second poll) writes nothing. What is saved is always a
+  /// complete state with its own cursor, so a save skipped by an app kill
+  /// only means the next launch re-reads a little more from the server.
+  void _commit(Set<String> changed, {bool cursorMoved = true}) {
     if (changed.isNotEmpty) _emit(changed);
-    unawaited(_persist());
+    if (changed.isEmpty && !cursorMoved) return;
+    _dirty = true;
+    if (_running == null) unawaited(_persist());
   }
 
   void _emit(Set<String> changed) {
@@ -266,6 +286,7 @@ class SyncEngine {
 
   Future<void> _persist() async {
     final id = _userId;
+    _dirty = false;
     if (id == null) return;
     try {
       await prefs.setString(_storageKey(id), jsonEncode(_state.toJson()));

@@ -107,6 +107,64 @@ void main() {
     expect(offline.records(SyncCollections.transactions), isEmpty);
   });
 
+  test('a sync with no changes does not rewrite the offline cache', () async {
+    server.pages[''] = page(cursor: '5', collections: {
+      'transactions': {'upserted': [txJson('tx_1')], 'deleted': []},
+    });
+    server.pages['5'] = page(cursor: '5');
+    await engine.open('user-a');
+    await engine.sync();
+    const key = 'finn.remote.cache.user-a';
+    expect(prefs.getString(key), isNotNull);
+
+    // Marker: any rewrite of the cache would replace it.
+    await prefs.setString(key, 'marker');
+    await engine.sync(); // the 30-second poll, nothing new on the server
+    await Future<void>.delayed(Duration.zero);
+    expect(server.requests, [null, '5']);
+    expect(prefs.getString(key), 'marker');
+  });
+
+  test('a multi-page incremental sync saves the complete state once the run ends', () async {
+    server.pages[''] = page(cursor: '5', collections: {
+      'transactions': {'upserted': [txJson('tx_1')], 'deleted': []},
+    });
+    server.pages['5'] = page(cursor: '8', hasMore: true, collections: {
+      'transactions': {'upserted': [txJson('tx_2')], 'deleted': ['tx_1']},
+    });
+    server.pages['8'] = page(cursor: '9', collections: {
+      'transactions': {'upserted': [txJson('tx_3')], 'deleted': []},
+    });
+    await engine.open('user-a');
+    await engine.sync();
+    await engine.sync();
+
+    final stored = jsonDecode(prefs.getString('finn.remote.cache.user-a')!) as Map;
+    expect(stored['cursor'], '9');
+    final restarted = SyncEngine(
+      api: apiWith(MockClient((_) async => throw http.ClientException('offline'))),
+      prefs: prefs,
+    );
+    await restarted.open('user-a');
+    expect(restarted.cursor, '9');
+    expect(restarted.records(SyncCollections.transactions).map((j) => j['id']), ['tx_2', 'tx_3']);
+  });
+
+  test('a failed page keeps what earlier pages applied, with their cursor', () async {
+    server.pages[''] = page(cursor: '5');
+    server.pages['5'] = page(cursor: '8', hasMore: true, collections: {
+      'transactions': {'upserted': [txJson('tx_2')], 'deleted': []},
+    });
+    // No page for '8': the server fails mid-run.
+    await engine.open('user-a');
+    await engine.sync();
+    await expectLater(engine.sync(), throwsA(anything));
+
+    final stored = jsonDecode(prefs.getString('finn.remote.cache.user-a')!) as Map;
+    expect(stored['cursor'], '8');
+    expect(engine.records(SyncCollections.transactions).single['id'], 'tx_2');
+  });
+
   test('applyChanges updates caches and streams without advancing the cursor', () async {
     server.pages[''] = page(cursor: '20', collections: {
       'transactions': {'upserted': [txJson('tx_1')], 'deleted': []},
