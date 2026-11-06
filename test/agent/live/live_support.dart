@@ -11,6 +11,7 @@ import 'package:finn/actions/action.dart';
 import 'package:finn/actions/dispatcher.dart';
 import 'package:finn/agent/llm/llm_provider.dart';
 import 'package:finn/agent/llm/llm_transport.dart';
+import 'package:finn/agent/prompt/agent_prompt.dart';
 import 'package:finn/core/result/result.dart';
 import 'package:http/http.dart' as http;
 
@@ -87,7 +88,13 @@ class OpenAiLiveTransport implements LlmTransport {
     this.reasoningEffort = 'none',
     this.maxOutputTokens = 2048,
     this.explicitCache = true,
-  });
+    bool? cacheKey,
+  }) : cacheKey = cacheKey ?? Platform.environment['FINN_LIVE_CACHE_KEY'] != '0';
+
+  /// Like the relay's default `OPENAI_PROMPT_CACHE_KEY=on`: one stable
+  /// `prompt_cache_key` per prompt version (FINN_LIVE_CACHE_KEY=0 turns it
+  /// off, for A/B runs).
+  final bool cacheKey;
 
   final String model;
 
@@ -131,6 +138,7 @@ class OpenAiLiveTransport implements LlmTransport {
       },
       'max_completion_tokens': requested is int && requested < maxOutputTokens ? requested : maxOutputTokens,
       'safety_identifier': 'finn-live-benchmark',
+      if (cacheKey) 'prompt_cache_key': 'finn-agent-live-$agentPromptVersion',
       if (reasoningEffort != 'off') 'reasoning_effort': reasoningEffort,
     };
     bodies.add(upstream);

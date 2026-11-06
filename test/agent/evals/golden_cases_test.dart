@@ -5,6 +5,7 @@
 
 import 'package:finn/actions/action_registry.dart';
 import 'package:finn/agent/answers/app_pages.dart';
+import 'package:finn/agent/answers/data_answers.dart';
 import 'package:finn/agent/orchestration/agent_runner.dart';
 import 'package:finn/app/di/action_catalog.dart';
 import 'package:finn/data/local/local_data_store.dart';
@@ -62,4 +63,28 @@ void main() {
       expect(grade(c, GoldenRun(saved, last!, r.provider.requests.length)), isNull);
     });
   }
+
+  test('every data question has a ground truth with real figures on the demo data', () async {
+    final h = await ActionHarness.create(scenario: DataScenario.demo);
+    final snapshot = await h.snapshot();
+    final cases = set.cases.where((c) => answerArgs(c).isNotEmpty).toList();
+    expect(cases, isNotEmpty);
+    for (final c in cases) {
+      for (final args in answerArgs(c)) {
+        final truth = DataAnswers.answer(args, snapshot, snapshot.today);
+        expect(truth, isNotEmpty, reason: c.id);
+        // The truth is self-consistent with the grader.
+        expect(answerMiss([truth], truth), isNull, reason: c.id);
+      }
+    }
+  });
+
+  test('answer grading compares figures, not wording', () {
+    const truth = 'You spent ₹1,250.50 on Food this month (1–31 Oct).';
+    expect(answerMiss([truth], 'You spent ₹1,250.50 on Food & Dining 1 Oct–10 Oct.'), isNull);
+    expect(answerMiss([truth], 'You spent ₹1,205.50 on Food this month.'), contains('₹1,250.50'));
+    expect(answerMiss(['Nothing on Education today.'], 'Nothing on Education today.'), isNull);
+    expect(answerMiss(['₹10', '₹20'], 'This month ₹10, last month ₹20.'), isNull);
+    expect(answerMiss(['₹10', '₹20'], 'This month ₹10.'), isNotNull);
+  });
 }

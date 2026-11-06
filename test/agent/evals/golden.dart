@@ -103,10 +103,43 @@ class GoldenRun {
   final int modelCalls;
 }
 
-/// Null when [run] meets every expectation of [c], else why not.
-String? grade(GoldenCase c, GoldenRun run) {
+/// The `q` op arguments a data question should be answered with
+/// (`answerOf`: one map, or a list for questions that need several figures).
+List<Map<String, Object?>> answerArgs(GoldenCase c) => switch (c.expect['answerOf']) {
+  final Map<dynamic, dynamic> m => [Map<String, Object?>.from(m)],
+  final List<dynamic> l => [for (final m in l) Map<String, Object?>.from(m as Map)],
+  _ => const [],
+};
+
+final _rupees = RegExp(r'₹[\d,]+(\.\d+)?');
+
+/// Null when [reply] states every figure of the ground-truth answers [truths]
+/// (computed from the scenario data with the expected `q` arguments), else why
+/// not. Figures are compared, not wording, so an equivalent period label
+/// ("this month" vs a date range) still passes.
+String? answerMiss(List<String> truths, String reply) {
+  for (final truth in truths) {
+    final figures = [for (final m in _rupees.allMatches(truth)) m.group(0)!];
+    if (figures.isEmpty) {
+      if (!reply.contains(truth)) return 'answer differs from data: expected "$truth", got "$reply"';
+      continue;
+    }
+    for (final f in figures) {
+      if (!reply.contains(f)) return 'answer lacks $f from the data ("$truth"): "$reply"';
+    }
+  }
+  return null;
+}
+
+/// Null when [run] meets every expectation of [c], else why not. [truths] are
+/// the ground-truth answers for an `answerOf` case.
+String? grade(GoldenCase c, GoldenRun run, {List<String> truths = const []}) {
   final reply = run.last.reply;
   final e = c.expect;
+  if (e['answerOf'] != null) {
+    if (truths.isEmpty) return 'no ground truth computed for answerOf';
+    if (answerMiss(truths, reply) case final miss?) return miss;
+  }
   if (c.opsAnyOf case final options?) {
     final misses = [for (final o in options) ?_opsMiss(o, run)];
     if (misses.length == options.length) return 'no acceptable outcome: ${misses.join(' | ')}';

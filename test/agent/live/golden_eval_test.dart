@@ -9,6 +9,7 @@
 import 'dart:io';
 
 import 'package:finn/actions/action_registry.dart';
+import 'package:finn/agent/answers/data_answers.dart';
 import 'package:finn/agent/execution/plan_gateway.dart';
 import 'package:finn/agent/execution/proposals.dart';
 import 'package:finn/agent/history/agent_history.dart';
@@ -48,6 +49,10 @@ void main() {
       );
       Future<Set<String>> approveAll(List<ProposedAction> p) async => {for (final x in p) x.id};
 
+      // Ground truth for data questions, from the scenario data itself.
+      final snapshot = await h.snapshot();
+      final truths = [for (final args in answerArgs(c)) DataAnswers.answer(args, snapshot, snapshot.today)];
+
       final saved = <({String actionId, Map<String, Object?> input})>[];
       AgentTurnResult? last;
       final turnTraces = <Map<String, Object?>>[];
@@ -64,7 +69,7 @@ void main() {
           saved.add((actionId: a.proposal.descriptor.id, input: a.proposal.input.toJson()));
         }
       }
-      final failure = grade(c, GoldenRun(saved, last!, transport.calls.length));
+      final failure = grade(c, GoldenRun(saved, last!, transport.calls.length), truths: truths);
       total[c.kind] = (total[c.kind] ?? 0) + 1;
       if (failure == null) passed[c.kind] = (passed[c.kind] ?? 0) + 1;
       cost += costOf(transport.calls);
@@ -78,6 +83,7 @@ void main() {
         'turns': turnTraces,
         'reply': last.reply,
         'saved': [for (final o in saved) '${o.actionId} ${o.input}'],
+        if (truths.isNotEmpty) 'truth': truths,
       });
       // ignore: avoid_print
       print('${failure == null ? 'PASS' : 'FAIL'} ${c.kind}/${c.id}${failure == null ? '' : ': $failure\n  reply: ${last.reply}'}');
