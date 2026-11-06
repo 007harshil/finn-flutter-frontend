@@ -14,6 +14,7 @@ import 'package:finn/agent/execution/proposals.dart';
 import 'package:finn/agent/history/agent_history.dart';
 import 'package:finn/agent/llm/chat_completions_provider.dart';
 import 'package:finn/agent/orchestration/agent_runner.dart';
+import 'package:finn/agent/orchestration/agent_trace.dart';
 import 'package:finn/agent/prompt/agent_prompt.dart';
 import 'package:finn/app/di/action_catalog.dart';
 import 'package:finn/data/local/local_data_store.dart';
@@ -49,8 +50,16 @@ void main() {
 
       final saved = <({String actionId, Map<String, Object?> input})>[];
       AgentTurnResult? last;
+      final turnTraces = <Map<String, Object?>>[];
       for (final t in c.turns) {
         last = await runner.runTurn(t, approve: approveAll);
+        final trace = runner.lastTrace;
+        turnTraces.add({
+          'agentMs': trace.agentTime / 1000,
+          'untilReviewMs': ?trace.untilReview == null ? null : trace.untilReview! / 1000,
+          'stagesMs': {for (final e in trace.totals.entries) if (e.key != AgentTrace.approval) e.key: e.value / 1000},
+          'facts': trace.facts,
+        });
         for (final a in last.actions.where((a) => a.succeeded)) {
           saved.add((actionId: a.proposal.descriptor.id, input: a.proposal.input.toJson()));
         }
@@ -65,6 +74,8 @@ void main() {
         'pass': failure == null,
         'failure': ?failure,
         'llmCalls': transport.calls.length,
+        'modelMs': [for (final m in transport.calls) m.ms],
+        'turns': turnTraces,
         'reply': last.reply,
         'saved': [for (final o in saved) '${o.actionId} ${o.input}'],
       });
@@ -74,12 +85,13 @@ void main() {
     if (only != null) return;
 
     final rates = {for (final k in total.keys) k: (passed[k] ?? 0) / total[k]!};
-    writeReport('golden_eval', {
+    writeReport(Platform.environment['FINN_GOLDEN_REPORT'] ?? 'golden_eval', {
       'promptVersion': agentPromptVersion,
       'date': DateTime.now().toIso8601String().substring(0, 10),
       'passRates': rates,
       'thresholds': set.thresholds,
       'costUsd': cost,
+      'latency': _latencySummary(rows),
       'cases': rows,
     });
     // ignore: avoid_print
@@ -88,4 +100,31 @@ void main() {
       expect(rates[e.key] ?? 0, greaterThanOrEqualTo(e.value), reason: '${e.key} pass rate below ${e.value}');
     }
   }, skip: liveSkipReason, timeout: const Timeout(Duration(minutes: 30)));
+}
+
+/// Median and p90 per stage over every turn, in milliseconds.
+Map<String, Object?> _latencySummary(List<Map<String, Object?>> rows) {
+  final byStage = <String, List<double>>{};
+  final agent = <double>[];
+  final review = <double>[];
+  for (final row in rows) {
+    for (final t in (row['turns']! as List).cast<Map<String, Object?>>()) {
+      agent.add(t['agentMs']! as double);
+      if (t['untilReviewMs'] case final double r) review.add(r);
+      for (final e in (t['stagesMs']! as Map<String, double>).entries) {
+        (byStage[e.key] ??= []).add(e.value);
+      }
+    }
+  }
+  Map<String, double> stats(List<double> v) {
+    final s = [...v]..sort();
+    double at(double q) => s.isEmpty ? 0 : s[((s.length - 1) * q).round()];
+    return {'p50': at(0.5), 'p90': at(0.9), 'max': s.isEmpty ? 0 : s.last, 'n': s.length.toDouble()};
+  }
+
+  return {
+    'agentMs': stats(agent),
+    'untilReviewMs': stats(review),
+    'stagesMs': {for (final e in byStage.entries) e.key: stats(e.value)},
+  };
 }

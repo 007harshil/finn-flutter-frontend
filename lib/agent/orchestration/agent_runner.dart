@@ -24,6 +24,7 @@ import '../plan/op_catalog.dart';
 import '../prompt/agent_prompt.dart';
 import 'agent_events.dart';
 import 'agent_memory.dart';
+import 'agent_trace.dart';
 import 'local_intents.dart';
 
 /// Asks the user to approve [proposals]; completes with the approved ids.
@@ -171,6 +172,10 @@ class AgentRunner {
   /// model calls the turn made, for its history entry.
   String? _turnModel;
   int _turnCalls = 0;
+  AgentTrace _trace = AgentTrace();
+
+  /// Stage timings of the latest (or running) turn.
+  AgentTrace get lastTrace => _trace;
 
   static const waitingLabel = 'Still working on it…';
 
@@ -185,6 +190,7 @@ class AgentRunner {
     RedoRequest? redo,
   }) async {
     final token = cancel ?? CancellationToken();
+    final trace = _trace = AgentTrace();
     final text = (redo?.request ?? userText).trim();
     if (text.isEmpty) return const AgentTurnResult(end: AgentTurnEnd.failed, reply: 'Type what you would like to do.');
     if (text.length > config.maxUserMessageChars) {
@@ -196,6 +202,7 @@ class AgentRunner {
     final FinanceSnapshot snapshot;
     try {
       snapshot = await loadSnapshot();
+      trace.lap('snapshot');
     } catch (e) {
       debugPrint('Agent could not load data: $e');
       return const AgentTurnResult(
@@ -214,7 +221,9 @@ class AgentRunner {
     _turnModel = null;
     var request = text;
     var usage = const LlmUsage();
-    switch (redo == null ? LocalIntents.match(text, memory) : null) {
+    final local = redo == null ? LocalIntents.match(text, memory) : null;
+    trace.lap('localIntents');
+    switch (local) {
       case HistoryIntent(:final period):
         return AgentTurnResult(end: AgentTurnEnd.completed, reply: await _historyAnswer(period, onEvent));
       case BalanceIntent():
@@ -254,11 +263,20 @@ class AgentRunner {
         output: LlmOutputFormat.json,
         maxOutputTokens: config.maxOutputTokens,
       );
+      trace
+        ..lap('prompt')
+        ..fact('instructionChars', agentInstructions.length)
+        ..fact('contextChars', llmRequest.messages.fold(0, (s, m) => s + (m.content?.length ?? 0)));
       final AgentPlan plan;
       try {
         final (p, u) = await _plan(llmRequest, token, onEvent);
         plan = p;
         usage = u;
+        trace
+          ..fact('inputTokens', u.inputTokens)
+          ..fact('cachedTokens', u.cachedInputTokens)
+          ..fact('outputTokens', u.outputTokens)
+          ..fact('ops', p.ops.length);
       } on _PlanFailure catch (f) {
         return AgentTurnResult(
           end: f.error?.kind == LlmErrorKind.cancelled ? AgentTurnEnd.cancelled : AgentTurnEnd.failed,
@@ -286,6 +304,7 @@ class AgentRunner {
       answer: DataAnswers.answer,
     );
     final outcomes = <String, OpOutcome>{for (final op in ops) op.ref: _checked(compileOp(op, ctx))};
+    trace.lap('compile');
     final answers = <String>[];
     String? opening;
     for (final op in ops) {
@@ -436,6 +455,7 @@ class AgentRunner {
       ?question,
     ];
     final reply = join([...lead, if (records.isNotEmpty) _outcomeSummary(records, lead: cancelled ? 'Stopped.' : ''), ...tail]);
+    trace.lap('reply');
     return AgentTurnResult(
       end: cancelled ? AgentTurnEnd.cancelled : AgentTurnEnd.completed,
       reply: reply.isEmpty ? 'Nothing was changed.' : reply,
@@ -507,7 +527,11 @@ class AgentRunner {
     if (steps.isEmpty) return (records: const <ActionRecord>[], problems: problems, questions: questions);
 
     onEvent?.call(const AgentToolStarted('plan', 'Preparing your changes'));
+    _trace.lap('prepare');
     final previews = await gateway.preview(planId, steps);
+    _trace
+      ..lap('preview')
+      ..add('previewSteps', steps.length);
     final proposals = <ProposedAction>[];
     final previewed = <PlanStep>[];
     for (var i = 0; i < steps.length; i++) {
@@ -557,6 +581,7 @@ class AgentRunner {
     } on LlmException {
       approvedIds = const {}; // stopped while waiting: nothing runs
     }
+    _trace.lap(AgentTrace.approval);
     final approved = {
       for (final p in proposals)
         if (approvedIds.contains(p.id)) p.stepId: p.preview.fingerprint,
@@ -577,6 +602,9 @@ class AgentRunner {
         modelCalls: _turnCalls,
       ),
     );
+    _trace
+      ..lap('execute')
+      ..add('executedSteps', approved.length);
     final byStep = {for (final r in results) r.stepId: r};
     final records = <ActionRecord>[];
     for (final p in proposals) {
@@ -615,6 +643,7 @@ class AgentRunner {
     onEvent?.call(const AgentToolStarted('history', 'Checking your history'));
     try {
       final page = await repo.list(limit: 20);
+      _trace.lap('history');
       return historyAnswer(page.items, period: period, now: _now());
     } on AppFailure catch (f) {
       return 'I couldn\'t read your history: ${f.message}';
@@ -645,8 +674,11 @@ class AgentRunner {
         throw _PlanFailure('That is a lot at once. Please send it in smaller parts.', usage: usage);
       }
       try {
-        return (PlanParser.parse(response.text), usage);
+        final plan = PlanParser.parse(response.text);
+        _trace.lap('parse');
+        return (plan, usage);
       } on PlanFormatException catch (e) {
+        _trace.lap('parse');
         debugPrint('Agent plan unusable (${e.reason})');
         if (attempt >= config.invalidPlanRetries) {
           throw _PlanFailure('I couldn\'t work out what to do. Please rephrase.', usage: usage);
@@ -668,7 +700,7 @@ class AgentRunner {
     while (true) {
       token.throwIfCancelled();
       try {
-        return await token.guard(provider.complete(request, cancel: token).timeout(
+        final response = await token.guard(provider.complete(request, cancel: token).timeout(
           config.requestTimeout,
           onTimeout: () => throw const LlmException(
             LlmErrorKind.timeout,
@@ -676,7 +708,15 @@ class AgentRunner {
             retryable: true,
           ),
         ));
+        // Network + relay + model: time to the complete reply (not streamed).
+        _trace
+          ..lap('model')
+          ..add('modelCalls', 1);
+        return response;
       } on LlmException catch (e) {
+        _trace
+          ..lap('model')
+          ..add('modelCalls', 1);
         final Duration wait;
         if (e.kind == LlmErrorKind.rateLimited) {
           final hint = e.retryAfter;
@@ -693,6 +733,7 @@ class AgentRunner {
           wait = Duration(milliseconds: 800 * transientRetries);
         }
         await token.guard(Future<void>.delayed(wait));
+        _trace.lap('retryWait');
         onEvent?.call(const AgentThinking());
       }
     }

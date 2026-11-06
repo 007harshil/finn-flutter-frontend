@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/di/action_providers.dart';
@@ -12,6 +13,7 @@ import '../execution/proposals.dart';
 import '../llm/llm_provider.dart';
 import '../orchestration/agent_events.dart';
 import '../orchestration/agent_runner.dart';
+import '../orchestration/agent_trace.dart';
 import 'action_deck.dart';
 import 'agent_providers.dart';
 
@@ -273,7 +275,28 @@ class AgentController extends Notifier<AgentViewState> {
     _cancel = null;
     _target = null;
     state = state.copyWith(status: AgentStatus.idle, progress: () => null, proposals: const [], plan: () => null);
+    final trace = _runner?.lastTrace;
+    if (trace != null) _logAfterFrame(trace);
     return result;
+  }
+
+  /// Debug and profile builds: logs the turn's stage timings once the reply
+  /// has been drawn (`render` = from the result to the next frame).
+  static void _logAfterFrame(AgentTrace trace) {
+    if (kReleaseMode) return;
+    final SchedulerBinding binding;
+    try {
+      binding = SchedulerBinding.instance;
+    } catch (_) {
+      trace.log(); // no Flutter binding (plain unit tests)
+      return;
+    }
+    binding.addPostFrameCallback((_) {
+      trace
+        ..lap('render')
+        ..log();
+    });
+    binding.ensureVisualUpdate();
   }
 
   /// Sets the user's call on one pending change ([decision] null undoes
