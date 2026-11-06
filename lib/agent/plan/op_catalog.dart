@@ -232,7 +232,8 @@ String _fmtDate(DateTime d) => '${d.day} ${const ['Jan', 'Feb', 'Mar', 'Apr', 'M
 
 OpOutcome _transaction(PlanOp op, OpContext c, TransactionType type) {
   final what = _what(op, type == TransactionType.income ? 'income' : 'expense');
-  final amount = _money(op, 'amount');
+  // With parts, the whole amount may be left for the parts to add up to.
+  final amount = _money(op, 'amount') ?? (type == TransactionType.expense ? _partsTotal(op.args['parts']) : null);
   if (amount == null) {
     return OpQuestion(
       type == TransactionType.income ? 'How much was the $what?' : 'How much did you spend on $what?',
@@ -242,11 +243,17 @@ OpOutcome _transaction(PlanOp op, OpContext c, TransactionType type) {
   final category = _categoryFor(op.args['category'], c.snapshot, type);
   if (category == null) return const OpRejected('There is no category to file this under.');
   final party = _str(op.args['party'], max: 60);
-  final account = _moneyAccount(
-    op,
-    c,
-    type == TransactionType.income ? 'Which account did the money go to' : 'Which account did you pay from',
-  );
+  // Only an expense can be paid from several accounts (as in the app).
+  final legs = type == TransactionType.expense ? _splitLegs(op.args['parts'], c, amount) : null;
+  if (legs is OpOutcome) return legs;
+  final split = legs as _Legs?;
+  final account = split != null
+      ? split.accountId
+      : _moneyAccount(
+          op,
+          c,
+          type == TransactionType.income ? 'Which account did the money go to' : 'Which account did you pay from',
+        );
   if (account is OpQuestion) return account;
   return OpAction(
     'transactions.create',
@@ -256,6 +263,7 @@ OpOutcome _transaction(PlanOp op, OpContext c, TransactionType type) {
       'categoryId': category.id,
       'date': Out.date(_date(op, c)),
       'accountId': account,
+      'splits': ?split?.json,
       'channel': AgentChannel.resolve(op.args['channel'], c.userText),
       'counterparty': party != null && grounded(party, c.userText, extra: c.groundingText) ? party : null,
       'note': _str(op.args['note']),
@@ -310,7 +318,7 @@ OpOutcome _edit(PlanOp op, OpContext c) {
   }
   // Changed fields may sit in "set" or, loosely, at the top level.
   final set = <String, Object?>{
-    for (final k in ['amount', 'category', 'date', 'note', 'party', 'account', 'channel', 'type']) k: ?op.args[k],
+    for (final k in ['amount', 'category', 'date', 'note', 'party', 'account', 'parts', 'channel', 'type']) k: ?op.args[k],
     if (op.args['set'] is Map) ...Map<String, Object?>.from(op.args['set'] as Map),
   };
   if (set.isEmpty) return const OpQuestion('What should I change?');
@@ -327,11 +335,24 @@ OpOutcome _edit(PlanOp op, OpContext c) {
     categoryId = category.id;
     if (category.note != null) notes.add(category.note!);
   }
-  final amount = AgentAmount.parse(set['amount']) ?? tx.amount;
+  final amount = AgentAmount.parse(set['amount']) ?? (set.containsKey('parts') ? _partsTotal(set['parts']) : null) ?? tx.amount;
   final date = AgentDate.resolve(set['date'], c.today) ?? tx.date;
-  final accountId = set.containsKey('account')
-      ? AgentAccount.resolve(c.snapshot, set['account'], c.userText) ?? tx.accountId
-      : tx.accountId;
+  // New parts replace the old ones; a split entry keeps its parts while
+  // the amount and accounts stay; otherwise one account carries it all.
+  final newLegs = type == TransactionType.expense && set.containsKey('parts') ? _splitLegs(set['parts'], c, amount) : null;
+  if (newLegs is OpOutcome) return newLegs;
+  final split = newLegs as _Legs?;
+  final keepsLegs = split == null && tx.isSplit && amount == tx.amount && !set.containsKey('account') && type == tx.type;
+  final accountId = split?.accountId ??
+      (set.containsKey('account')
+          ? AgentAccount.resolve(c.snapshot, set['account'], '${c.userText} ${c.groundingText}') ?? tx.accountId
+          : tx.accountId);
+  if (tx.isSplit && split?.json == null && !keepsLegs) {
+    notes.add(
+      'This payment was split across ${tx.splits.length} accounts. After this change '
+      '${c.snapshot.account(accountId)?.name ?? 'one account'} carries all of it.',
+    );
+  }
   final channel = set.containsKey('channel') ? AgentChannel.resolve(set['channel'], c.userText) : tx.channel;
   return OpAction(
     'transactions.update',
@@ -343,8 +364,9 @@ OpOutcome _edit(PlanOp op, OpContext c) {
       'categoryId': categoryId,
       'date': Out.date(date),
       'accountId': accountId,
-      // A split payment keeps its parts while the amount and accounts stay.
-      if (tx.isSplit && amount == tx.amount && !set.containsKey('account'))
+      if (split?.json != null)
+        'splits': split!.json
+      else if (keepsLegs)
         'splits': [for (final l in tx.splits) {'accountId': l.accountId, 'amount': Out.money(l.amount)}],
       'channel': channel,
       'counterparty': set.containsKey('party') ? _str(set['party'], max: 60) : tx.counterparty,
@@ -414,6 +436,81 @@ Object? _moneyAccount(PlanOp op, OpContext c, String question, {bool holdsMoney 
   return _askAccount(m is NoMatch<MoneyAccount> && said != null ? 'You have no "$said" account. $question' : question, fits);
 }
 
+// ---------------------------------------------------------------------------
+// Split payments: one payment carried by several accounts
+// ---------------------------------------------------------------------------
+
+/// The resolved `splits` input of a payment split across accounts.
+class _Legs {
+  const _Legs(this.accountId, [this.json]);
+
+  /// The first part's account, which the entry is filed under.
+  final String accountId;
+
+  /// `[{accountId, amount}]`, two or more, adding up to the payment; null
+  /// when only one account was named (it then carries the whole amount).
+  final List<Map<String, Object?>>? json;
+}
+
+/// Most accounts one payment may be split across (the app's limit is the
+/// user's accounts; this only bounds what the model can send).
+const _maxParts = 6;
+
+Money? _partAmount(Object? v) {
+  try {
+    return AgentAmount.parse(v);
+  } on FieldProblem {
+    return null;
+  }
+}
+
+/// The sum of `parts` when every part has an amount, else null.
+Money? _partsTotal(Object? raw) {
+  if (raw is! List || raw.length < 2) return null;
+  final amounts = [for (final p in raw) p is Map ? _partAmount(p['amount']) : null];
+  return amounts.contains(null) ? null : Money.sum(amounts.whereType<Money>());
+}
+
+const _askParts = 'Which accounts paid, and how much from each?';
+
+/// `parts: [{account, amount?}]` (the user paid one payment from several
+/// accounts) → the `splits` input, an [OpOutcome] (question / rejection),
+/// or null when the op has no parts. One part may leave out its amount: it
+/// is the rest of [total]. A single part is just the paying account.
+Object? _splitLegs(Object? raw, OpContext c, Money total) {
+  if (raw is! List || raw.isEmpty) return null;
+  if (raw.length > _maxParts) return const OpRejected('A payment can be split across at most $_maxParts accounts.');
+  final text = '${c.userText} ${c.groundingText}';
+  final accounts = <MoneyAccount>[];
+  final amounts = <Money?>[];
+  for (final p in raw) {
+    if (p is! Map) return const OpQuestion(_askParts);
+    final m = AgentAccount.match(c.snapshot, p['account'], text);
+    if (m is! Matched<MoneyAccount>) return const OpQuestion(_askParts);
+    if (accounts.any((a) => a.id == m.value.id)) return const OpQuestion('Each account can pay one part. $_askParts');
+    accounts.add(m.value);
+    amounts.add(_partAmount(p['amount']));
+  }
+  if (accounts.length == 1) {
+    return _Legs(accounts.single.id);
+  }
+  final open = [for (var i = 0; i < amounts.length; i++) if (amounts[i] == null) i];
+  if (open.length > 1) return const OpQuestion('How much came from each account?');
+  final known = Money.sum(amounts.whereType<Money>());
+  if (open.length == 1) {
+    final rest = total - known;
+    if (!rest.isPositive) {
+      return OpQuestion('The parts come to ${known.format()}, which is not less than ${total.format()}. $_askParts');
+    }
+    amounts[open.single] = rest;
+  } else if (known != total) {
+    return OpQuestion('The parts add up to ${known.format()}, not ${total.format()}. $_askParts');
+  }
+  return _Legs(accounts.first.id, [
+    for (var i = 0; i < accounts.length; i++) {'accountId': accounts[i].id, 'amount': Out.money(amounts[i]!)},
+  ]);
+}
+
 /// Op types that move money on one account (`account` arg → `accountId`).
 const _accountOps = {'expense', 'income', 'settle', 'loan_pay', 'sub_paid', 'goal_add', 'goal_take', 'fund_add', 'fund_take'};
 const _setAsideOps = {'goal_add', 'fund_add'};
@@ -421,8 +518,10 @@ const _setAsideOps = {'goal_add', 'fund_add'};
 /// A follow-up question for a change the server refused while preparing it,
 /// when one answer can fix it (another account, another amount). Null when
 /// the refusal is not about those (it is then reported as it is).
-/// [failedAccountId] is the account the refused input used.
-OpQuestion? refusalQuestion(PlanOp op, AppFailure failure, OpContext c, {String? failedAccountId}) {
+/// [failedAccountId] is the account the refused input used; [amount] the
+/// amount it moved.
+OpQuestion? refusalQuestion(PlanOp op, AppFailure failure, OpContext c, {String? failedAccountId, Money? amount}) {
+  if (failure.code == FailureCode.insufficientFunds) return _shortQuestion(op, failure, c, failedAccountId, amount);
   if (failure.code != FailureCode.validation) return null;
   final errors = failure.fieldErrors;
   final reason = errors['accountId'] ?? errors['amount'] ?? failure.message;
@@ -440,6 +539,53 @@ OpQuestion? refusalQuestion(PlanOp op, AppFailure failure, OpContext c, {String?
   }
   if (errors.containsKey('amount')) return OpQuestion('${_sentence(reason)} How much should it be?', field: 'amount');
   return null;
+}
+
+/// Op types that may pay from several accounts (`parts`).
+const _partsOps = {'expense', 'settle'};
+
+/// Ops whose paying account the overdraft rule can refuse, and the op
+/// field that names it.
+const _payingField = {'expense': 'account', 'settle': 'account', 'loan_pay': 'account', 'sub_paid': 'account', 'transfer': 'from'};
+
+/// A cash, bank or debit account cannot go below zero. When the account
+/// the change used is short, ask for one that covers it (credit cards
+/// always can), or for a split across accounts when only together they
+/// cover it. Null when no answer can fix it (the refusal is then shown).
+OpQuestion? _shortQuestion(PlanOp op, AppFailure failure, OpContext c, String? failedAccountId, Money? amount) {
+  final field = _payingField[op.type];
+  if (field == null || amount == null) return null;
+  // The app's own hint is for the form; the agent words its own.
+  final reason = _sentence(failure.message.replaceAll(' Split the payment across accounts.', ''));
+  final excluded = {failedAccountId ?? c.snapshot.defaultAccountId, if (op.type == 'transfer') ?AgentAccount.resolve(c.snapshot, op.args['to'], c.userText)};
+  final balances = {for (final b in c.snapshot.balance.accounts) b.account.id: b};
+  final candidates = [for (final a in c.snapshot.activeAccounts) if (!excluded.contains(a.id)) a];
+  // A split that is still short is re-split by the user, not swapped for one account.
+  final wasSplit = op.args['parts'] is List && (op.args['parts'] as List).length > 1;
+  final covering = wasSplit ? const <MoneyAccount>[] : [
+    for (final a in candidates)
+      if (op.type == 'transfer' ? !a.isLiability && (balances[a.id]?.balance ?? Money.zero) >= amount
+          : a.isLiability || (balances[a.id]?.balance ?? Money.zero) >= amount)
+        a,
+  ];
+  final question = op.type == 'transfer' ? 'Which account did the money leave' : 'Which account should I use instead';
+  if (covering.isNotEmpty) {
+    final q = _askAccount('$reason $question', covering);
+    return OpQuestion(
+      _partsOps.contains(op.type) ? '${q.question} Or tell me how to split it across accounts.' : q.question,
+      field: field,
+      options: q.options,
+    );
+  }
+  if (!_partsOps.contains(op.type)) return null;
+  var spare = Money.zero;
+  for (final a in c.snapshot.activeAccounts) {
+    final b = balances[a.id]?.balance ?? Money.zero;
+    if (!a.isLiability && b.isPositive) spare += b;
+  }
+  if (spare < amount) return null;
+  // No field: the reply goes back to the model with this question.
+  return OpQuestion('$reason How should I split it across your accounts? For example, an amount from one and the rest from another.');
 }
 
 String _sentence(String s) {
@@ -564,7 +710,12 @@ Object _openPending(PlanOp op, OpContext c, {required String verb}) {
   final chosen = _str(op.args['_id']);
   final open = s.pendingViews.where((v) => v.status.isActive).toList();
   if (chosen != null) {
-    return open.where((v) => v.payment.id == chosen).firstOrNull ?? const OpRejected('That item is no longer open.');
+    final v = open.where((v) => v.payment.id == chosen).firstOrNull;
+    if (v == null) return const OpRejected('That item is no longer open.');
+    if (!v.payment.canSettle) {
+      return OpRejected('This is shared with ${v.payment.counterparty}, who is owed the money. Only they can close it.');
+    }
+    return v;
   }
   final person = _str(op.args['person'], max: 60);
   if (person == null) return OpQuestion('Who $verb?', field: 'person');
@@ -587,14 +738,32 @@ Object _openPending(PlanOp op, OpContext c, {required String verb}) {
     final byPurpose = matchByName(note, list, (v) => [v.payment.purpose]);
     if (byPurpose is Matched<PendingView>) list = [byPurpose.value];
   }
-  if (list.length == 1) return list.single;
+  // Only the person who is owed settles or writes off a shared item.
+  // Checked after narrowing, so the item the user meant is never swapped
+  // for another one they may close.
+  final allowed = [for (final v in list) if (v.payment.canSettle) v];
+  if (allowed.isEmpty) {
+    final who = list.first.payment.counterparty;
+    return OpRejected(
+      'This is shared with $who, who is owed the money. Only $who can ${verb == 'will not pay' ? 'write it off' : 'settle it'}.',
+    );
+  }
+  final blocked = [for (final v in list) if (!v.payment.canSettle) v.payment.purpose];
+  list = allowed;
+  // Never pick the one closable item silently when the user may have
+  // meant one only the other person can close.
+  if (list.length == 1 && blocked.isEmpty) return list.single;
+  final aside = blocked.isEmpty
+      ? ''
+      : ' ${_orList(blocked.take(3).toList())} ${blocked.length == 1 ? 'is' : 'are'} shared, and only '
+          '${list.first.payment.counterparty} can close ${blocked.length == 1 ? 'it' : 'them'}.';
   String label(PendingView v) =>
       '${v.payment.purpose} (${v.outstanding.format()} ${v.payment.direction == PendingDirection.iOwe ? 'you owe' : 'to collect'})';
   final options = [
     for (final v in list.take(5)) ClarifyOption(label: label(v), value: v.payment.id, amount: v.outstanding),
   ];
   return OpQuestion(
-    'Which one with ${list.first.payment.counterparty}: ${options.map((o) => o.label).join(' or ')}?',
+    'Which one with ${list.first.payment.counterparty}: ${options.map((o) => o.label).join(' or ')}?$aside',
     field: '_id',
     options: options,
   );
@@ -604,21 +773,25 @@ OpOutcome _settle(PlanOp op, OpContext c) {
   final found = _openPending(op, c, verb: 'paid back');
   if (found is OpOutcome) return found;
   final v = found as PendingView;
-  final amount = _money(op, 'amount') ?? v.outstanding;
+  final owe = v.payment.direction == PendingDirection.iOwe;
+  // Paying back from several accounts: the parts may give the amount.
+  final amount = _money(op, 'amount') ?? (owe ? _partsTotal(op.args['parts']) : null) ?? v.outstanding;
   if (amount > v.outstanding) {
     return OpRejected('Only ${v.outstanding.format()} is still open with ${v.payment.counterparty} for ${v.payment.purpose}.');
   }
-  final account = _moneyAccount(
-    op,
-    c,
-    v.payment.direction == PendingDirection.owedToMe ? 'Which account did the money come into' : 'Which account did you pay from',
-  );
+  final legs = owe ? _splitLegs(op.args['parts'], c, amount) : null;
+  if (legs is OpOutcome) return legs;
+  final split = legs as _Legs?;
+  final account = split != null
+      ? split.accountId
+      : _moneyAccount(op, c, owe ? 'Which account did you pay from' : 'Which account did the money come into');
   if (account is OpQuestion) return account;
   return OpAction('pending.settle', {
     'pendingId': v.payment.id,
     'amount': Out.money(amount),
     'date': Out.date(_date(op, c)),
     'accountId': account,
+    'splits': ?split?.json,
     'channel': AgentChannel.resolve(op.args['channel'], c.userText),
     'recordCashMovement': true,
   });

@@ -38,7 +38,7 @@ void main() {
     // Changed agentInstructions? Bump agentPromptVersion, then update both
     // values here. History entries carry the version, so a regression can
     // be traced to the prompt that made it.
-    expect((agentPromptVersion, fnv1a(agentInstructions)), ('2026-11-03.1', '1731b23b'));
+    expect((agentPromptVersion, fnv1a(agentInstructions)), ('2026-11-06.1', '75054696'));
   });
 
   group('replies are the app\'s words, never the model\'s', () {

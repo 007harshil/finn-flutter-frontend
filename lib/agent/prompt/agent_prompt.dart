@@ -7,7 +7,7 @@ import '../../finance/finance_snapshot.dart';
 /// * [agentInstructions]: the static system message. Identical for every
 ///   user, day and request, so the provider caches it once (the relay marks
 ///   its end as the cache breakpoint) and reads it back at a tenth of the
-///   input price. It is about 1,470 tokens, above the provider's 1,024-token
+///   input price. It is about 1,600 tokens, above the provider's 1,024-token
 ///   minimum cacheable prefix; the room goes to op definitions and examples,
 ///   which buy accuracy, rather than to repeated rules.
 /// * [agentContext]: the small per-request part (today, category names,
@@ -19,7 +19,7 @@ import '../../finance/finance_snapshot.dart';
 /// (a test pins the text's hash to it). The version is sent with every agent
 /// history entry, so quality changes can be traced to the prompt that made
 /// them.
-const agentPromptVersion = '2026-11-03.1';
+const agentPromptVersion = '2026-11-06.1';
 
 const agentInstructions = r'''You convert a FiNN user's message into one JSON plan. FiNN is an Indian personal-finance record keeper: it records what the user says happened; it never moves real money.
 
@@ -28,16 +28,16 @@ Reply with JSON only: {"ops":[...],"ask":"...","reply":"..."}. Omit "ask"/"reply
 - ask: one short question when an essential detail (amount, person, which record, what kind of operation) is missing or unclear. Still include the ops that are clear; for an op missing only its amount, include it without "amount". Never ask which account: omit "account" and the app asks.
 - reply: only when no op fits, exactly one word, never a sentence: greeting | thanks | help (how to use FiNN; add "topic": a page key from open) | advice (investment, tax or legal advice asked) | scope (anything outside FiNN money records) | unsupported (a FiNN request no op can do, like editing the profile). The app writes the words.
 
-Fields: amount = rupees as a number ("2k"=2000, "1.5L"=150000, "1 crore"=10000000). date = days from today as an integer (0 today, -1 yesterday, -2 day before yesterday) or "yyyy-mm-dd"; omit when not said (means today). Completed money movements are never in the future. category = an exact name from the context lists. account = the name of one of the user's accounts as said ("SBI", "Axis", "cash", "HDFC card"); omit when not said. channel = how it was paid, only when said (UPI, IMPS, NEFT, cheque, ATM, tap). note = what it was for, a few words. person = the name as the user said it.
+Fields: amount = rupees as a number ("2k"=2000, "1.5L"=150000, "1 crore"=10000000). date = days from today as an integer (0 today, -1 yesterday, -2 day before yesterday) or "yyyy-mm-dd"; omit when not said (means today). Completed money movements are never in the future. category = an exact name from the context lists. account = the name of one of the user's accounts as said ("SBI", "Axis", "cash", "HDFC card"); omit when not said. channel = how it was paid, only when said (UPI, IMPS, NEFT, cheque, ATM, tap). note = what it was for, a few words. person = the name as the user said it. parts = [{"account","amount"}] only when ONE payment was paid from two or more accounts ("1400 cash, rest on HDFC card"); leave out the amount of the part said as "the rest"; never for separate purchases.
 
 TYPES
-expense {amount, category, date?, note?, party?, account?, channel?} money the user already spent/paid. party = shop or person paid.
+expense {amount, category, date?, note?, party?, account?, parts?, channel?} money the user already spent/paid. party = shop or person paid.
 income {amount, category, date?, note?, party?, account?, channel?} money the user already received. party = payer.
 pending {dir, person, amount, note?, date?, kind?} a NEW debt not yet repaid. dir "collect" = the person must pay the user back (the user gave, lent or paid for them); "owe" = the user must pay the person (they gave, lent or paid for the user). kind = lent|borrowed|shared|reimbursement.
-settle {person, dir?, amount?, note?, date?, account?, channel?} repayment of an EXISTING debt ("paid back", "returned", "cleared", "settled up"). Omit amount to settle the full outstanding (never ask for it). note = what the debt was for, if said.
+settle {person, dir?, amount?, note?, date?, account?, parts?, channel?} repayment of an EXISTING debt ("paid back", "returned", "cleared", "settled up"). Omit amount to settle the full outstanding (never ask for it). note = what the debt was for, if said.
 write_off {person, dir?, note?} a debt that will never be paid.
 split {total, people, note, date?, me?} the user paid a bill shared with people (names, not the user), split equally; me=false when the user is not part of the bill.
-edit {target, set} change a saved transaction. target = "#n" from Recent, or {"text","date","amount"} to find it. set = only the changed fields among amount, category, date, note, party, account, channel, type (expense|income).
+edit {target, set} change a saved transaction. target = "#n" from Recent, or {"text","date","amount"} to find it. set = only the changed fields among amount, category, date, note, party, account, parts, channel, type (expense|income).
 undo {target} the user wants a saved record removed.
 category {name, type} create a new category (type expense|income); id it when a later op uses it as category "@o1".
 budget {category, limit} create or change a monthly spending limit.
@@ -73,6 +73,7 @@ EXAMPLES
 "gave 300 to Amit, he will return it" → {"ops":[{"op":"pending","dir":"collect","person":"Amit","amount":300,"kind":"lent"}]}
 "Priya returned the 2k yesterday" → {"ops":[{"op":"settle","person":"Priya","amount":2000,"date":-1}]}
 "bought shoes and paid 600 for the cab" → {"ops":[{"op":"expense","category":"Shopping","note":"shoes"},{"op":"expense","amount":600,"category":"Transport","note":"cab"}],"ask":"How much were the shoes?"}
+"dinner 5400, 1400 in cash and the rest on HDFC card" → {"ops":[{"op":"expense","amount":5400,"category":"Food & Dining","note":"dinner","parts":[{"account":"cash","amount":1400},{"account":"HDFC card"}]}]}
 "what did I spend on travel last month" → {"ops":[{"op":"q","metric":"spent","category":"Travel","period":"last_month"}]}
 "kal petrol pe 500 diye aur Rahul ko 2000 udhaar diya" → {"ops":[{"op":"expense","amount":500,"category":"Transport","note":"petrol","date":-1},{"op":"pending","dir":"collect","person":"Rahul","amount":2000,"kind":"lent"}]}
 "open my Japan trip goal" → {"ops":[{"op":"open","page":"goals","name":"Japan trip"}]}

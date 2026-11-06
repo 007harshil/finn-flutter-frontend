@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../../actions/action.dart';
 import '../../actions/action_registry.dart';
 import '../../core/ids/id_generator.dart';
+import '../../core/money/money.dart';
 import '../../core/result/result.dart';
 import '../../finance/finance_snapshot.dart';
 import '../agent_config.dart';
@@ -513,10 +514,18 @@ class AgentRunner {
       final s = steps[i];
       final p = previews[i];
       if (p.preview == null) {
-        final failed = s.input.toJson()['accountId'];
+        final json = s.input.toJson();
+        final failed = json['accountId'] ?? json['fromAccountId'];
+        final moved = json['amount'];
         final q = p.failure == null
             ? null
-            : refusalQuestion(planOps[s.stepId]!, p.failure!, ctx, failedAccountId: failed is String ? failed : null);
+            : refusalQuestion(
+                planOps[s.stepId]!,
+                p.failure!,
+                ctx,
+                failedAccountId: failed is String ? failed : null,
+                amount: moved is String ? Money.tryParse(moved) : null,
+              );
         if (q != null) {
           questions.add((op: planOps[s.stepId]!, q: q));
         } else {

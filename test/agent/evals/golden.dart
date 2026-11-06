@@ -29,6 +29,8 @@ class GoldenOp {
       final want = e.value;
       if (want is List) {
         if (!want.contains(got)) return false;
+      } else if (want is Map && want['count'] is int) {
+        if (got is! List || got.length != want['count']) return false;
       } else if (want is Map && want['re'] is String) {
         if (got is! String || !RegExp(want['re']! as String).hasMatch(got)) return false;
       } else if (want is num) {

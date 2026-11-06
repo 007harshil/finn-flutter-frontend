@@ -1,16 +1,19 @@
 import 'dart:math' as math;
+import 'dart:ui' show PathMetric;
 
 import 'package:flutter/material.dart';
 
 import '../../../design_system/design_system.dart';
 import '../../../kit/kit.dart' show LedgerContext;
 
-/// The FiNN agent mark: a fin cresting a wave on a deep indigo disc, with a small
-/// spark for "assistant". Flat ink and paper like the rest of the ledger kit,
-/// deliberately not a gradient, sparkle or robot.
+/// The FiNN agent mark: an indigo key (the rounded-square icon well of the
+/// Bahi kit, standing on its darker edge) carrying an "F" drawn as ledger
+/// strokes over a double "total" rule, with a marigold spark for
+/// "assistant". Geometric and flat like the rest of the kit: no gradient,
+/// no robot, no play-button triangle.
 ///
-/// [phase] (0..1) drives the wave so callers can animate it; the static mark
-/// uses 0.
+/// [phase] (0..1) twinkles the spark so callers can animate it; the static
+/// mark uses 0.
 class FinnAgentMark extends StatelessWidget {
   const FinnAgentMark({super.key, this.size = 40, this.phase = 0, this.semanticLabel});
 
@@ -23,79 +26,107 @@ class FinnAgentMark extends StatelessWidget {
     final c = context.ink;
     final mark = CustomPaint(
       size: Size.square(size),
-      painter: _MarkPainter(disc: c.deep, glyph: const Color(0xFFFFFFFF), phase: phase),
+      painter: _MarkPainter(
+        tile: c.deep,
+        // A deeper shade of the tile in both themes (the kit's dark `edge`
+        // is marigold, which would read as a second shape here).
+        edge: Color.lerp(c.deep, const Color(0xFF000000), 0.35)!,
+        glyph: const Color(0xFFFFFFFF),
+        spark: c.marigold,
+        phase: phase,
+      ),
     );
     if (semanticLabel == null) return ExcludeSemantics(child: mark);
     return Semantics(label: semanticLabel, image: true, child: mark);
   }
 }
 
-class _MarkPainter extends CustomPainter {
-  const _MarkPainter({required this.disc, required this.glyph, required this.phase});
+/// Corner radius of the mark's tile as a share of its side.
+const _tileRadius = 0.26;
 
-  final Color disc;
+class _MarkPainter extends CustomPainter {
+  const _MarkPainter({
+    required this.tile,
+    required this.edge,
+    required this.glyph,
+    required this.spark,
+    required this.phase,
+  });
+
+  final Color tile;
+  final Color edge;
   final Color glyph;
+  final Color spark;
   final double phase;
 
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.shortestSide;
-    canvas.drawCircle(Offset(s / 2, s / 2), s / 2, Paint()..color = disc);
+    final radius = Radius.circular(s * _tileRadius);
+    // The key stands on a darker edge, like the kit's pressable buttons.
+    final lip = math.max(1.0, s * 0.06);
+    canvas.drawRRect(RRect.fromRectAndRadius(Offset.zero & Size.square(s), radius), Paint()..color = edge);
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, s, s - lip), radius), Paint()..color = tile);
 
-    Offset p(double x, double y) => Offset(x * s, y * s);
-    final white = Paint()..color = glyph;
+    final h = s - lip;
+    Offset p(double x, double y) => Offset(x * s, y * h);
 
-    // Dorsal fin: convex leading edge, concave trailing edge.
-    final fin = Path()
-      ..moveTo(0.30 * s, 0.64 * s)
-      ..cubicTo(0.36 * s, 0.48 * s, 0.46 * s, 0.30 * s, 0.62 * s, 0.22 * s)
-      ..quadraticBezierTo(0.56 * s, 0.44 * s, 0.72 * s, 0.64 * s)
-      ..close();
-    canvas.drawPath(fin, white);
+    // "F" monogram as ledger strokes: stem, top arm, shorter middle arm.
+    final stroke = Paint()
+      ..color = glyph
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = math.max(1.6, s * 0.085);
+    final f = Path()
+      ..moveTo(p(0.64, 0.25).dx, p(0.64, 0.25).dy)
+      ..lineTo(p(0.33, 0.25).dx, p(0.33, 0.25).dy)
+      ..lineTo(p(0.33, 0.68).dx, p(0.33, 0.68).dy)
+      ..moveTo(p(0.33, 0.465).dx, p(0.33, 0.465).dy)
+      ..lineTo(p(0.54, 0.465).dx, p(0.54, 0.465).dy);
+    canvas.drawPath(f, stroke);
 
-    // Wave the fin rides on.
-    final wave = Path();
-    const steps = 28;
-    for (var i = 0; i <= steps; i++) {
-      final x = 0.18 + 0.64 * i / steps;
-      final y = 0.665 + 0.035 * math.sin((x * 3.2 + phase) * 2 * math.pi);
-      i == 0 ? wave.moveTo(x * s, y * s) : wave.lineTo(x * s, y * s);
+    // Double rule under the figure: the ledger's "total" line. One rule at
+    // small sizes, where two would blur into one.
+    final rule = Paint()
+      ..color = glyph.withValues(alpha: 0.72)
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = math.max(1.0, s * 0.04);
+    final ruleY = s < 32 ? [0.82] : [0.80, 0.88];
+    for (final y in ruleY) {
+      canvas.drawLine(p(0.27, y), p(0.73, y), rule);
     }
-    canvas.drawPath(
-      wave,
-      Paint()
-        ..color = glyph
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = math.max(1.4, s * 0.06),
-    );
 
-    // Four-point spark beside the fin tip.
-    final sc = p(0.30, 0.30);
-    final r = s * 0.085;
-    final spark = Path()
-      ..moveTo(sc.dx, sc.dy - r)
-      ..quadraticBezierTo(sc.dx, sc.dy, sc.dx + r, sc.dy)
-      ..quadraticBezierTo(sc.dx, sc.dy, sc.dx, sc.dy + r)
-      ..quadraticBezierTo(sc.dx, sc.dy, sc.dx - r, sc.dy)
-      ..quadraticBezierTo(sc.dx, sc.dy, sc.dx, sc.dy - r)
+    // Four-point marigold spark: the assistant. Twinkles with [phase].
+    final twinkle = 1 + 0.16 * math.sin(phase * 2 * math.pi);
+    final c = p(0.74, 0.50);
+    final r = s * 0.115 * twinkle;
+    final k = r * 0.22; // waist of the spark
+    final sparkPath = Path()
+      ..moveTo(c.dx, c.dy - r)
+      ..quadraticBezierTo(c.dx + k, c.dy - k, c.dx + r, c.dy)
+      ..quadraticBezierTo(c.dx + k, c.dy + k, c.dx, c.dy + r)
+      ..quadraticBezierTo(c.dx - k, c.dy + k, c.dx - r, c.dy)
+      ..quadraticBezierTo(c.dx - k, c.dy - k, c.dx, c.dy - r)
       ..close();
-    canvas.drawPath(spark, white..color = glyph.withValues(alpha: 0.92));
+    canvas.drawPath(sparkPath, Paint()..color = spark);
   }
 
   @override
-  bool shouldRepaint(_MarkPainter old) => old.phase != phase || old.disc != disc || old.glyph != glyph;
+  bool shouldRepaint(_MarkPainter old) =>
+      old.phase != phase || old.tile != tile || old.edge != edge || old.glyph != glyph || old.spark != spark;
 }
 
-/// The animated agent orb used as the centre button of the navigation bar.
+/// The agent button mark with its working states.
 ///
-/// A rotating marigold ring, a pulse halo and a flowing wave make it read as
-/// "alive" and catch the eye. Idle, it plays an attention burst
-/// ([idleLoops] loops) when it appears and again whenever [attentionKey]
-/// changes (e.g. on tab switches), then rests, so it never drains the
-/// battery in the background. [active] (agent mode on) or [listening] keep
-/// it animating with a faster ring and stronger glow. Reduced motion shows
-/// the static mark.
+/// At rest it is the plain [FinnAgentMark]. A marigold trace runs once
+/// around the key when it appears and again whenever [attentionKey] changes
+/// ([idleLoops] laps), then fades out, so nothing moves in the background.
+/// [active] (agent mode on) keeps a faint outline with the trace running;
+/// [listening] adds a soft halo that breathes outward. Continuous motion is
+/// reserved for those two working states. Reduced motion shows the static
+/// mark, with a still outline while active or listening so the state stays
+/// visible.
 class AgentOrb extends StatefulWidget {
   const AgentOrb({
     super.key,
@@ -109,10 +140,10 @@ class AgentOrb extends StatefulWidget {
   final double size;
   final bool active;
 
-  /// Voice capture is running: the halo pulses faster.
+  /// Voice capture is running: the halo breathes.
   final bool listening;
 
-  /// Replays the idle attention burst when it changes.
+  /// Replays the idle attention trace when it changes.
   final Object? attentionKey;
   final int idleLoops;
 
@@ -121,8 +152,10 @@ class AgentOrb extends StatefulWidget {
 }
 
 class _AgentOrbState extends State<AgentOrb> with SingleTickerProviderStateMixin {
-  late final AnimationController _loop = AnimationController(vsync: this, duration: const Duration(seconds: 6));
+  late final AnimationController _loop = AnimationController(vsync: this, duration: const Duration(milliseconds: 2400));
   bool _reduced = false;
+
+  bool get _working => widget.active || widget.listening;
 
   @override
   void didChangeDependencies() {
@@ -137,8 +170,7 @@ class _AgentOrbState extends State<AgentOrb> with SingleTickerProviderStateMixin
   @override
   void didUpdateWidget(AgentOrb old) {
     super.didUpdateWidget(old);
-    final continuous = widget.active || widget.listening;
-    if (continuous != (old.active || old.listening) || widget.attentionKey != old.attentionKey) {
+    if (_working != (old.active || old.listening) || widget.attentionKey != old.attentionKey) {
       _syncAnimation(restartBurst: true);
     }
   }
@@ -148,14 +180,16 @@ class _AgentOrbState extends State<AgentOrb> with SingleTickerProviderStateMixin
       _loop
         ..stop()
         ..value = 0;
-    } else if (widget.active || widget.listening) {
+    } else if (_working) {
       if (!_loop.isAnimating) _loop.repeat();
     } else if (restartBurst && widget.idleLoops > 0) {
       _loop
         ..value = 0
         ..repeat(count: widget.idleLoops);
     } else {
-      _loop.stop();
+      _loop
+        ..stop()
+        ..value = 0;
     }
   }
 
@@ -169,64 +203,120 @@ class _AgentOrbState extends State<AgentOrb> with SingleTickerProviderStateMixin
   Widget build(BuildContext context) {
     final c = context.ink;
     final size = widget.size;
-    final ringColors = [c.marigold.withValues(alpha: 0), c.marigold, c.marigold.withValues(alpha: 0)];
+    // Room for the trace outside the key: stroke plus a hairline gap.
+    final inset = math.max(3.0, size * 0.075);
     return RepaintBoundary(
       child: AnimatedBuilder(
         animation: _loop,
         builder: (context, _) {
           final t = _loop.value;
-          // Ring turns once per loop idle, three times when active.
-          final spin = t * (widget.active ? 3 : 1);
-          // Halo pulses 3x per loop idle, 6x while active or listening.
-          final pulses = widget.listening ? 8 : (widget.active ? 6 : 3);
-          final pulse = (t * pulses) % 1;
-          final glow = widget.active || widget.listening ? 0.6 : 0.4;
           return SizedBox.square(
             dimension: size,
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
-              children: [
-                if (!context.reduceMotion)
-                  // Expanding, fading pulse ring.
-                  Transform.scale(
-                    scale: 1 + 0.45 * Curves.easeOut.transform(pulse),
-                    child: Container(
-                      width: size,
-                      height: size,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: c.marigold.withValues(alpha: (1 - pulse) * glow),
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                  ),
-                // Rotating marigold arc.
-                Transform.rotate(
-                  angle: spin * 2 * math.pi,
-                  child: Container(
-                    width: size,
-                    height: size,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: SweepGradient(colors: ringColors, stops: const [0, 0.75, 1]),
-                    ),
-                  ),
-                ),
-                // Gap between ring and mark.
-                Container(
-                  width: size - 5,
-                  height: size - 5,
-                  decoration: BoxDecoration(color: c.surface, shape: BoxShape.circle),
-                ),
-                FinnAgentMark(size: size - 9, phase: t * 4),
-              ],
+            child: CustomPaint(
+              painter: _TracePainter(
+                t: t,
+                color: c.marigold,
+                inset: inset,
+                working: _working,
+                listening: widget.listening,
+                reduced: _reduced,
+                running: _loop.isAnimating,
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(inset),
+                child: FinnAgentMark(size: size - inset * 2, phase: _loop.isAnimating ? (t * 2) % 1 : 0),
+              ),
             ),
           );
         },
       ),
     );
   }
+}
+
+/// The marigold outline around the key: a travelling segment while the
+/// orb animates, a faint track while working, a breathing halo while
+/// listening.
+class _TracePainter extends CustomPainter {
+  const _TracePainter({
+    required this.t,
+    required this.color,
+    required this.inset,
+    required this.working,
+    required this.listening,
+    required this.reduced,
+    required this.running,
+  });
+
+  final double t;
+  final Color color;
+  final double inset;
+  final bool working;
+  final bool listening;
+  final bool reduced;
+  final bool running;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.shortestSide;
+    final markSide = s - inset * 2;
+    final stroke = math.max(1.5, s * 0.04);
+    final half = stroke / 2;
+    final rect = Rect.fromLTWH(half, half, s - stroke, s - stroke);
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(markSide * _tileRadius + inset - half));
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+
+    if (reduced) {
+      if (working) canvas.drawRRect(rrect, paint..color = color);
+      return;
+    }
+
+    if (working) canvas.drawRRect(rrect, paint..color = color.withValues(alpha: 0.22));
+
+    if (listening) {
+      // Halo breathes outward twice per loop.
+      final b = (t * 2) % 1;
+      final grow = Curves.easeOut.transform(b) * inset * 1.6;
+      canvas.drawRRect(
+        rrect.inflate(grow),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = math.max(1.0, stroke * 0.7)
+          ..color = color.withValues(alpha: 0.45 * (1 - b)),
+      );
+    }
+
+    if (!running) return;
+    // Idle laps fade in and out so the trace never cuts off abruptly.
+    final strength = working ? 1.0 : math.sin(t * math.pi);
+    if (strength <= 0.01) return;
+    final metric = (Path()..addRRect(rrect)).computeMetrics().first;
+    _segment(canvas, metric, t, 0.26, paint..color = color.withValues(alpha: strength));
+  }
+
+  /// Draws [share] of the outline ending at [t] (wraps past the start).
+  void _segment(Canvas canvas, PathMetric m, double t, double share, Paint paint) {
+    final len = m.length;
+    final end = t * len;
+    final start = end - share * len;
+    if (start >= 0) {
+      canvas.drawPath(m.extractPath(start, end), paint);
+    } else {
+      canvas.drawPath(m.extractPath(len + start, len), paint);
+      canvas.drawPath(m.extractPath(0, end), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TracePainter old) =>
+      old.t != t ||
+      old.color != color ||
+      old.inset != inset ||
+      old.working != working ||
+      old.listening != listening ||
+      old.reduced != reduced ||
+      old.running != running;
 }

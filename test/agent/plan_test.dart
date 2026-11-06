@@ -191,10 +191,15 @@ void main() {
       expect((c('expense', {'amount': 'a lot'}) as OpQuestion).question, startsWith('The amount is not clear.'));
       expect((c('pending', {'dir': 'collect', 'amount': 300}) as OpQuestion).question, 'Who is this with?');
       expect((c('pending', {'person': 'Amit', 'amount': 300}, text: 'amit') as OpQuestion).field, 'dir');
+      // Rahul: a private cab item and a shared concert item only Rahul (the
+      // person owed) may close. The agent still asks, naming why.
       final rahul = c('settle', {'person': 'Rahul'}) as OpQuestion;
-      expect(rahul.options, hasLength(2));
+      expect(rahul.options.map((o) => o.label), [startsWith('Cab to airport')]);
+      expect(rahul.question, endsWith('Concert tickets is shared, and only Rahul Verma can close it.'));
       expect(c('settle', {'person': 'Rahul', 'amount': 780, 'account': 'Cash'}, text: 'cash'), isA<OpAction>()); // narrowed by amount
-      expect(c('settle', {'person': 'Rahul', 'note': 'concert', 'account': 'Cash'}, text: 'cash'), isA<OpAction>()); // narrowed by purpose
+      expect((c('settle', {'person': 'Rahul', 'note': 'concert', 'account': 'Cash'}, text: 'cash') as OpRejected).reason,
+          contains('Only Rahul Verma can settle it.')); // narrowed by purpose, then refused
+      expect((c('write_off', {'person': 'Rahul', 'note': 'concert'}) as OpRejected).reason, contains('Only Rahul Verma can write it off.'));
       expect((c('settle', {'person': 'Zed'}) as OpRejected).reason, 'There is no open pending payment with Zed.');
       expect((c('settle', {'person': 'Neha', 'amount': 99999}) as OpRejected).reason, contains('Only ₹850'));
       expect((c('goal_add', {'goal': 'yacht', 'amount': 5}) as OpRejected).reason, 'You don\'t have a goal called "yacht".');
