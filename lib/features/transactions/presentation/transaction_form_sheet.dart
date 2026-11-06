@@ -12,6 +12,8 @@ import '../../../kit/kit.dart';
 import '../../../features/transactions/domain/transaction.dart';
 import '../../accounts/presentation/widgets/account_picker_field.dart';
 import '../../accounts/presentation/widgets/channel_field.dart';
+import '../../accounts/presentation/widgets/paid_from_field.dart';
+import '../../../core/money/money.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../../shared/presentation/category_icons.dart';
 import '../../categories/domain/category.dart';
@@ -117,6 +119,10 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
   late DateTime _date;
   // Null until picked: the form shows the default account and sends it.
   String? _accountId;
+
+  /// Parts when the payment is split across accounts; null otherwise.
+  List<AccountLeg>? _splits;
+  Money? _total;
   String? _channel;
 
   /// Shown when an edited transaction's category can no longer be used.
@@ -136,6 +142,8 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     if (t != null) {
       _type = t.type;
       _amount.text = MoneyFormatter.editable(t.amount);
+      _total = t.amount;
+      if (t.isSplit) _splits = t.splits;
       _date = t.date;
       _accountId = t.accountId;
       _channel = t.channel;
@@ -166,6 +174,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
   void _setType(TransactionType type) {
     setState(() {
       _type = type;
+      if (type.isIncome) _splits = null;
       final current = _categoryId == null
           ? null
           : ref.read(categoryProvider(_categoryId!));
@@ -223,6 +232,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       if (amount == null || !amount.isPositive)
         'amount': 'Enter an amount greater than zero.',
       if (_categoryId == null) 'categoryId': 'Choose a category.',
+      ...?_splitErrors(amount),
     };
     if (local.isNotEmpty) {
       setState(() => _errors = local);
@@ -242,6 +252,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       categoryId: _categoryId!,
       date: _date,
       accountId: accountId,
+      splits: _splits ?? const [],
       channel: _channel,
       counterparty: _trimmed(_counterparty),
       note: _trimmed(_note),
@@ -286,6 +297,16 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     await Navigator.of(context).maybePop(saved.id);
   }
 
+  /// Local check of a split before sending it.
+  Map<String, String>? _splitErrors(Money? amount) {
+    final legs = _splits;
+    if (legs == null || amount == null) return null;
+    if (legs.length < 2) return {'splits': 'Enter amounts for at least two accounts.'};
+    final sum = Money.sum(legs.map((l) => l.amount));
+    if (sum != amount) return {'splits': 'The parts add up to ${sum.format()}, not ${amount.format()}.'};
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = context.type;
@@ -322,7 +343,10 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
             autofocus: !_editing,
             errorText: _errors['amount'],
             textInputAction: TextInputAction.next,
-            onChanged: (_) => _clearError('amount'),
+            onChanged: (v) {
+              setState(() => _total = v);
+              _clearError('amount');
+            },
           ),
           const SizedBox(height: LedgerForm.gap),
           if (_retiredCategoryName != null && _categoryId == null) ...[
@@ -403,15 +427,37 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
             onChanged: (_) => _clearError('counterparty'),
           ),
           const SizedBox(height: LedgerForm.gap),
-          AccountPickerField(
-            label: income ? 'Received in' : 'Paid from',
-            value: _accountId ?? ref.watch(defaultAccountProvider).value?.id,
-            errorText: _errors['accountId'],
-            onChanged: (id) => setState(() {
-              _accountId = id;
-              _errors = Map.of(_errors)..remove('accountId');
-            }),
-          ),
+          if (income)
+            AccountPickerField(
+              label: 'Received in',
+              value: _accountId ?? ref.watch(defaultAccountProvider).value?.id,
+              errorText: _errors['accountId'],
+              onChanged: (id) => setState(() {
+                _accountId = id;
+                _errors = Map.of(_errors)..remove('accountId');
+              }),
+            )
+          else
+            PaidFromField(
+              accountId: _accountId ?? ref.watch(defaultAccountProvider).value?.id,
+              total: _total,
+              initialSplits: widget.initial?.isExpense ?? false ? widget.initial!.splits : const [],
+              room: {
+                if (widget.initial case final t? when t.isExpense)
+                  for (final l in t.legs) l.accountId: l.amount,
+              },
+              errorText: _errors['accountId'],
+              splitErrorText: _errors['splits'],
+              enabled: !_submitting,
+              onAccountChanged: (id) => setState(() {
+                _accountId = id;
+                _errors = Map.of(_errors)..remove('accountId')..remove('amount');
+              }),
+              onSplitChanged: (legs) => setState(() {
+                _splits = legs;
+                _errors = Map.of(_errors)..remove('splits')..remove('amount');
+              }),
+            ),
           const SizedBox(height: LedgerForm.gap),
           LedgerDateField(
             label: 'Date',

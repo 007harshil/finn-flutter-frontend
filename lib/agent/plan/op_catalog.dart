@@ -343,6 +343,9 @@ OpOutcome _edit(PlanOp op, OpContext c) {
       'categoryId': categoryId,
       'date': Out.date(date),
       'accountId': accountId,
+      // A split payment keeps its parts while the amount and accounts stay.
+      if (tx.isSplit && amount == tx.amount && !set.containsKey('account'))
+        'splits': [for (final l in tx.splits) {'accountId': l.accountId, 'amount': Out.money(l.amount)}],
       'channel': channel,
       'counterparty': set.containsKey('party') ? _str(set['party'], max: 60) : tx.counterparty,
       'note': set.containsKey('note') ? _str(set['note']) : tx.note,

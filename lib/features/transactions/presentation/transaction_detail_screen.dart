@@ -141,7 +141,9 @@ class _DetailsState extends ConsumerState<_Details> {
         t.version > 1 ||
         t.updatedAt.isAfter(t.createdAt.add(const Duration(seconds: 1)));
 
-    final account = ref.watch(financeSnapshotProvider).value?.account(t.accountId)?.name ?? 'Unknown account';
+    final snapshot = ref.watch(financeSnapshotProvider).value;
+    String nameOf(String id) => snapshot?.account(id)?.name ?? 'Unknown account';
+    final account = t.isSplit ? '${t.legs.length} accounts' : nameOf(t.accountId);
     final who = (t.counterparty ?? '').trim();
     final note = (t.note ?? '').trim();
     return Column(
@@ -159,8 +161,9 @@ class _DetailsState extends ConsumerState<_Details> {
               caption: title,
               stats: [
                 SlabStat.text(label: 'Date', text: DateFormats.dayMonthYear.format(t.date)),
-                SlabStat.text(label: 'Account', text: account),
+                SlabStat.text(label: t.isSplit ? 'Split' : 'Account', text: account),
               ],
+              footer: t.isSplit ? _SplitLegs(transaction: t, nameOf: nameOf) : null,
             ),
           ),
         ),
@@ -202,6 +205,60 @@ class _DetailsState extends ConsumerState<_Details> {
               expand: true,
               loading: _deleting,
               onPressed: _confirmDelete,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// A payment split across accounts: one bar with each account's part, then
+/// each account with its amount.
+class _SplitLegs extends StatelessWidget {
+  const _SplitLegs({required this.transaction, required this.nameOf});
+
+  final Transaction transaction;
+  final String Function(String id) nameOf;
+
+  static const _colors = [Slab.cool, Slab.warn, Slab.lilac, Slab.good, Slab.bad];
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.type;
+    final legs = transaction.legs;
+    final total = transaction.amount.paise;
+    Color colorOf(int i) => _colors[i % _colors.length];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SlabBar(
+          key: const ValueKey('tx-split-bar'),
+          parts: [for (var i = 0; i < legs.length; i++) (legs[i].amount.paise / total, colorOf(i))],
+          semanticLabel: [for (final l in legs) '${nameOf(l.accountId)} ${MoneyFormatter.spoken(l.amount)}'].join(', '),
+        ),
+        const SizedBox(height: Sp.sm),
+        for (var i = 0; i < legs.length; i++)
+          Padding(
+            key: ValueKey('tx-split-leg:${legs[i].accountId}'),
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(color: colorOf(i), shape: BoxShape.circle),
+                ),
+                const SizedBox(width: Sp.sm),
+                Expanded(
+                  child: Text(
+                    nameOf(legs[i].accountId),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.small.copyWith(color: Slab.soft),
+                  ),
+                ),
+                AmountText(legs[i].amount, style: t.small.copyWith(color: Slab.ink, fontWeight: FontWeight.w600)),
+              ],
             ),
           ),
       ],

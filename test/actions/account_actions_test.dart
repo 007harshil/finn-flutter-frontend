@@ -162,6 +162,7 @@ void main() {
     });
 
     test('delete always asks first and removes the account transactions and transfers', () async {
+      await h.run(const SetAccountBalanceAction(), SetAccountBalanceInput(id: sbi.id, balance: const Money.rupees(1000)));
       final tx = await h.run(const CreateTransactionAction(), spend(50, accountId: sbi.id));
       final spare = await h.run(const CreateAccountAction(), newAccount('Spare', MoneyAccountKind.bank));
       await h.run(const CreateTransferAction(),
@@ -276,9 +277,11 @@ void main() {
       expect(await fields(atm(100)), ['fromAccountId']);
     });
 
-    test('overdrawing only warns', () async {
-      final p = await h.dispatcher.preview(const CreateTransferAction(), atm(50000));
-      expect(p.valueOrNull!.warnings, isNotEmpty);
+    test('overdrawing is refused and nothing changes', () async {
+      final f = await h.reject(const CreateTransferAction(), atm(50000));
+      expect(f.code, FailureCode.insufficientFunds);
+      expect(f.fieldErrors['amount'], startsWith('Not enough money in SBI'));
+      expect((await h.snapshot()).transfers, isEmpty);
     });
 
     test('update and delete reverse the effect; stale versions are rejected', () async {

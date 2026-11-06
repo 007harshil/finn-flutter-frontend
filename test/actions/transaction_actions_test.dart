@@ -89,11 +89,27 @@ void main() {
       expect((await h.reject(const CreateTransactionAction(), expense(10))).fieldErrors.keys, ['categoryId']);
     });
 
-    test('warns, without blocking, when an expense exceeds the available balance', () async {
-      final preview = (await h.dispatcher.preview(const CreateTransactionAction(), expense(150000))).valueOrNull!;
-      expect(preview.warnings.single, startsWith('This is more than your available balance'));
-      await h.run(const CreateTransactionAction(), expense(150000));
-      expect((await h.snapshot()).balance.cash, const Money.rupees(-50000));
+    test('refuses an expense larger than the account holds; the balance never goes below zero', () async {
+      final f = await h.reject(const CreateTransactionAction(), expense(150000));
+      expect(f.code, FailureCode.insufficientFunds);
+      expect(f.message, startsWith('Not enough money in Cash'));
+      expect((await h.snapshot()).balance.cash, harnessOpening);
+      // Spending exactly what is there is fine.
+      await h.run(const CreateTransactionAction(), expense(100000));
+      expect((await h.snapshot()).balance.cash, Money.zero);
+    });
+
+    test('refuses an edit or delete that would overdraw', () async {
+      final big = await h.run(const CreateTransactionAction(), expense(90000));
+      final f = await h.reject(
+        const UpdateTransactionAction(),
+        UpdateTransactionInput(id: big.id, expectedVersion: 1, data: expense(120000)),
+      );
+      expect(f.code, FailureCode.insufficientFunds);
+      final pay = await h.run(const CreateTransactionAction(), income(5000));
+      await h.run(const CreateTransactionAction(), expense(15000));
+      final d = await h.reject(const DeleteTransactionAction(), DeleteTransactionInput(id: pay.id));
+      expect(d.code, FailureCode.insufficientFunds);
     });
 
     test('JSON round trip through decode', () {

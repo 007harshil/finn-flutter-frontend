@@ -10,6 +10,8 @@ import '../../../kit/kit.dart';
 import '../../../shared/presentation/action_runner.dart';
 import '../../accounts/presentation/widgets/account_picker_field.dart';
 import '../../accounts/presentation/widgets/channel_field.dart';
+import '../../accounts/presentation/widgets/paid_from_field.dart';
+import '../../transactions/domain/transaction.dart';
 import '../application/pending_actions.dart';
 import '../domain/pending_payment.dart';
 import 'pending_ui.dart';
@@ -47,6 +49,9 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
   DateTime? _date;
   // Null until picked: the form shows the default account and sends it.
   String? _accountId;
+
+  /// Parts when the payment is split across accounts; null otherwise.
+  List<AccountLeg>? _splits;
   String? _channel;
   bool _recordCash = true;
   bool _busy = false;
@@ -73,6 +78,20 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
       );
       return;
     }
+    final owe = v.payment.direction.isOwe;
+    final legs = _recordCash && owe ? _splits : null;
+    if (legs != null) {
+      final sum = Money.sum(legs.map((l) => l.amount));
+      final err = legs.length < 2
+          ? 'Enter amounts for at least two accounts.'
+          : sum != amount
+              ? 'The parts add up to ${sum.format()}, not ${amount.format()}.'
+              : null;
+      if (err != null) {
+        setState(() => _errors = {'splits': err});
+        return;
+      }
+    }
     final note = _note.text.trim();
     setState(() {
       _busy = true;
@@ -87,6 +106,7 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
         amount: amount,
         date: _date ?? ref.read(todayProvider),
         accountId: _recordCash ? (_accountId ?? ref.read(defaultAccountProvider).value?.id) : null,
+        splits: legs ?? const [],
         channel: _recordCash ? _channel : null,
         recordCashMovement: _recordCash,
         note: note.isEmpty ? null : note,
@@ -148,7 +168,7 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
                 (tooMuch
                     ? 'More than the ${v.outstanding.format()} outstanding.'
                     : null),
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(() => _errors = Map.of(_errors)..remove('amount')),
           ),
           const SizedBox(height: Sp.md),
           _QuickAmounts(
@@ -195,15 +215,32 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
           ),
           if (_recordCash) ...[
             const SizedBox(height: LedgerForm.gap),
-            AccountPickerField(
-              label: owe ? 'Paid from' : 'Received in',
-              value: _accountId ?? ref.watch(defaultAccountProvider).value?.id,
-              errorText: _errors['accountId'],
-              onChanged: (id) => setState(() {
-                _accountId = id;
-                _errors = Map.of(_errors)..remove('accountId');
-              }),
-            ),
+            if (owe)
+              PaidFromField(
+                accountId: _accountId ?? ref.watch(defaultAccountProvider).value?.id,
+                total: entered.isPositive ? entered : null,
+                errorText: _errors['accountId'],
+                splitErrorText: _errors['splits'],
+                enabled: !_busy,
+                onAccountChanged: (id) => setState(() {
+                  _accountId = id;
+                  _errors = Map.of(_errors)..remove('accountId')..remove('amount');
+                }),
+                onSplitChanged: (legs) => setState(() {
+                  _splits = legs;
+                  _errors = Map.of(_errors)..remove('splits')..remove('amount');
+                }),
+              )
+            else
+              AccountPickerField(
+                label: 'Received in',
+                value: _accountId ?? ref.watch(defaultAccountProvider).value?.id,
+                errorText: _errors['accountId'],
+                onChanged: (id) => setState(() {
+                  _accountId = id;
+                  _errors = Map.of(_errors)..remove('accountId');
+                }),
+              ),
             const SizedBox(height: LedgerForm.gap),
             ChannelField(
               value: _channel,

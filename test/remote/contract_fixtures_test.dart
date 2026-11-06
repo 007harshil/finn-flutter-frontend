@@ -133,7 +133,7 @@ void main() {
     expect(mirrored!.link?.createdByMe, isFalse);
     expect(mirrored.link?.handle, '@alice');
     final settlementIds = (await repos.settlements.getAll()).where((s) => s.pendingId == 'mir_shr_1').map((s) => s.id);
-    expect(settlementIds, containsAll(['mir_set_3', 'set_4']));
+    expect(settlementIds, containsAll(['set_3', 'set_4']));
     expect(repos.users.known(mirrored.link!.userId)?.handle, '@alice');
     expect(repos.users.me.name, 'Bob');
   });

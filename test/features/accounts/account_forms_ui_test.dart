@@ -76,6 +76,43 @@ void main() {
   setUp(() async => env = await TestEnv.create());
 
   group('transaction form', () {
+    testWidgets('a payment bigger than one account is split across two and saved as one entry', (tester) async {
+      await _sized(tester, h: 2400);
+      final before = await env.snapshot();
+      final sbi = before.balance.balanceOf(SeedAccountIds.sbi)!;
+      final cash = before.balance.balanceOf(SeedAccountIds.cash)!;
+      final total = sbi + Money.fromPaise(cash.paise ~/ 2).roundToRupee();
+      await env.pumpWidget(tester, const TransactionFormSheet());
+      await tester.pumpAndSettle();
+
+      await _enterAmount(tester, (total.paise ~/ 100).toString());
+      await tester.tap(find.text('Choose a category'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey(SeedCategoryIds.food)));
+      await tester.pumpAndSettle();
+
+      // SBI (the default) cannot cover it: the form says so and offers a split.
+      expect(find.byKey(const ValueKey('pay-short')), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const ValueKey('pay-split')));
+      await tester.tap(find.byKey(const ValueKey('pay-split')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('pay-part:${SeedAccountIds.sbi}')), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const ValueKey('pay-max:${SeedAccountIds.cash}')));
+      await tester.tap(find.byKey(const ValueKey('pay-max:${SeedAccountIds.cash}')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('assigned'), findsOneWidget);
+
+      await _submitAndConfirm(tester, 'Record expense');
+
+      final after = await env.snapshot();
+      final tx = after.transactions.firstWhere((t) => t.amount == total);
+      expect(tx.isSplit, isTrue);
+      expect(tx.amountOn(SeedAccountIds.sbi), sbi);
+      expect(tx.amountOn(SeedAccountIds.cash), total - sbi);
+      expect(after.balance.balanceOf(SeedAccountIds.sbi), Money.zero);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('preselects the default account; another account and a channel are saved', (tester) async {
       await _sized(tester);
       await env.pumpWidget(tester, const TransactionFormSheet());

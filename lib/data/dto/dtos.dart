@@ -41,7 +41,7 @@ abstract final class TransactionDto {
         'categoryId': t.categoryId,
         'date': J.date(t.date),
         'accountId': t.accountId,
-        'accountSplits': t.isSplit
+        'splits': t.isSplit
             ? [for (final l in t.splits) {'accountId': l.accountId, 'amountPaise': J.money(l.amount)}]
             : null,
         'channel': t.channel,
@@ -70,7 +70,7 @@ abstract final class TransactionDto {
         note: j['note'] as String?,
         origin: J.enumByName(TransactionOrigin.values, j['origin'], TransactionOrigin.manual),
         originRefId: j['originRefId'] as String?,
-        splits: accountLegsFromJson(j['accountSplits']),
+        splits: accountLegsFromJson(j['splits'] ?? j['accountSplits']),
         createdAt: J.toInstant(j['createdAt']),
         updatedAt: J.toInstant(j['updatedAt']),
         version: (j['version'] as num?)?.toInt() ?? 1,
