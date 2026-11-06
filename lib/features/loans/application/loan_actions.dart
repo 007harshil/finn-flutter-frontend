@@ -5,6 +5,7 @@ import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../core/time/frequency.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../../finance/overdraft.dart';
 import '../../accounts/application/account_support.dart';
 import '../../categories/domain/category.dart';
 import '../../transactions/application/transaction_actions.dart';
@@ -214,6 +215,17 @@ class CreateLoanAction extends FinancialAction<LoanInput, Loan> {
   Result<ActionPreview> prepare(LoanInput input, FinanceSnapshot s, ActionEnvironment env) {
     final e = validateLoan(input, s);
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
+    if (input.recordDisbursement && input.direction != LoanDirection.borrowed) {
+      final short = transactionOverdraft(s, field: 'principal', add: [
+        draftTransaction(
+          type: TransactionType.expense,
+          amount: input.principal,
+          date: input.startDate.dateOnly,
+          accountId: input.accountId ?? s.defaultAccountId,
+        ),
+      ]);
+      if (short != null) return Result.err(short);
+    }
     final ppy = input.frequency.periodsPerYear;
     final lines = <PreviewLine>[
       PreviewLine('Principal', input.principal.format(), emphasis: true),
@@ -495,6 +507,17 @@ class RecordLoanPaymentAction extends FinancialAction<LoanPaymentInput, LoanPaym
     final p = (r as Ok<LoanPaymentPreview>).value;
     final loan = s.loan(input.loanId)!.loan;
     final borrowed = loan.isBorrowed;
+    if (input.recordCashMovement) {
+      final short = transactionOverdraft(s, add: [
+        draftTransaction(
+          type: borrowed ? TransactionType.expense : TransactionType.income,
+          amount: input.amount,
+          date: input.date.dateOnly,
+          accountId: input.accountId ?? s.defaultAccountId,
+        ),
+      ]);
+      if (short != null) return Result.err(short);
+    }
     final warnings = <String>[];
     if (borrowed && input.recordCashMovement && input.amount > s.balance.available) {
       warnings.add('This is more than your available balance of ${s.balance.available.format()}.');
@@ -619,6 +642,11 @@ class DeleteLoanAction extends FinancialAction<LoanIdInput, Loan> {
       return const Result.err(
         AppFailure(FailureCode.notPermitted, 'This loan has payments recorded, so it is kept for your history.'),
       );
+    }
+    final disbursement = st.loan.disbursementTransactionId;
+    if (disbursement != null) {
+      final short = transactionOverdraft(s, remove: {disbursement}, field: 'id');
+      if (short != null) return Result.err(short);
     }
     return Result.ok(
       preview(

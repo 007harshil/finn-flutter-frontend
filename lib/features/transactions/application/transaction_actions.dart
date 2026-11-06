@@ -5,6 +5,7 @@ import '../../../core/result/result.dart';
 import '../../../core/time/clock.dart';
 import '../../../core/time/dates.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../../finance/overdraft.dart';
 import '../../accounts/application/account_support.dart';
 import '../domain/transaction.dart';
 import '../../settings/application/tracking_start.dart';
@@ -17,6 +18,7 @@ class TransactionInput extends ActionInput {
     required this.categoryId,
     required this.date,
     this.accountId,
+    this.splits = const [],
     this.channel,
     this.counterparty,
     this.note,
@@ -28,6 +30,10 @@ class TransactionInput extends ActionInput {
   final DateTime date;
   /// Account hit; null resolves to the user's default account.
   final String? accountId;
+
+  /// Parts paid from different accounts (two or more, adding up to
+  /// [amount]). Empty when one account carries the whole amount.
+  final List<AccountLeg> splits;
   final String? channel;
   final String? counterparty;
   final String? note;
@@ -38,6 +44,7 @@ class TransactionInput extends ActionInput {
     categoryId: In.str(j, 'categoryId'),
     date: In.date(j, 'date'),
     accountId: In.strOpt(j, 'accountId'),
+    splits: decodeAccountSplits(j),
     channel: In.strOpt(j, 'channel'),
     counterparty: In.strOpt(j, 'counterparty'),
     note: In.strOpt(j, 'note'),
@@ -50,10 +57,49 @@ class TransactionInput extends ActionInput {
     'categoryId': categoryId,
     'date': Out.date(date),
     'accountId': accountId,
+    if (splits.isNotEmpty) 'splits': encodeAccountSplits(splits),
     'channel': channel,
     'counterparty': counterparty,
     'note': note,
   };
+}
+
+/// Decodes `splits: [{accountId, amount}]` (amounts in rupees).
+List<AccountLeg> decodeAccountSplits(Map<String, Object?> j) {
+  final raw = j['splits'];
+  if (raw == null) return const [];
+  if (raw is! List) {
+    throw const AppFailure.validation('Invalid "splits": expected a list.', fields: {'splits': 'Expected a list'});
+  }
+  return [
+    for (final e in raw)
+      if (e is Map)
+        AccountLeg(In.str(Map<String, Object?>.from(e), 'accountId'), In.money(Map<String, Object?>.from(e), 'amount'))
+      else
+        throw const AppFailure.validation('Invalid "splits".', fields: {'splits': 'Expected accountId and amount'}),
+  ];
+}
+
+List<Map<String, Object?>> encodeAccountSplits(List<AccountLeg> legs) => [
+  for (final l in legs) {'accountId': l.accountId, 'amount': Out.money(l.amount)},
+];
+
+/// Why [legs] cannot split [amount], or null. Two or more different
+/// writable accounts, each part above zero, parts adding up to [amount].
+String? accountSplitError(FinanceSnapshot s, Money amount, List<AccountLeg> legs, {List<AccountLeg> keep = const []}) {
+  if (legs.isEmpty) return null;
+  if (legs.length < 2) return 'Choose at least two accounts to split the payment.';
+  final ids = legs.map((l) => l.accountId).toSet();
+  if (ids.length != legs.length) return 'Each account can appear only once.';
+  if (legs.any((l) => !l.amount.isPositive)) return 'Enter an amount for each account.';
+  final total = Money.sum(legs.map((l) => l.amount));
+  if (total != amount) return 'The parts add up to ${total.format()}, not ${amount.format()}.';
+  final kept = keep.map((l) => l.accountId).toSet();
+  for (final l in legs) {
+    final err = accountWriteError(s, l.accountId, keepAccountId: kept.contains(l.accountId) ? l.accountId : null);
+    if (err != null) return err;
+  }
+  return null;
 }
 
 const _fields = [
@@ -65,6 +111,12 @@ const _fields = [
     'accountId',
     FieldKind.id,
     'Money account it hit (cash, bank or card). Omit for the default account',
+    required: false,
+  ),
+  ActionFieldSpec(
+    'splits',
+    FieldKind.string,
+    'Optional: pay from several accounts, a list of {accountId, amount} adding up to amount. Overrides accountId',
     required: false,
   ),
   ActionFieldSpec('channel', FieldKind.string, 'Optional: UPI, IMPS, NEFT, Cheque, ATM … (up to 30 characters)', required: false),
@@ -88,8 +140,13 @@ Map<String, String> validateTransaction(TransactionInput i, FinanceSnapshot s, {
     errors['categoryId'] = 'This category is managed automatically. Choose another.';
   }
   if (i.date.dateOnly.isAfter(s.today)) errors['date'] = 'The date cannot be in the future.';
-  final accountErr = accountWriteError(s, i.accountId ?? existing?.accountId ?? s.defaultAccountId, keepAccountId: existing?.accountId);
-  if (accountErr != null) errors['accountId'] = accountErr;
+  if (i.splits.isEmpty) {
+    final accountErr = accountWriteError(s, i.accountId ?? existing?.accountId ?? s.defaultAccountId, keepAccountId: existing?.accountId);
+    if (accountErr != null) errors['accountId'] = accountErr;
+  } else {
+    final splitErr = accountSplitError(s, i.amount, i.splits, keep: existing?.legs ?? const []);
+    if (splitErr != null) errors['splits'] = splitErr;
+  }
   final channelErr = channelError(i.channel);
   if (channelErr != null) errors['channel'] = channelErr;
   if ((i.counterparty?.length ?? 0) > 80) errors['counterparty'] = 'Keep this under 80 characters.';
@@ -102,7 +159,10 @@ List<PreviewLine> _lines(TransactionInput i, FinanceSnapshot s, {Transaction? ex
   PreviewLine('Amount', i.amount.format(), emphasis: true),
   PreviewLine('Category', s.category(i.categoryId)?.name ?? '—'),
   PreviewLine('Date', DateFormats.dayMonthYear.format(i.date)),
-  PreviewLine('Account', s.account(i.accountId ?? existing?.accountId ?? s.defaultAccountId)?.name ?? '—'),
+  if (i.splits.length > 1)
+    for (final l in i.splits) PreviewLine(s.account(l.accountId)?.name ?? '—', l.amount.format())
+  else
+    PreviewLine('Account', s.account(i.accountId ?? existing?.accountId ?? s.defaultAccountId)?.name ?? '—'),
   if (cleanChannel(i.channel) != null) PreviewLine('Channel', cleanChannel(i.channel)!),
   if (i.counterparty != null) PreviewLine(i.type.isIncome ? 'From' : 'To', i.counterparty!),
 ];
@@ -128,6 +188,12 @@ class CreateTransactionAction extends FinancialAction<TransactionInput, Transact
   Result<ActionPreview> prepare(TransactionInput input, FinanceSnapshot s, ActionEnvironment env) {
     final errors = validateTransaction(input, s);
     if (errors.isNotEmpty) return Result.err(AppFailure.validation(errors.values.first, fields: errors));
+    final short = transactionOverdraft(
+      s,
+      add: [input.draft(s.defaultAccountId)],
+      canSplit: input.isExpense && input.splits.isEmpty,
+    );
+    if (short != null) return Result.err(short);
     final warnings = <String>[];
     if (input.isExpense && input.amount > s.balance.available) {
       warnings.add('This is more than your available balance of ${s.balance.available.format()}.');
@@ -152,7 +218,8 @@ class CreateTransactionAction extends FinancialAction<TransactionInput, Transact
       amount: input.amount,
       categoryId: input.categoryId,
       date: input.date.dateOnly,
-      accountId: resolveAccountId(s, input.accountId),
+      accountId: input.splits.length > 1 ? input.splits.first.accountId : resolveAccountId(s, input.accountId),
+      splits: input.splits.length > 1 ? List.unmodifiable(input.splits) : const [],
       channel: cleanChannel(input.channel),
       counterparty: input.counterparty,
       note: input.note,
@@ -160,13 +227,22 @@ class CreateTransactionAction extends FinancialAction<TransactionInput, Transact
       updatedAt: now,
     );
     await env.repos.transactions.save(tx);
-    await extendTrackingStart(env, tx.date, accountIds: [tx.accountId]);
+    await extendTrackingStart(env, tx.date, accountIds: tx.legs.map((l) => l.accountId));
     return Result.ok(tx);
   }
 }
 
-extension on TransactionInput {
+extension TransactionInputDraft on TransactionInput {
   bool get isExpense => type == TransactionType.expense;
+
+  /// This input as a throwaway transaction, for balance checks.
+  Transaction draft(String fallbackAccountId) => draftTransaction(
+    type: type,
+    amount: amount,
+    date: date.dateOnly,
+    accountId: accountId ?? fallbackAccountId,
+    splits: splits,
+  );
 }
 
 class UpdateTransactionInput extends ActionInput {
@@ -225,6 +301,13 @@ class UpdateTransactionAction extends FinancialAction<UpdateTransactionInput, Tr
     }
     final errors = validateTransaction(input.data, s, existing: existing);
     if (errors.isNotEmpty) return Result.err(AppFailure.validation(errors.values.first, fields: errors));
+    final short = transactionOverdraft(
+      s,
+      add: [input.data.draft(existing.accountId)],
+      remove: {existing.id},
+      canSplit: input.data.isExpense && input.data.splits.isEmpty,
+    );
+    if (short != null) return Result.err(short);
     return Result.ok(
       preview(
         input,
@@ -245,7 +328,8 @@ class UpdateTransactionAction extends FinancialAction<UpdateTransactionInput, Tr
       amount: d.amount,
       categoryId: d.categoryId,
       date: d.date.dateOnly,
-      accountId: d.accountId ?? existing.accountId,
+      accountId: d.splits.length > 1 ? d.splits.first.accountId : (d.accountId ?? existing.accountId),
+      splits: d.splits.length > 1 ? List.unmodifiable(d.splits) : const [],
       channel: () => cleanChannel(d.channel),
       counterparty: () => d.counterparty,
       note: () => d.note,
@@ -253,7 +337,7 @@ class UpdateTransactionAction extends FinancialAction<UpdateTransactionInput, Tr
       version: existing.version + 1,
     );
     await env.repos.transactions.save(updated);
-    await extendTrackingStart(env, updated.date, accountIds: [updated.accountId]);
+    await extendTrackingStart(env, updated.date, accountIds: updated.legs.map((l) => l.accountId));
     return Result.ok(updated);
   }
 }
@@ -296,6 +380,8 @@ class DeleteTransactionAction extends FinancialAction<DeleteTransactionInput, Tr
         ),
       );
     }
+    final short = transactionOverdraft(s, remove: {t.id}, field: 'id');
+    if (short != null) return Result.err(short);
     return Result.ok(
       preview(
         input,
@@ -335,6 +421,7 @@ Transaction buildLinkedTransaction({
   required TransactionOrigin origin,
   required String originRefId,
   required String accountId,
+  List<AccountLeg> splits = const [],
   String? channel,
   String? counterparty,
   String? note,
@@ -346,7 +433,8 @@ Transaction buildLinkedTransaction({
     amount: amount,
     categoryId: categoryId,
     date: date.dateOnly,
-    accountId: accountId,
+    accountId: splits.length > 1 ? splits.first.accountId : accountId,
+    splits: splits.length > 1 ? List.unmodifiable(splits) : const [],
     channel: cleanChannel(channel),
     counterparty: counterparty,
     note: note,

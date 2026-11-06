@@ -4,6 +4,7 @@ import '../../../core/money/money_format.dart';
 import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../../finance/overdraft.dart';
 import '../../accounts/domain/money_account.dart';
 import '../domain/financial_profile.dart';
 
@@ -104,6 +105,19 @@ class UpdateProfileAction extends FinancialAction<UpdateProfileInput, FinancialP
       PreviewLine('Tracking since', DateFormats.dayMonthYear.format(input.openingDate)),
       if (input.monthlyIncomeEstimate != null) PreviewLine('Monthly income estimate', input.monthlyIncomeEstimate!.format()),
     ];
+    if (balanceChange && existing != null) {
+      final date = input.openingDate.dateOnly;
+      final short = overdraftFailure(
+        s,
+        profile: s.profile?.copyWith(openingBalance: input.openingBalance, openingDate: date),
+        accounts: [
+          for (final a in s.accounts)
+            if (a.id == cashAccountId) a.copyWith(opening: input.openingBalance, openingDate: date) else a,
+        ],
+        field: 'openingBalance',
+      );
+      if (short != null) return Result.err(short);
+    }
     final warnings = <String>[];
     if (balanceChange && existing != null) {
       final newCash = _cashWith(s, input);

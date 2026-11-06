@@ -13,7 +13,7 @@ import '../../kit/kit.dart';
 /// only when this transaction or its category changes (the category is
 /// selected individually).
 class TransactionRow extends ConsumerWidget {
-  const TransactionRow({super.key, required this.transaction, this.onTap, this.showDate = false});
+  const TransactionRow({super.key, required this.transaction, this.onTap, this.showDate = false, this.forAccount});
 
   final Transaction transaction;
 
@@ -23,6 +23,10 @@ class TransactionRow extends ConsumerWidget {
   /// Show the date in the subtitle (for lists not grouped by date).
   final bool showDate;
 
+  /// In an account's list: show only the part of a split payment that
+  /// moved through this account.
+  final String? forAccount;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = transaction;
@@ -31,12 +35,17 @@ class TransactionRow extends ConsumerWidget {
     final category = ref.watch(categoryProvider(t.categoryId));
     final title = t.displayTitle ?? category?.name ?? 'Transaction';
     final date = showDate ? DateFormatsX.short(t.date) : null;
+    final part = t.isSplit && forAccount != null ? t.amountOn(forAccount!) : t.amount;
     final subtitle = [
       if (t.displayTitle != null && category != null) category.name,
+      if (t.isSplit)
+        forAccount != null
+            ? 'Part of ${AmountVisibility.hiddenOf(context) ? MoneyFormatter.masked : AmountText.formatted(t.amount)}'
+            : 'Split · ${t.legs.length} accounts',
       ?date,
     ].join(', ');
-    final amount = t.isIncome ? t.amount : -t.amount;
-    final spoken = AmountVisibility.hiddenOf(context) ? 'amount hidden' : MoneyFormatter.spoken(t.amount);
+    final amount = t.isIncome ? part : -part;
+    final spoken = AmountVisibility.hiddenOf(context) ? 'amount hidden' : MoneyFormatter.spoken(part);
     return LedgerRow(
       leading: CategoryMark(category: category),
       title: title,

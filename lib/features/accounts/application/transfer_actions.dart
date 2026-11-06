@@ -4,6 +4,7 @@ import '../../../core/money/money_format.dart';
 import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../../finance/overdraft.dart';
 import '../../settings/application/tracking_start.dart';
 import '../domain/transfer.dart';
 import 'account_support.dart';
@@ -86,14 +87,16 @@ List<PreviewLine> _lines(TransferInput i, FinanceSnapshot s) => [
       const PreviewLine('Income / spending', 'Not affected'),
     ];
 
-List<String> _warnings(TransferInput i, FinanceSnapshot s, {Transfer? replacing}) {
-  final from = s.account(i.fromAccountId);
-  if (from == null || from.isLiability) return const [];
-  var bal = s.balance.balanceOf(from.id) ?? Money.zero;
-  if (replacing != null && replacing.fromAccountId == from.id) bal += replacing.amount;
-  if (i.amount > bal) return ['${from.name} has ${bal.format()}; this would overdraw it.'];
-  return const [];
-}
+/// This input as a throwaway transfer, for balance checks.
+Transfer _draft(TransferInput i) => Transfer(
+      id: '_draft',
+      fromAccountId: i.fromAccountId,
+      toAccountId: i.toAccountId,
+      amount: i.amount,
+      date: i.date.dateOnly,
+      createdAt: i.date,
+      updatedAt: i.date,
+    );
 
 class CreateTransferAction extends FinancialAction<TransferInput, Transfer> {
   const CreateTransferAction();
@@ -117,13 +120,14 @@ class CreateTransferAction extends FinancialAction<TransferInput, Transfer> {
   Result<ActionPreview> prepare(TransferInput input, FinanceSnapshot s, ActionEnvironment env) {
     final errors = validateTransfer(input, s);
     if (errors.isNotEmpty) return Result.err(AppFailure.validation(errors.values.first, fields: errors));
+    final short = transferOverdraft(s, add: [_draft(input)]);
+    if (short != null) return Result.err(short);
     return Result.ok(preview(
       input,
       title: 'Transfer',
       summary: 'Moved ${input.amount.format()} from ${s.account(input.fromAccountId)?.name ?? '—'} '
           'to ${s.account(input.toAccountId)?.name ?? '—'}',
       lines: _lines(input, s),
-      warnings: _warnings(input, s),
     ));
   }
 
@@ -192,12 +196,13 @@ class UpdateTransferAction extends FinancialAction<UpdateTransferInput, Transfer
     }
     final errors = validateTransfer(input.data, s, existing: existing);
     if (errors.isNotEmpty) return Result.err(AppFailure.validation(errors.values.first, fields: errors));
+    final short = transferOverdraft(s, add: [_draft(input.data)], remove: {existing.id});
+    if (short != null) return Result.err(short);
     return Result.ok(preview(
       input,
       title: 'Save changes',
       summary: 'Updated transfer to ${input.data.amount.format()}',
       lines: _lines(input.data, s),
-      warnings: _warnings(input.data, s, replacing: existing),
     ));
   }
 
@@ -251,6 +256,8 @@ class DeleteTransferAction extends FinancialAction<DeleteTransferInput, Transfer
   Result<ActionPreview> prepare(DeleteTransferInput input, FinanceSnapshot s, ActionEnvironment env) {
     final t = s.transfers.where((x) => x.id == input.id).firstOrNull;
     if (t == null) return const Result.err(AppFailure.notFound('This transfer no longer exists.'));
+    final short = transferOverdraft(s, remove: {t.id}, field: 'id');
+    if (short != null) return Result.err(short);
     return Result.ok(preview(
       input,
       title: 'Delete transfer?',

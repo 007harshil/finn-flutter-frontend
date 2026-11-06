@@ -5,6 +5,7 @@ import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../domain/repositories.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../../finance/overdraft.dart';
 import '../../accounts/application/account_support.dart';
 import '../../categories/domain/category.dart';
 import '../../transactions/application/transaction_actions.dart';
@@ -560,6 +561,7 @@ class SettlePendingInput extends ActionInput {
     required this.amount,
     required this.date,
     this.accountId,
+    this.splits = const [],
     this.channel,
     this.recordCashMovement = true,
     this.note,
@@ -571,6 +573,10 @@ class SettlePendingInput extends ActionInput {
   /// Account the money moved through (default account when omitted) and the
   /// optional free-text channel. Only used with [recordCashMovement].
   final String? accountId;
+
+  /// Paid from several accounts: parts (two or more) adding up to [amount].
+  /// Still one transaction. Empty when one account carries it all.
+  final List<AccountLeg> splits;
   final String? channel;
 
   /// When true, a linked income/expense transaction is created so the cash
@@ -585,6 +591,7 @@ class SettlePendingInput extends ActionInput {
         'amount': Out.money(amount),
         'date': Out.date(date),
         'accountId': accountId,
+        if (splits.isNotEmpty) 'splits': encodeAccountSplits(splits),
         'channel': channel,
         'recordCashMovement': recordCashMovement,
         'note': note,
@@ -608,6 +615,8 @@ class SettlePendingAction extends FinancialAction<SettlePendingInput, PendingSet
           ActionFieldSpec('amount', FieldKind.money, 'Amount settled now (≤ outstanding)'),
           ActionFieldSpec('date', FieldKind.date, 'Settlement date'),
           ActionFieldSpec('accountId', FieldKind.id, 'Account the money moved through (default account when omitted)', required: false),
+          ActionFieldSpec('splits', FieldKind.string,
+              'Optional: pay from several accounts, a list of {accountId, amount} adding up to amount', required: false),
           ActionFieldSpec('channel', FieldKind.string, 'Optional channel, e.g. UPI, NEFT (up to 30 characters)', required: false),
           ActionFieldSpec('recordCashMovement', FieldKind.boolean, 'Create the matching cash transaction (default true)', required: false),
           ActionFieldSpec('note', FieldKind.string, 'Reference', required: false),
@@ -620,6 +629,7 @@ class SettlePendingAction extends FinancialAction<SettlePendingInput, PendingSet
         amount: In.money(j, 'amount'),
         date: In.date(j, 'date'),
         accountId: In.strOpt(j, 'accountId'),
+        splits: decodeAccountSplits(j),
         channel: In.strOpt(j, 'channel'),
         recordCashMovement: In.boolean(j, 'recordCashMovement', fallback: true),
         note: In.strOpt(j, 'note'),
@@ -641,15 +651,36 @@ class SettlePendingAction extends FinancialAction<SettlePendingInput, PendingSet
     if (input.amount > v.outstanding) e['amount'] = 'Only ${v.outstanding.format()} is outstanding.';
     if (input.date.dateOnly.isAfter(s.today)) e['date'] = 'The date cannot be in the future.';
     if (input.date.dateOnly.isBefore(v.payment.createdDate)) e['date'] = 'The date is before this item was created.';
+    final owe = v.payment.direction == PendingDirection.iOwe;
     if (input.recordCashMovement) {
-      final accountErr = accountWriteError(s, input.accountId ?? s.defaultAccountId);
-      if (accountErr != null) e['accountId'] = accountErr;
+      if (input.splits.isEmpty) {
+        final accountErr = accountWriteError(s, input.accountId ?? s.defaultAccountId);
+        if (accountErr != null) e['accountId'] = accountErr;
+      } else {
+        final splitErr = accountSplitError(s, input.amount, input.splits);
+        if (splitErr != null) e['splits'] = splitErr;
+      }
       final channelErr = channelError(input.channel);
       if (channelErr != null) e['channel'] = channelErr;
     }
     if (e.isNotEmpty) return Result.err(AppFailure.validation(e.values.first, fields: e));
+    if (input.recordCashMovement) {
+      final short = transactionOverdraft(
+        s,
+        add: [
+          draftTransaction(
+            type: owe ? TransactionType.expense : TransactionType.income,
+            amount: input.amount,
+            date: input.date.dateOnly,
+            accountId: input.accountId ?? s.defaultAccountId,
+            splits: input.splits,
+          ),
+        ],
+        canSplit: owe && input.splits.isEmpty,
+      );
+      if (short != null) return Result.err(short);
+    }
 
-    final owe = v.payment.direction == PendingDirection.iOwe;
     final remaining = v.outstanding - input.amount;
     final warnings = <String>[];
     if (owe && input.recordCashMovement && input.amount > s.balance.available) {
@@ -671,7 +702,10 @@ class SettlePendingAction extends FinancialAction<SettlePendingInput, PendingSet
         PreviewLine('This settlement', input.amount.format(), emphasis: true),
         PreviewLine('Remaining after', remaining.format()),
         PreviewLine('Cash balance', cashLine),
-        if (input.recordCashMovement) PreviewLine('Account', s.account(input.accountId ?? s.defaultAccountId)?.name ?? '—'),
+        if (input.recordCashMovement && input.splits.length > 1)
+          for (final l in input.splits) PreviewLine(s.account(l.accountId)?.name ?? '—', l.amount.format())
+        else if (input.recordCashMovement)
+          PreviewLine('Account', s.account(input.accountId ?? s.defaultAccountId)?.name ?? '—'),
       ],
       warnings: warnings,
       basis: {'v': v.payment.version, 'settled': v.settled.paise},
@@ -693,12 +727,13 @@ class SettlePendingAction extends FinancialAction<SettlePendingInput, PendingSet
         origin: TransactionOrigin.pendingSettlement,
         originRefId: v.payment.id,
         accountId: input.accountId ?? s.defaultAccountId,
+        splits: input.splits,
         channel: input.channel,
         counterparty: v.payment.counterparty,
         note: 'Settlement · ${v.payment.purpose}',
       );
       await env.repos.transactions.save(tx);
-      await extendTrackingStart(env, tx.date, accountIds: [tx.accountId]);
+      await extendTrackingStart(env, tx.date, accountIds: tx.legs.map((l) => l.accountId));
     }
     final settlement = PendingSettlement(
       id: env.ids.next('set'),

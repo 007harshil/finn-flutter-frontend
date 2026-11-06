@@ -4,6 +4,7 @@
 // persistence, backup/export, and will be the starting point for API
 // mappers when a backend is introduced (see docs/BACKEND_INTEGRATION.md).
 
+import '../../core/money/money.dart';
 import '../../core/persistence/entity_collection.dart';
 import '../../core/persistence/json_utils.dart';
 import '../../core/time/dates.dart';
@@ -40,6 +41,9 @@ abstract final class TransactionDto {
         'categoryId': t.categoryId,
         'date': J.date(t.date),
         'accountId': t.accountId,
+        'accountSplits': t.isSplit
+            ? [for (final l in t.splits) {'accountId': l.accountId, 'amountPaise': J.money(l.amount)}]
+            : null,
         'channel': t.channel,
         'counterparty': t.counterparty,
         'note': t.note,
@@ -66,10 +70,22 @@ abstract final class TransactionDto {
         note: j['note'] as String?,
         origin: J.enumByName(TransactionOrigin.values, j['origin'], TransactionOrigin.manual),
         originRefId: j['originRefId'] as String?,
+        splits: accountLegsFromJson(j['accountSplits']),
         createdAt: J.toInstant(j['createdAt']),
         updatedAt: J.toInstant(j['updatedAt']),
         version: (j['version'] as num?)?.toInt() ?? 1,
       );
+}
+
+/// Split legs from JSON (`[{accountId, amountPaise}]`); empty unless two or more.
+List<AccountLeg> accountLegsFromJson(Object? raw) {
+  if (raw is! List) return const [];
+  final legs = [
+    for (final e in raw.whereType<Map>())
+      if (e['accountId'] is String && num.tryParse('${e['amountPaise']}') != null)
+        AccountLeg(e['accountId'] as String, Money.fromPaise(num.parse('${e['amountPaise']}').toInt())),
+  ];
+  return legs.length > 1 ? List.unmodifiable(legs) : const [];
 }
 
 abstract final class CategoryDto {

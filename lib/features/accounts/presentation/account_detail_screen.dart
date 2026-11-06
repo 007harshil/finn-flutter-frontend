@@ -193,7 +193,7 @@ class _BodyState extends ConsumerState<_Body> {
     final transfers = ref.watch(transfersProvider).value ?? const <Transfer>[];
     final all = <_Movement>[
       for (final t in txs)
-        if (t.accountId == id) _Movement.tx(t),
+        if (t.touches(id)) _Movement.tx(t),
       for (final t in transfers)
         if (t.fromAccountId == id || t.toAccountId == id) _Movement.transfer(t),
     ];
@@ -235,6 +235,7 @@ class _BodyState extends ConsumerState<_Body> {
                                 key: ValueKey('tx-${m.tx!.id}'),
                                 transaction: m.tx!,
                                 showDate: true,
+                                forAccount: a.id,
                               )
                             else
                               _TransferRow(

@@ -4,6 +4,7 @@ import '../../../core/money/money_format.dart';
 import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../../finance/overdraft.dart';
 import '../../loans/domain/loan.dart';
 import '../../pending/domain/pending_payment.dart';
 import '../domain/money_account.dart';
@@ -139,7 +140,7 @@ List<PreviewLine> _lines(AccountInput i, FinanceSnapshot s) => [
     ];
 
 bool _hasMovements(FinanceSnapshot s, String accountId) =>
-    s.transactions.any((t) => t.accountId == accountId) ||
+    s.transactions.any((t) => t.touches(accountId)) ||
     s.transfers.any((t) => t.fromAccountId == accountId || t.toAccountId == accountId);
 
 /// What deleting an account removes (transactions, transfers, set-aside
@@ -154,7 +155,7 @@ class _AccountRecords {
   });
 
   factory _AccountRecords.of(FinanceSnapshot s, String accountId) => _AccountRecords(
-        transactions: s.transactions.where((t) => t.accountId == accountId).length,
+        transactions: s.transactions.where((t) => t.touches(accountId)).length,
         transfers: s.transfers.where((t) => t.fromAccountId == accountId || t.toAccountId == accountId).length,
         savings: s.savingsMovements.where((m) => m.accountId == accountId).length,
         subscriptions: s.subscriptions.where((x) => x.accountId == accountId).length,
@@ -300,6 +301,17 @@ class UpdateAccountAction extends FinancialAction<UpdateAccountInput, MoneyAccou
           '${input.data.kind.isLiability ? 'a credit card' : 'a non-credit account'}.';
     }
     if (errors.isNotEmpty) return Result.err(AppFailure.validation(errors.values.first, fields: errors));
+    final changed = existing.copyWith(
+      kind: input.data.kind,
+      opening: input.data.openingBalance,
+      openingDate: (input.data.openingDate ?? existing.openingDate).dateOnly,
+    );
+    final short = overdraftFailure(
+      s,
+      accounts: [for (final x in s.accounts) x.id == existing.id ? changed : x],
+      field: 'openingBalance',
+    );
+    if (short != null) return Result.err(short);
     return Result.ok(preview(
       input,
       title: 'Save changes',
@@ -408,7 +420,7 @@ class SetAccountBalanceAction extends FinancialAction<SetAccountBalanceInput, Mo
     final a = s.account(input.id);
     if (a == null) return const Result.err(AppFailure.notFound('This account no longer exists.'));
     final e = <String, String>{};
-    if (input.balance.isNegative && a.isLiability) e['balance'] = 'Enter zero or more.';
+    if (input.balance.isNegative) e['balance'] = 'Enter zero or more.';
     if (input.balance.paise.abs() > maxAccountAmount.paise) e['balance'] = 'That amount looks too large. Please check it.';
     if (input.asOf != null && input.asOf!.dateOnly.isAfter(s.today)) e['asOf'] = 'The date cannot be in the future.';
     if (e.isEmpty && _newOpening(input, a, s).opening.isNegative) {
@@ -584,6 +596,14 @@ class DeleteAccountAction extends FinancialAction<AccountIdInput, MoneyAccount> 
     if (!a.isArchived && !s.activeAccounts.any((x) => x.id != a.id)) {
       return const Result.err(AppFailure.validation('You need at least one active account.'));
     }
+    final short = overdraftFailure(
+      s,
+      accounts: [for (final x in s.accounts) if (x.id != a.id) x],
+      transactions: [for (final t in s.transactions) if (!t.touches(a.id)) t],
+      transfers: [for (final t in s.transfers) if (t.fromAccountId != a.id && t.toAccountId != a.id) t],
+      field: 'id',
+    );
+    if (short != null) return Result.err(short);
     final n = _AccountRecords.of(s, a.id);
     String plural(int count, String word) => '$count $word${count == 1 ? '' : 's'}';
     final unlinked = [
@@ -622,7 +642,7 @@ class DeleteAccountAction extends FinancialAction<AccountIdInput, MoneyAccount> 
   Future<Result<MoneyAccount>> execute(AccountIdInput input, FinanceSnapshot s, ActionEnvironment env) async {
     final a = s.account(input.id)!;
     final now = env.clock.now();
-    final txIds = {for (final t in s.transactions) if (t.accountId == a.id) t.id};
+    final txIds = {for (final t in s.transactions) if (t.touches(a.id)) t.id};
     // Keep loans, loan payments, settlements and subscriptions; only unlink them.
     for (final l in s.loans) {
       if (txIds.contains(l.disbursementTransactionId)) {

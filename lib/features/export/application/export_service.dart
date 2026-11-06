@@ -188,7 +188,7 @@ class ExportService {
             for (final t in transactionsFor(s, r))
               [
                 d(t.date), t.type.label, Csv.text(cat(t.categoryId)), amt(t.amount), fmt(t.amount),
-                amt(t.signedAmount), Csv.text(acct(t.accountId)), Csv.text(t.channel), Csv.text(t.counterparty), Csv.text(t.note),
+                amt(t.signedAmount), Csv.text(t.isSplit ? [for (final l in t.legs) '${acct(l.accountId)} ${fmt(l.amount)}'].join(' + ') : acct(t.accountId)), Csv.text(t.channel), Csv.text(t.counterparty), Csv.text(t.note),
                 t.origin.label, t.id,
               ],
           ]);

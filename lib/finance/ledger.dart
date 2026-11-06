@@ -142,14 +142,18 @@ class LedgerCalculator {
     bool counts(MoneyAccount a, DateTime d) => !d.isAfter(to) && !d.isBefore(a.openingDate.dateOnly);
 
     for (final t in transactions) {
-      final a = byId[legacy ? cashAccountId : t.accountId];
-      if (a == null || !counts(a, t.date)) continue;
-      flow[a.id] = flow[a.id]! + t.signedAmount.paise;
-      if (!a.isLiability) {
-        if (t.isIncome) {
-          inflow += t.amount.paise;
-        } else {
-          outflow += t.amount.paise;
+      // A payment split across accounts counts each part on its account.
+      for (final leg in t.legs) {
+        final a = byId[legacy ? cashAccountId : leg.accountId];
+        if (a == null || !counts(a, t.date)) continue;
+        final paise = leg.amount.paise;
+        flow[a.id] = flow[a.id]! + (t.isIncome ? paise : -paise);
+        if (!a.isLiability) {
+          if (t.isIncome) {
+            inflow += paise;
+          } else {
+            outflow += paise;
+          }
         }
       }
     }
@@ -231,7 +235,9 @@ class LedgerCalculator {
     bool within(DateTime d) => !d.isBefore(lo) && !d.isAfter(hi);
     var flow = 0;
     for (final t in transactions) {
-      if (t.accountId == accountId && within(t.date)) flow += t.signedAmount.paise;
+      if (!within(t.date)) continue;
+      final part = t.amountOn(accountId).paise;
+      flow += t.isIncome ? part : -part;
     }
     for (final tr in transfers) {
       if (!within(tr.date)) continue;
@@ -317,7 +323,9 @@ class CashFlowCalculator {
       } else {
         expense += t.amount.paise;
         cat[t.categoryId] = (cat[t.categoryId] ?? 0) + t.amount.paise;
-        account[t.accountId] = (account[t.accountId] ?? 0) + t.amount.paise;
+        for (final leg in t.legs) {
+          account[leg.accountId] = (account[leg.accountId] ?? 0) + leg.amount.paise;
+        }
         final ch = t.channel;
         if (ch != null && ch.isNotEmpty) channel[ch] = (channel[ch] ?? 0) + t.amount.paise;
       }

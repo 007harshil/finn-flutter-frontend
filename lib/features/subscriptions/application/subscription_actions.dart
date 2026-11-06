@@ -5,6 +5,7 @@ import '../../../core/result/result.dart';
 import '../../../core/time/dates.dart';
 import '../../../core/time/frequency.dart';
 import '../../../finance/finance_snapshot.dart';
+import '../../../finance/overdraft.dart';
 import '../../accounts/application/account_support.dart';
 import '../../categories/domain/category.dart';
 import '../../transactions/application/transaction_actions.dart';
@@ -500,6 +501,10 @@ class MarkSubscriptionPaidAction extends FinancialAction<MarkSubscriptionPaidInp
     final r = plan(input, s);
     if (r case Err(:final failure)) return Result.err(failure);
     final p = (r as Ok<SubscriptionPaymentPlan>).value;
+    final short = transactionOverdraft(s, add: [
+      draftTransaction(type: TransactionType.expense, amount: p.amount, date: p.date, accountId: p.accountId),
+    ]);
+    if (short != null) return Result.err(short);
     final warnings = <String>[
       if (p.amount > s.balance.available) 'This is more than your available balance of ${s.balance.available.format()}.',
       if (p.amount != p.subscription.amount)
@@ -540,7 +545,7 @@ class MarkSubscriptionPaidAction extends FinancialAction<MarkSubscriptionPaidInp
       note: SubscriptionSchedule.paymentNote(sub, p.cycle),
     );
     await env.repos.transactions.save(tx);
-    await extendTrackingStart(env, tx.date, accountIds: [tx.accountId]);
+    await extendTrackingStart(env, tx.date, accountIds: tx.legs.map((l) => l.accountId));
     try {
       await env.repos.subscriptions.save(sub.copyWith(
         nextDueDate: p.nextDueDate,

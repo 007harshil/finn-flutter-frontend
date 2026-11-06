@@ -28,6 +28,25 @@ enum TransactionOrigin {
   bool get isLinked => this != TransactionOrigin.manual;
 }
 
+/// One account's part of a transaction: how much of the amount moved
+/// through [accountId]. A payment split across accounts has several legs
+/// that add up to the transaction amount.
+@immutable
+class AccountLeg {
+  const AccountLeg(this.accountId, this.amount);
+
+  final String accountId;
+
+  /// Always positive; direction is the transaction's type.
+  final Money amount;
+
+  @override
+  bool operator ==(Object other) => other is AccountLeg && other.accountId == accountId && other.amount == amount;
+
+  @override
+  int get hashCode => Object.hash(accountId, amount);
+}
+
 /// A completed movement of cash into or out of the user's money.
 ///
 /// Projections (upcoming subscription charges), obligations (pending
@@ -49,6 +68,7 @@ class Transaction {
     this.note,
     this.origin = TransactionOrigin.manual,
     this.originRefId,
+    this.splits = const [],
     this.version = 1,
   });
 
@@ -62,8 +82,14 @@ class Transaction {
   /// Calendar date the money moved.
   final DateTime date;
 
-  /// The money account this movement hit (see `MoneyAccount`).
+  /// The money account this movement hit (see `MoneyAccount`). For a
+  /// payment split across accounts, the first leg's account.
   final String accountId;
+
+  /// Parts of a payment split across two or more accounts (they add up to
+  /// [amount]); empty when one account carried all of it. Still one
+  /// transaction: one entry in Activity, budgets and analytics.
+  final List<AccountLeg> splits;
 
   /// Optional free-text sub-type: UPI, IMPS, NEFT, Cheque, ATM …
   final String? channel;
@@ -84,6 +110,18 @@ class Transaction {
   bool get isIncome => type == TransactionType.income;
   bool get isExpense => type == TransactionType.expense;
   bool get isLinked => origin.isLinked;
+
+  bool get isSplit => splits.length > 1;
+
+  /// Every account this transaction moved money through, with its part.
+  List<AccountLeg> get legs => isSplit ? splits : [AccountLeg(accountId, amount)];
+
+  /// Whether any part of this transaction hit [account].
+  bool touches(String account) => legs.any((l) => l.accountId == account);
+
+  /// The part of [amount] that moved through [account] (zero when none).
+  Money amountOn(String account) =>
+      Money.sum([for (final l in legs) if (l.accountId == account) l.amount]);
 
   /// Signed cash effect: positive inflow, negative outflow.
   Money get signedAmount => isIncome ? amount : -amount;
@@ -108,6 +146,7 @@ class Transaction {
     String? Function()? channel,
     String? Function()? counterparty,
     String? Function()? note,
+    List<AccountLeg>? splits,
     DateTime? updatedAt,
     int? version,
   }) {
@@ -123,6 +162,7 @@ class Transaction {
       note: note != null ? note() : this.note,
       origin: origin,
       originRefId: originRefId,
+      splits: splits ?? this.splits,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,

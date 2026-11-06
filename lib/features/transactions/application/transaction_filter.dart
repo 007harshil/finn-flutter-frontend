@@ -403,7 +403,7 @@ abstract final class TransactionQuery {
     final amount = filter.amount;
     if (amount != null && !amount.contains(t.amount)) return false;
     if (filter.accountIds.isNotEmpty &&
-        !filter.accountIds.contains(t.accountId))
+        !t.legs.any((l) => filter.accountIds.contains(l.accountId)))
       return false;
     if (filter.channels.isNotEmpty &&
         !filter.channels.any(
