@@ -130,3 +130,11 @@ NEXT: review remaining screens in after/ screenshots (goals, loans, pending, set
 - Prompt `2026-11-06.1` (hash `75054696` pinned in `agent_hardening_test.dart`): `parts` field + example. Golden set 71 cases (+ `split_payment_cash_card`, `settle_shared_blocked`, `hi_split_payment`); grader supports `{"count": n}`. Tests `test/agent/agent_split_payments_test.dart`; `plan_test` updated for the shared-settle rule.
 - Agent mark (`agent_logo.dart`): indigo rounded-square key on its edge, "F" ledger strokes over a double total rule, marigold spark. `AgentOrb` API unchanged; spinning sweep ring/halo replaced by a marigold outline trace (idle laps fade in/out, faint outline while active, breathing halo while listening, still outline under reduced motion).
 - Backend: no code change needed (accepts `splits`, returns `insufficientFunds` with the same field/hint). Live Supabase (xeqhygypqyyyoortalod) on 2026-11-06 had `finn_split_payments` + `finn_agent_quality` applied but NOT `20261106090000_finn_settle_only_owed.sql` (settlements_insert still uses `can_access_pending`). Apply it via SQL editor / MCP, not `supabase db push` (remote migration versions differ from local file names).
+
+## Perf / security / agent-latency hardening (2026-11-06)
+- Branch `hardening/perf-security` (app) and `security/next-16.4.5` (finn-backend, not pushed/deployed). Full record: `docs/HARDENING.md` (architecture, research checklist, findings, baseline numbers, open decisions).
+- Done: offline cache written only when it changed, once per sync run (`83b2d71`); `AgentTrace` per-stage agent timing, logged in debug/profile only, live golden eval stores per-stage p50/p90 (`ce1b739`); backend `next` 16.4.5 (critical RCE fix).
+- Agent baseline: `docs/agent-benchmarks/golden_eval_baseline.json` — accuracy normal 100 / edge 93 / Hinglish 100 / adversarial 100 %; model call 1425 ms p50 = >95 % of agent time; app stages < 15 ms; 2,446 input tokens (95 % cached), 33 output.
+- Baseline app tests: 821 pass, 2 skip, 2 known fails (`accounts_ui_test` archive hint, `loans_ui_test` "are locked" — helper text removed earlier).
+- No Android device/emulator: on-device profiling not done (user chose proxy metrics).
+- NEXT: wait for user decisions listed at the end of `docs/HARDENING.md` / last chat report; then run `flutter build apk --analyze-size` for size baseline.
