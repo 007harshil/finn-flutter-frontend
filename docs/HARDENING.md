@@ -70,6 +70,13 @@ Production adds (measured from India with curl): new connection DNS+TCP+TLS 110�
 
 Conclusion: >95 % of agent time is the OpenAI call itself. Prompt size, parsing, data loading and the UI are not the bottleneck. Output is 33 tokens, so streaming or trimming output cannot help.
 
-## Decisions needed
+## Decisions (user, 2026-11-06) — next work, in this order
 
-See the final report in chat; recorded here when answered.
+1. **Encrypt the offline cache: YES.** Add `cryptography` (AES-GCM 256). Random key generated once, stored in `flutter_secure_storage` (same options as `SecureSessionStore`, own key name). `SyncEngine._persist` stores `{"v":2,"n":nonce,"c":ciphertext,"m":mac}` (base64); `open` decrypts. Migration: a plaintext cache (old format, starts with `{"cursor"`) is read once and re-saved encrypted. If the key is missing/unreadable or decryption fails: discard the cache (it is re-downloaded by the next sync), never crash. Sign-out (`close`) also deletes the key. Keep encode/decrypt cost in mind (measure at 10k rows; if > ~16 ms move encrypt+encode into `Isolate.run`). Tests: round trip, migration from plaintext, wrong/missing key → empty + resync, other user's cache never readable, sign-out removes key.
+2. **App-switcher privacy only (screenshots stay allowed).** Android: `MainActivity` → `setRecentsScreenshotEnabled(false)` on API 33+ (below 33 there is no equivalent without FLAG_SECURE; leave as is). iOS: cover the window with a blur/brand view in `sceneWillResignActive` / `applicationWillResignActive`, remove on active (AppDelegate/SceneDelegate). No Dart change.
+3. **Agent warm-up on open: YES** (only this speed-up). When agent mode opens (`agentModeProvider` true, remote mode, consent given), fire one `OPTIONS /api/v1/agent/completions` through the shared `http.Client` (no auth, no body), at most once per ~60 s, errors ignored. Verify the route's `preflight()` runs in the same function as POST. Measure: cold first-request time before/after with curl, and rerun the 71-case live eval (`FINN_LIVE=1 FINN_GOLDEN_REPORT=golden_eval_after flutter test test/agent/live/golden_eval_test.dart`) to confirm accuracy ≥ baseline.
+4. **nodemailer 7 → 10: YES** on finn-backend branch `security/next-16.4.5`; fix API changes in `server/mail/`, run `npx vitest run` (460 tests). Do not deploy.
+
+Not chosen: local spending answers, OpenAI priority tier, Vercel always-warm, screenshot blocking.
+
+Then: `flutter build apk --release --analyze-size` (size baseline/after), full `flutter test`, final prose report.

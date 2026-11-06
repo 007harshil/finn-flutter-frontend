@@ -137,4 +137,4 @@ NEXT: review remaining screens in after/ screenshots (goals, loans, pending, set
 - Agent baseline: `docs/agent-benchmarks/golden_eval_baseline.json` — accuracy normal 100 / edge 93 / Hinglish 100 / adversarial 100 %; model call 1425 ms p50 = >95 % of agent time; app stages < 15 ms; 2,446 input tokens (95 % cached), 33 output.
 - Baseline app tests: 821 pass, 2 skip, 2 known fails (`accounts_ui_test` archive hint, `loans_ui_test` "are locked" — helper text removed earlier).
 - No Android device/emulator: on-device profiling not done (user chose proxy metrics).
-- NEXT: wait for user decisions listed at the end of `docs/HARDENING.md` / last chat report; then run `flutter build apk --analyze-size` for size baseline.
+- NEXT: user decided (see `docs/HARDENING.md` "Decisions"): 1) encrypt offline cache, 2) app-switcher privacy only, 3) agent warm-up on open, 4) nodemailer 10. Do them in that order, then size build, full tests, final report.
