@@ -39,6 +39,27 @@ android {
         versionName = flutter.versionName
     }
 
+    // Package only the ABIs Flutter was asked to build (--target-platform). Otherwise
+    // plugin .so files leak e.g. an x86_64 folder with no libflutter.so/libapp.so, and
+    // Play would serve a crashing APK to x86_64 devices. abiFilters cannot do this: the
+    // Flutter Gradle plugin resets them to all ABIs, so exclude at packaging instead.
+    val flutterAbis = mapOf(
+        "android-arm" to "armeabi-v7a",
+        "android-arm64" to "arm64-v8a",
+        "android-x64" to "x86_64",
+    )
+    val targetAbis = (project.findProperty("target-platform") as String?)
+        ?.split(",")
+        ?.mapNotNull { flutterAbis[it.trim()] }
+        .orEmpty()
+    if (targetAbis.isNotEmpty()) {
+        packaging {
+            jniLibs {
+                (flutterAbis.values - targetAbis.toSet()).forEach { excludes += "lib/$it/**" }
+            }
+        }
+    }
+
     // The UI is English-only: drop the translated strings bundled by AndroidX.
     androidResources {
         localeFilters += listOf("en")
