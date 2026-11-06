@@ -122,6 +122,8 @@ void main() {
 
       final accept = find.byKey(const ValueKey('agent-consent-accept'));
       await tester.scrollUntilVisible(accept, 200);
+      await tester.ensureVisible(accept);
+      await tester.pumpAndSettle();
       await tester.tap(accept);
       await tester.pumpAndSettle();
       expect(container.read(settingsProvider).agentConsent, isTrue);

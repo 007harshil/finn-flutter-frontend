@@ -106,7 +106,7 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
     final borrowed = [for (final l in items) if (l.loan.isBorrowed) l];
     final lent = [for (final l in items) if (!l.loan.isBorrowed) l];
     Widget panel(List<LoanState> list) => LedgerPanel(
-      dividerIndent: Sp.lg + 40 + Sp.md + 2,
+      dividerIndent: Khata.textX,
       children: [for (final l in list) _LoanRow(key: ValueKey(l.loan.id), state: l)],
     );
     if (borrowed.isEmpty || lent.isEmpty) {

@@ -32,7 +32,7 @@ class AttentionSection extends ConsumerWidget {
         actionLabel: alerts.length > maxShown ? 'See all' : null,
         onAction: () => context.push(AppRoutes.alerts),
         child: LedgerPanel(
-          dividerIndent: Sp.lg + 40 + Sp.md + 2,
+          dividerIndent: Khata.textX,
           children: [
             for (final a in alerts.take(maxShown))
               LedgerRow(
@@ -121,7 +121,7 @@ class _UpcomingSectionState extends ConsumerState<UpcomingSection> {
               const SizedBox(height: Sp.md),
             ],
             LedgerPanel(
-              dividerIndent: Sp.lg + 40 + Sp.md + 2,
+              dividerIndent: Khata.textX,
               children: [
                 for (final i in shown)
                   LedgerRow(

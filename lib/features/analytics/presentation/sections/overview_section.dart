@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/money/money.dart';
@@ -10,17 +9,16 @@ import '../../domain/analytics.dart';
 import '../insight_widgets.dart';
 
 /// Overview: what was spent in the period with money in and kept beside
-/// it, a three-line health check, what stands out, and one row per topic
-/// that jumps straight to its chip.
+/// it, a three-line health check and what stands out. Topics are reached
+/// from the chips above.
 List<Widget> overviewSection(InsightsData data) => [
       _Hero(data: data),
       _HealthCheck(data: data),
       if (data.insights.isNotEmpty) _StandsOut(insights: data.insights),
-      _Explore(data: data),
     ];
 
 /// Indent that lines row dividers up with the text after a 40pt well.
-const double _rowIndent = Sp.lg + 40 + Sp.md + 2;
+const double _rowIndent = Khata.textX;
 
 class _Hero extends StatelessWidget {
   const _Hero({required this.data});
@@ -252,93 +250,6 @@ class _StandsOut extends StatelessWidget {
               titleLines: 3,
               subtitle: maskAmounts(i.body, hidden),
               subtitleLines: 4,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One row per topic: its key number, tap to open that chip.
-class _Explore extends ConsumerWidget {
-  const _Explore({required this.data});
-  final InsightsData data;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = context.type;
-    String m(Money x, {bool compact = true}) => moneyText(context, x, compact: compact);
-
-    final topCat = data.categories.isEmpty ? null : data.categories.first;
-    final topMethod = data.accountSpend.isEmpty ? null : data.accountSpend.first;
-    final net = data.current.net;
-    final active = data.budgetsActive;
-    final rows = <(InsightsSection, String, String)>[
-      (
-        InsightsSection.spending,
-        data.hasActivity ? '${m(data.dailyBurn)}/day' : 'No spending',
-        'Average daily spend',
-      ),
-      (
-        InsightsSection.cashFlow,
-        data.current.income.isZero && data.current.expense.isZero
-            ? 'No activity'
-            : '${net.isNegative ? '−' : '+'}${m(net.abs())}',
-        net.isNegative ? 'Spent more than earned' : 'Kept after spending',
-      ),
-      (
-        InsightsSection.categories,
-        topCat == null ? 'No spending' : topCat.name,
-        topCat == null ? 'Biggest spend' : 'Biggest spend, ${formatBps(topCat.shareBps, decimals: 0)}',
-      ),
-      (
-        InsightsSection.payments,
-        topMethod == null ? 'No payments' : topMethod.name,
-        topMethod == null
-            ? 'How you pay'
-            : 'Used for ${formatBps(topMethod.amount.ratioBps(data.current.expense) ?? 0, decimals: 0)}',
-      ),
-      (
-        InsightsSection.budgets,
-        active == 0 ? 'Not set' : '${active - data.budgetsOver} of $active',
-        active == 0 ? 'Create a budget' : 'Budgets on track',
-      ),
-      (
-        InsightsSection.savings,
-        data.savings.isEmpty || data.savings.last.value.isZero ? 'Nothing yet' : m(data.savings.last.value),
-        'Set aside for goals',
-      ),
-      (
-        InsightsSection.loans,
-        data.debt.isEmpty || data.debt.last.value.isZero ? 'No loans' : m(data.debt.last.value),
-        'Still owed',
-      ),
-      (
-        InsightsSection.subscriptions,
-        data.activeSubscriptionCount == 0 ? 'None' : '${m(data.subscriptionsMonthly)}/mo',
-        data.activeSubscriptionCount == 0 ? 'Recurring payments' : '${data.activeSubscriptionCount} active',
-      ),
-    ];
-
-    return LedgerSection(
-      title: 'Explore by topic',
-      child: LedgerPanel(
-        dividerIndent: _rowIndent,
-        children: [
-          for (final (section, value, hint) in rows)
-            LedgerRow(
-              key: Key('insights-explore:${section.name}'),
-              leading: IconWell(icon: section.icon),
-              title: section.label,
-              subtitle: hint,
-              subtitleLines: 2,
-              trailing: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 120),
-                child: Text(value, style: t.figure, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.end),
-              ),
-              chevron: true,
-              semanticLabel: '${section.label}: $value, $hint. Open ${section.label}',
-              onTap: () => ref.read(insightsSectionProvider.notifier).select(section),
             ),
         ],
       ),

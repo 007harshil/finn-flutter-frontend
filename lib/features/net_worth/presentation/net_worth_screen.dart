@@ -231,7 +231,7 @@ class _AssetsSection extends StatelessWidget {
             const SizedBox(height: Sp.md),
           ],
           LedgerPanel(
-            dividerIndent: Sp.lg + 40 + Sp.md + 2,
+            dividerIndent: Khata.textX,
             children: [for (final r in view.assets) _AssetTile(key: ValueKey(r.asset.id), row: r)],
           ),
         ],

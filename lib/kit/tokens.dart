@@ -336,23 +336,44 @@ extension AnekWidth on TextStyle {
   TextStyle wide([double w = 112]) => withWidth(w);
 }
 
-/// 4-point spacing.
+/// 4-point spacing, sized for phones: tight enough that a screen shows
+/// real content above the fold, never below the 8 px touch gap.
 abstract final class Sp {
   static const double xs = 4;
   static const double sm = 8;
-  static const double md = 12;
-  static const double lg = 16;
-  static const double xl = 24;
-  static const double xxl = 32;
+  static const double md = 10;
+  static const double lg = 12;
+  static const double xl = 16;
+  static const double xxl = 24;
 
   /// Horizontal page margin.
-  static const double gutter = 20;
+  static const double gutter = 16;
 
   /// Space between page sections.
-  static const double section = 32;
+  static const double section = 20;
 
   /// Widest the content column grows on tablets.
   static const double maxWidth = 560;
+}
+
+/// Bahi ledger geometry, shared by [LedgerRow], panel dividers, khata month
+/// headers and the red margin line so they can never drift apart.
+abstract final class Khata {
+  /// Row inset from the panel edge.
+  static const double inset = Sp.lg;
+
+  /// The icon column (an `IconWell`/`CategoryMark` at its default size).
+  static const double lead = 40;
+
+  /// Space between the icon column and the row text.
+  static const double gap = Sp.lg;
+
+  /// Where row text starts; dividers and headers align here.
+  static const double textX = inset + lead + gap;
+
+  /// Left stroke of the red double margin line, centred in [gap]
+  /// (two 1.2 px strokes, 3 px apart).
+  static const double margin = inset + lead + gap / 2 - 2.1;
 }
 
 abstract final class Rad {

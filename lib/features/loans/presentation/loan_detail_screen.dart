@@ -94,25 +94,16 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
   }
 }
 
-class _Body extends StatefulWidget {
+class _Body extends StatelessWidget {
   const _Body({required this.state});
 
   final LoanState state;
 
   @override
-  State<_Body> createState() => _BodyState();
-}
-
-class _BodyState extends State<_Body> {
-  static const _collapsedRows = 6;
-  bool _showAllSchedule = false;
-
-  @override
   Widget build(BuildContext context) {
-    final s = widget.state;
+    final s = state;
     final l = s.loan;
     final next = s.nextDue;
-    final schedule = _showAllSchedule ? s.schedule : s.schedule.take(_collapsedRows).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -136,34 +127,7 @@ class _BodyState extends State<_Body> {
             child: LedgerSection(
               title: 'Upcoming schedule',
               count: s.schedule.length,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _ScheduleColumns(rows: s.schedule.take(12).toList()),
-                  const SizedBox(height: Sp.md),
-                  LedgerPanel(
-                    khata: true,
-                    dividerIndent: 0,
-                    children: [
-                      for (final r in schedule)
-                        _ScheduleRowTile(key: ValueKey('row-${r.number}'), row: r, today: s.today),
-                    ],
-                  ),
-                  if (s.schedule.length > _collapsedRows) ...[
-                    const SizedBox(height: Sp.sm),
-                    Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: LedgerButton(
-                        label: _showAllSchedule ? 'Show less' : 'Show all ${s.schedule.length}',
-                        icon: _showAllSchedule ? LucideIcons.chevronUp : LucideIcons.chevronDown,
-                        variant: LedgerButtonVariant.quiet,
-                        small: true,
-                        onPressed: () => setState(() => _showAllSchedule = !_showAllSchedule),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+              child: _ScheduleColumns(rows: s.schedule.take(12).toList()),
             ),
           ),
         PageColumn(
@@ -178,7 +142,7 @@ class _BodyState extends State<_Body> {
                   )
                 : LedgerPanel(
                     khata: true,
-                    dividerIndent: 70,
+                    dividerIndent: Khata.textX,
                     children: [for (final p in s.payments) _PaymentRow(key: ValueKey(p.id), payment: p, loan: l)],
                   ),
           ),
@@ -225,8 +189,6 @@ class _BodyState extends State<_Body> {
                 text: '${s.periodsPaid} of ${l.tenureInstallments ?? 0}',
                 icon: LucideIcons.listChecks,
               ),
-              if (!s.isClosed && s.remainingInstallments != null)
-                StatTile.text(label: 'Remaining', text: '${s.remainingInstallments} left', icon: LucideIcons.hourglass),
             ],
             if (end != null && !s.isClosed)
               StatTile.text(
@@ -451,29 +413,6 @@ class _NextDueCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ScheduleRowTile extends StatelessWidget {
-  const _ScheduleRowTile({super.key, required this.row, required this.today});
-
-  final ScheduleRow row;
-  final DateTime today;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.ink;
-    final t = context.type;
-    final overdue = row.dueDate.isBefore(today);
-    return LedgerRow(
-      title: '${DateFormats.dayMonthYear.format(row.dueDate)}${overdue ? ', overdue' : ''}',
-      subtitle:
-          '#${row.number}, ${maskedAmount(context, row.interest)} interest, ${maskedAmount(context, row.principal)} principal',
-      subtitleColor: overdue ? c.red : null,
-      subtitleLines: 2,
-      trailing: AmountText(row.payment, style: t.figure),
-      trailingSub: Text('${maskedAmount(context, row.balanceAfter)} after', style: t.small),
     );
   }
 }

@@ -21,7 +21,7 @@ abstract final class Space {
   static const double gutter = 16;
 
   /// Gap between dashboard sections.
-  static const double section = 28;
+  static const double section = 20;
 
   /// Bottom padding that clears the navigation bar and FAB.
   static const double bottomClearance = 112;

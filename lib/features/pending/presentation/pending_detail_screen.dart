@@ -20,7 +20,7 @@ import 'pending_ui.dart';
 enum _Menu { edit, remind, writeOff, delete }
 
 /// One pending item: what is left and how much is settled, the one thing
-/// to do next (settle), then the split it belongs to, the shared side, the
+/// to do next (settle), then the split it belongs to, the
 /// details and the settlement history.
 class PendingDetailScreen extends ConsumerStatefulWidget {
   const PendingDetailScreen({super.key, required this.id});
@@ -146,7 +146,6 @@ class _Body extends StatelessWidget {
         PageColumn(top: Sp.lg, child: _Hero(view: v)),
         if (split case final split?)
           PageColumn(top: Sp.section, child: PendingSplitSection(split: split, currentId: p.id)),
-        if (p.isShared) PageColumn(top: Sp.section, child: _Shared(view: v)),
         PageColumn(top: Sp.lg, child: _Details(view: v)),
         PageColumn(top: Sp.section, child: _History(view: v)),
       ],
@@ -246,110 +245,6 @@ class _Hero extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Shared on FiNN
-// ---------------------------------------------------------------------------
-
-/// Double entry made visible: who added the shared item and what the other
-/// person's FiNN shows right now, with a check that both sides agree.
-class _Shared extends ConsumerWidget {
-  const _Shared({required this.view});
-
-  final PendingView view;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.ink;
-    final t = context.type;
-    final p = view.payment;
-    final link = p.link!;
-    final first = p.counterparty.split(' ').first;
-    final mirror = ref.watch(mirrorProvider(link));
-    final theirs = mirror?.view(view.today);
-    final inStep = theirs != null && theirs.outstanding == view.outstanding && theirs.status == view.status;
-    return LedgerSection(
-      key: const ValueKey('pending-shared-card'),
-      title: 'Shared on FiNN',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          LedgerPanel(
-            dividerIndent: Sp.lg + 40 + Sp.md + 2,
-            children: [
-              LedgerRow(
-                leading: const IconWell(icon: LucideIcons.link2),
-                title: link.handle,
-                subtitle: link.createdByMe ? 'Added by you' : 'Added by $first',
-              ),
-              if (theirs == null)
-                const LedgerRow(
-                  leading: IconWell(icon: LucideIcons.refreshCw),
-                  title: 'Waiting to sync',
-                )
-              else
-                LedgerRow(
-                  key: const ValueKey('pending-their-side'),
-                  leading: PendingInitials(name: p.counterparty),
-                  title: theirs.payment.direction.sentence(theirs.payment.counterparty),
-                  subtitle: inStep ? 'Both sides match' : 'Syncing with $first',
-                  subtitleColor: inStep ? c.green : c.amber,
-                  trailing: AmountText(theirs.outstanding, style: t.figure),
-                  chevron: true,
-                  semanticLabel: 'On $first’s FiNN: ${theirs.payment.direction.sentence(theirs.payment.counterparty)}. '
-                      '${inStep ? 'Both sides match' : 'Syncing'}. Opens their side.',
-                  onTap: () => showFinnSheet<void>(
-                    context,
-                    builder: (_) => _TheirSideSheet(mirror: mirror!, today: view.today, name: first),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Read-only view of the mirrored entry, as the other person sees it.
-class _TheirSideSheet extends StatelessWidget {
-  const _TheirSideSheet({required this.mirror, required this.today, required this.name});
-
-  final MirrorEntry mirror;
-  final DateTime today;
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.type;
-    final v = mirror.view(today);
-    return FinnSheetScaffold(
-      title: '$name’s FiNN',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          LedgerPanel(children: [PendingRow(view: v)]),
-          const SizedBox(height: Sp.md),
-          Text(pendingAgeSentence(v), style: t.label),
-          if (v.settlements.isNotEmpty) ...[
-            const SizedBox(height: Sp.xl),
-            Text('Settlements on their side', style: t.labelStrong),
-            const SizedBox(height: Sp.sm),
-            LedgerPanel(
-              children: [
-                for (final s in v.settlements)
-                  LedgerRow(
-                    title: DateFormats.dayMonthYear.format(s.date),
-                    trailing: AmountText(s.amount, style: t.figure),
-                  ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Details and history
 // ---------------------------------------------------------------------------
 
@@ -409,7 +304,7 @@ class _History extends StatelessWidget {
           ? const LedgerEmpty(icon: LucideIcons.hourglass, title: 'Nothing settled yet')
           : LedgerPanel(
               khata: true,
-              dividerIndent: Sp.lg + 40 + Sp.md + 2,
+              dividerIndent: Khata.textX,
               children: [
                 for (final s in v.settlements)
                   _SettlementRow(

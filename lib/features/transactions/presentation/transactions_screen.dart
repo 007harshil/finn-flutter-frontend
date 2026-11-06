@@ -24,7 +24,7 @@ import 'widgets/activity_summary.dart';
 const int _pageSize = 60;
 
 /// Hairline indent between rows: lines up with the row text.
-const double _rowIndent = Sp.lg + 40 + Sp.md + 2;
+const double _rowIndent = Khata.textX;
 
 /// Height of the page title block; past it, content runs under the
 /// pinned filters and they get a hairline edge.
@@ -558,9 +558,9 @@ class _DayHeader extends StatelessWidget {
           children: [
             // In the khata margin, centred over the rows' 40 px icon tiles.
             Padding(
-              padding: const EdgeInsets.only(left: Sp.lg),
+              padding: const EdgeInsets.only(left: Khata.inset),
               child: SizedBox(
-                width: 40,
+                width: Khata.lead,
                 child: Text(
                   '${date.day}',
                   textAlign: TextAlign.center,
@@ -568,7 +568,7 @@ class _DayHeader extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: Sp.md + 2 + 8),
+            const SizedBox(width: Khata.gap),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

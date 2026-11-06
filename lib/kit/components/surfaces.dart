@@ -220,7 +220,7 @@ class LedgerSection extends StatelessWidget {
 /// White panel with a hairline edge, 14 px corners, no shadow.
 /// Holds rows; never nested.
 class LedgerPanel extends StatelessWidget {
-  const LedgerPanel({super.key, required this.children, this.dividerIndent = Sp.lg, this.padding, this.khata = false});
+  const LedgerPanel({super.key, required this.children, this.dividerIndent = Khata.inset, this.padding, this.khata = false});
 
   final List<Widget> children;
 
@@ -259,7 +259,10 @@ class LedgerPanel extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: khata
-          ? CustomPaint(painter: _MarginPainter(c.khataMargin), child: Material(type: MaterialType.transparency, child: column))
+          ? CustomPaint(
+              painter: _MarginPainter(c.khataMargin),
+              child: KhataScope(child: Material(type: MaterialType.transparency, child: column)),
+            )
           : column,
     );
   }
@@ -274,13 +277,24 @@ class _MarginPainter extends CustomPainter {
     final p = Paint()
       ..color = color
       ..strokeWidth = 1.2;
-    const x = 60.0;
+    const x = Khata.margin;
     canvas.drawLine(const Offset(x, 0), Offset(x, size.height), p);
     canvas.drawLine(const Offset(x + 3, 0), Offset(x + 3, size.height), p);
   }
 
   @override
   bool shouldRepaint(_MarginPainter old) => old.color != color;
+}
+
+/// Marks content drawn on khata paper, so rows without an icon can keep
+/// their text clear of the margin line.
+class KhataScope extends InheritedWidget {
+  const KhataScope({super.key, required super.child});
+
+  static bool of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<KhataScope>() != null;
+
+  @override
+  bool updateShouldNotify(KhataScope oldWidget) => false;
 }
 
 class LedgerDivider extends StatelessWidget {

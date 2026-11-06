@@ -229,7 +229,7 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
             LedgerPanel(
               khata: true,
               // Align hairlines with the row text (padding + 40pt mark + gap).
-              dividerIndent: Sp.lg + 40 + Sp.md + 2,
+              dividerIndent: Khata.textX,
               children: [
                 for (final tx in shown)
                   KeyedSubtree(key: ValueKey(tx.id), child: TransactionRow(transaction: tx, showDate: true)),

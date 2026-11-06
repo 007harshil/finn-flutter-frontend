@@ -41,7 +41,7 @@ void main() {
     await settle(tester);
 
     await openMenu(tester);
-    await tester.tap(find.byKey(const ValueKey('profile-entry')));
+    await tester.tap(find.byKey(const ValueKey('menu:Profile')));
     await tester.pumpAndSettle();
     expect(find.byType(ProfileScreen), findsOneWidget);
 

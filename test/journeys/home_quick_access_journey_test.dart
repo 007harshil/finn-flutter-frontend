@@ -9,18 +9,29 @@ import 'journey_helpers.dart';
 String _location(WidgetTester tester) => GoRouter.of(tester.element(find.byType(Navigator).first)).state.uri.path;
 
 void main() {
-  testWidgets('home quick-access tiles sit in a 3 × 2 grid and open their module', (tester) async {
+  testWidgets('home quick-access tiles sit in a 3-column grid and open their module', (tester) async {
     final env = await TestEnv.create();
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
 
-    await scrollTo(tester, find.byKey(const ValueKey('quick-tile:Insights')));
+    await scrollTo(tester, find.byKey(const ValueKey('quick-tile:Net worth')));
     final pos = {
-      for (final name in ['Loans & EMIs', 'Pending payments', 'Emergency fund', 'Goals', 'Timeline', 'Insights'])
+      for (final name in [
+        'Loans & EMIs',
+        'Pending payments',
+        'Emergency fund',
+        'Goals',
+        'Timeline',
+        'Insights',
+        'Subscriptions',
+        'Friends',
+        'Net worth',
+      ])
         name: tester.getCenter(find.byKey(ValueKey('quick-tile:$name'))),
     };
     // Loans, pending, emergency fund on the first row; goals, timeline,
-    // insights on the second, left to right.
+    // insights on the second; subscriptions, friends, net worth on the
+    // third, left to right.
     final names = pos.keys.toList();
     for (var i = 0; i < names.length; i++) {
       final row = i ~/ 3;
@@ -35,6 +46,9 @@ void main() {
       'Emergency fund': AppRoutes.emergencyFund,
       'Timeline': AppRoutes.timeline,
       'Insights': AppRoutes.analytics,
+      'Subscriptions': AppRoutes.subscriptions,
+      'Friends': AppRoutes.friends,
+      'Net worth': AppRoutes.netWorth,
     };
     for (final MapEntry(key: name, value: route) in routes.entries) {
       await scrollAndTap(tester, find.byKey(ValueKey('quick-tile:$name')));

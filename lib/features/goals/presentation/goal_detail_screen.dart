@@ -424,7 +424,7 @@ class _History extends StatelessWidget {
                 for (final e in groups.entries) ...[
                   // Month header inside the one panel: month and its net.
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(70, Sp.md, Sp.lg, Sp.sm),
+                    padding: const EdgeInsets.fromLTRB(Khata.textX, Sp.md, Khata.inset, Sp.sm),
                     child: Row(
                       children: [
                         Expanded(

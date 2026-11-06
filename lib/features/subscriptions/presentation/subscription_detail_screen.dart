@@ -214,7 +214,7 @@ class _Body extends ConsumerWidget {
                 ? const LedgerEmpty(icon: LucideIcons.receipt, title: 'No payments yet')
                 : LedgerPanel(
                     khata: true,
-                    dividerIndent: Sp.lg + 40 + Sp.md + 2,
+                    dividerIndent: Khata.textX,
                     children: [
                       for (final p in d.payments)
                         TransactionRow(

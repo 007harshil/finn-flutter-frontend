@@ -409,7 +409,7 @@ class _Welcome extends ConsumerWidget {
         LedgerSection(
           title: 'Try saying',
           child: LedgerPanel(
-            dividerIndent: Sp.lg + 40 + Sp.md + 2,
+            dividerIndent: Khata.textX,
             children: [
               for (final (icon, text) in examples)
                 LedgerRow(

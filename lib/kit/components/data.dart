@@ -6,6 +6,7 @@ import '../../design_system/motion/motion.dart';
 import '../../features/categories/domain/category.dart';
 import '../../shared/presentation/category_icons.dart';
 import '../tokens.dart';
+import 'surfaces.dart' show KhataScope;
 
 /// Square icon tile (soft corners). Monochrome by default; pass [color] only when the
 /// colour means something (overdue, over the limit).
@@ -101,11 +102,14 @@ class LedgerRow extends StatelessWidget {
     final tr = trailing;
     final trs = trailingSub;
     final bl = below;
+    // On khata paper a row without an icon still starts its text after the
+    // red margin line, level with the rows that have one.
+    final start = lead == null && KhataScope.of(context) ? Khata.textX : Khata.inset;
     final body = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md + 2),
+      padding: EdgeInsetsDirectional.fromSTEB(start, Sp.md, Khata.inset, Sp.md),
       child: Row(
         children: [
-          if (lead != null) ...[lead, const SizedBox(width: Sp.md + 2)],
+          if (lead != null) ...[lead, const SizedBox(width: Khata.gap)],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -174,9 +178,9 @@ class LedgerRow extends StatelessWidget {
                       HapticFeedback.mediumImpact();
                       onLongPress!();
                     },
-              child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 60), child: body),
+              child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 56), child: body),
             )
-          : MergeSemantics(child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 60), child: body)),
+          : MergeSemantics(child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 56), child: body)),
     );
   }
 }

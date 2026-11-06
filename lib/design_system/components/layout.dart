@@ -9,7 +9,7 @@ extension BottomClearanceX on BuildContext {
   /// Bottom scroll padding below the last item. The shell's navigation bar
   /// is solid (the body ends above it), so only the system inset and a
   /// little breathing room are needed.
-  double get bottomClearance => MediaQuery.paddingOf(this).bottom + Space.x8;
+  double get bottomClearance => MediaQuery.paddingOf(this).bottom + Space.x6;
 }
 
 /// Fades and slides its child up once, delayed by `index * stagger`.

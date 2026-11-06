@@ -7,8 +7,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../kit/kit.dart';
 import 'more_screen.dart';
 
-/// Side drawer holding what used to be the "More" tab: profile, money
-/// modules, insights and account settings. Every destination closes the
+/// Side drawer with the account menu: profile, settings, categories and
+/// export. Money modules are on the home "More" grid. Every destination closes the
 /// drawer before navigating so the page opens on a clean screen.
 class MoreDrawer extends StatelessWidget {
   const MoreDrawer({super.key});
@@ -39,7 +39,7 @@ class MoreDrawer extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.xl - 4, Sp.sm, Sp.sm, 0),
+              padding: const EdgeInsets.fromLTRB(Sp.gutter, Sp.xs, Sp.xs, 0),
               child: Row(
                 children: [
                   Expanded(
@@ -56,7 +56,7 @@ class MoreDrawer extends StatelessWidget {
             Expanded(
               child: ListView(
                 key: const PageStorageKey<String>('app-drawer'),
-                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.xl),
+                padding: const EdgeInsets.fromLTRB(Sp.gutter, Sp.sm, Sp.gutter, Sp.xl),
                 children: const [MoreMenu(open: _open)],
               ),
             ),

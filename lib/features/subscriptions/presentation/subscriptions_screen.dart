@@ -266,7 +266,7 @@ class _List extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => LedgerPanel(
-    dividerIndent: Sp.lg + 40 + Sp.md + 2,
+    dividerIndent: Khata.textX,
     children: [
       for (final s in items)
         KeyedSubtree(

@@ -103,7 +103,7 @@ class PendingSplitSection extends StatelessWidget {
           ),
           const SizedBox(height: Sp.lg),
           LedgerPanel(
-            dividerIndent: Sp.lg + 40 + Sp.md + 2,
+            dividerIndent: Khata.textX,
             children: [
               if (s.split.includesMe)
                 LedgerRow(

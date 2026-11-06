@@ -13,7 +13,7 @@ class LedgerPanelSlice extends StatelessWidget {
     required this.child,
     this.first = false,
     this.last = false,
-    this.dividerIndent = Sp.lg,
+    this.dividerIndent = Khata.inset,
     this.khata = false,
   });
 
@@ -22,7 +22,7 @@ class LedgerPanelSlice extends StatelessWidget {
   /// Bahi ledger paper: warm fill, ruled edges and the red double margin
   /// line at [khataMargin] (between the icon column and the text).
   final bool khata;
-  static const khataMargin = 60.0;
+  static const khataMargin = Khata.margin;
 
   /// Opens the panel: rounded top edge, no divider above.
   final bool first;
@@ -59,7 +59,7 @@ class LedgerPanelSlice extends StatelessWidget {
                   padding: EdgeInsetsDirectional.only(start: dividerIndent),
                   child: Container(height: 1, color: khata ? c.khataRule : c.line),
                 ),
-              child,
+              if (khata) KhataScope(child: child) else child,
             ],
           ),
         ),

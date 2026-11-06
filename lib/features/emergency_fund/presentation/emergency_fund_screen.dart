@@ -229,7 +229,6 @@ class _PlanSection extends StatelessWidget {
                 amount: s.target,
                 icon: LucideIcons.flag,
               ),
-              StatTile.money(label: 'Monthly expenses', amount: plan.essentialMonthlyExpenses, icon: LucideIcons.receipt),
               s.remaining.isPositive
                   ? StatTile.money(label: 'To go', amount: s.remaining, icon: LucideIcons.hourglass, color: c.amber)
                   : StatTile.text(label: 'To go', text: 'Target reached', icon: LucideIcons.circleCheck, color: c.green),
@@ -285,7 +284,7 @@ class _History extends StatelessWidget {
               children: [
                 for (final e in groups.entries) ...[
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(70, Sp.md, Sp.lg, Sp.sm),
+                    padding: const EdgeInsets.fromLTRB(Khata.textX, Sp.md, Khata.inset, Sp.sm),
                     child: Row(
                       children: [
                         Expanded(

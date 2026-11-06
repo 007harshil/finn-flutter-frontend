@@ -37,12 +37,15 @@ void main() {
     expect(find.textContaining('of every ₹100 you earned'), findsOneWidget);
     expect(find.text('Avg income'), findsOneWidget);
 
-    // An overview tile jumps straight to its topic.
+    // Overview no longer repeats the topics as a list; the chips are the way in.
     await tester.ensureVisible(find.byKey(const Key('insights-chip:overview')));
     await tester.tap(find.byKey(const Key('insights-chip:overview')));
     await tester.pumpAndSettle();
     expect(find.text('Money health check'), findsOneWidget);
-    await scrollAndTap(tester, find.byKey(const Key('insights-explore:budgets')));
+    expect(find.text('Explore by topic'), findsNothing);
+    await tester.ensureVisible(find.byKey(const Key('insights-chip:budgets')));
+    await tester.tap(find.byKey(const Key('insights-chip:budgets')));
+    await tester.pumpAndSettle();
     expect(find.text('Money health check'), findsNothing);
     expect(find.textContaining('Tick = today'), findsOneWidget);
 

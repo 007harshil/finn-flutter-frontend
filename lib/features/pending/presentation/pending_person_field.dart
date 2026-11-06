@@ -130,6 +130,15 @@ class _PendingPersonFieldState extends ConsumerState<PendingPersonField> {
       for (final u in friends)
         if (_matches(u, _query)) u,
     ];
+    // A recent name that is also a friend shows once, as the friend: the
+    // friend chip links the item, the plain name would not.
+    final friendNames = {for (final u in friends) u.name.trim().toLowerCase()};
+    final recents = [
+      for (final n in widget.recentNames)
+        if (!friendNames.contains(n.trim().toLowerCase())) n,
+    ];
+    final both = friends.isNotEmpty && recents.isNotEmpty;
+    final t = context.type;
     return MotionAnimatedSize(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -150,6 +159,10 @@ class _PendingPersonFieldState extends ConsumerState<PendingPersonField> {
           ] else ...[
             if (friends.isNotEmpty) ...[
               const SizedBox(height: Sp.sm),
+              if (both) ...[
+                Text('Friends', style: t.small),
+                const SizedBox(height: Sp.xs),
+              ],
               Wrap(
                 spacing: Sp.sm,
                 runSpacing: Sp.sm,
@@ -167,13 +180,17 @@ class _PendingPersonFieldState extends ConsumerState<PendingPersonField> {
               const SizedBox(height: Sp.sm),
               _NoFriends(onOpen: () => context.push(AppRoutes.friends)),
             ],
-            if (widget.recentNames.isNotEmpty) ...[
-              const SizedBox(height: Sp.sm),
+            if (recents.isNotEmpty) ...[
+              const SizedBox(height: Sp.md),
+              if (both) ...[
+                Text('Recent', style: t.small),
+                const SizedBox(height: Sp.xs),
+              ],
               Wrap(
                 spacing: Sp.sm,
                 runSpacing: Sp.sm,
                 children: [
-                  for (final n in widget.recentNames)
+                  for (final n in recents)
                     LedgerChip(
                       label: n,
                       icon: LucideIcons.history,

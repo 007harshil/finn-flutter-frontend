@@ -428,7 +428,7 @@ void main() {
     });
 
     testWidgets(
-      'detail of a shared item shows the other side and that both match',
+      'detail of a shared item no longer shows the shared-on-FiNN card',
       (tester) async {
         tester.view.physicalSize =
             const Size(400, 900) * tester.view.devicePixelRatio;
@@ -436,19 +436,8 @@ void main() {
         final v = await item('Concert tickets');
         await env.pumpWidget(tester, PendingDetailScreen(id: v.payment.id));
         await tester.pumpAndSettle();
-        final card = find.byKey(const ValueKey('pending-shared-card'));
-        await tester.scrollUntilVisible(
-          card,
-          300,
-          scrollable: find.byType(Scrollable).first,
-        );
-        expect(find.text('Added by Rahul'), findsOneWidget);
-        expect(
-          find.text('Aarav owes you'),
-          findsOneWidget,
-          reason: 'Rahul sees me owing him',
-        );
-        expect(find.text('Both sides match'), findsOneWidget);
+        expect(find.byKey(const ValueKey('pending-shared-card')), findsNothing);
+        expect(find.text('Waiting to sync'), findsNothing);
         expect(tester.takeException(), isNull);
       },
     );

@@ -120,7 +120,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
                 child: shown.isEmpty
                     ? _emptyFor(context)
                     : LedgerPanel(
-                        dividerIndent: Sp.lg + 40 + Sp.md + 2,
+                        dividerIndent: Khata.textX,
                         children: [
                           for (final g in shown)
                             GoalListRow(

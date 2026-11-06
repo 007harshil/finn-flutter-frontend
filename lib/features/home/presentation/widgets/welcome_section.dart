@@ -51,7 +51,7 @@ class SetupChecklistSection extends ConsumerWidget {
       title: 'Get set up',
       trailing: Text('${list.completed} of ${list.total} done', style: context.type.label),
       child: LedgerPanel(
-        dividerIndent: Sp.lg + 40 + Sp.md + 2,
+        dividerIndent: Khata.textX,
         children: [
           for (final step in SetupStep.values)
             LedgerRow(

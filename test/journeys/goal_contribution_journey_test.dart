@@ -20,13 +20,7 @@ void main() {
     expect(inHero(rupees(before.balance.cash)), findsOneWidget);
     expect(inHero(rupees(before.balance.earmarked)), findsOneWidget);
 
-    // Menu: note the net worth shown before.
-    await openMenu(tester);
-    expect(find.text(rupees(before.netWorth.netWorth)), findsOneWidget);
-
     // Goals tab → MacBook Pro → Add money.
-    await tester.tap(find.byTooltip('Close menu'));
-    await tester.pumpAndSettle();
     await tapTab(tester, 'Goals');
     await scrollAndTap(
       tester,
@@ -59,10 +53,8 @@ void main() {
     expect(inHero(rupees(after.balance.earmarked)), findsOneWidget);
     expect(inHero(rupees(before.balance.cash)), findsOneWidget);
     expect(inHero(rupees(before.balance.available)), findsNothing);
-
-    // Menu: net worth unchanged.
-    await openMenu(tester);
-    expect(find.text(rupees(before.netWorth.netWorth)), findsOneWidget);
+    // Net worth is unchanged (asserted on the snapshot above; the menu no
+    // longer shows it).
     expect(tester.takeException(), isNull);
   });
 }

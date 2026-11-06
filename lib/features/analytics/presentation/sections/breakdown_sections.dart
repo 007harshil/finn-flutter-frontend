@@ -10,7 +10,7 @@ import '../insight_charts.dart';
 import '../insight_widgets.dart';
 
 /// Indent that lines row dividers up with the text after a 40pt well.
-const double _rowIndent = Sp.lg + 40 + Sp.md + 2;
+const double _rowIndent = Khata.textX;
 
 // ---------------------------------------------------------------------------
 // Categories

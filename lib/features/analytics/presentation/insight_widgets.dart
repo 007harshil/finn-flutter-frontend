@@ -196,7 +196,7 @@ class InsightListSection extends StatelessWidget {
     this.actionLabel,
     this.onAction,
     this.footer,
-    this.dividerIndent = Sp.lg + 40 + Sp.md + 2,
+    this.dividerIndent = Khata.textX,
   });
 
   final String title;

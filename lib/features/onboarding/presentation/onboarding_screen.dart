@@ -324,11 +324,14 @@ class _IntroView extends StatelessWidget {
             children: [
               for (final (icon, text) in page.points)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md),
+                  padding: const EdgeInsets.symmetric(horizontal: Khata.inset, vertical: Sp.md),
                   child: Row(
                     children: [
-                      IconWell(icon: icon, size: 36, color: c.brand, background: c.surface),
-                      const SizedBox(width: Sp.md + 10),
+                      SizedBox(
+                        width: Khata.lead,
+                        child: Center(child: IconWell(icon: icon, size: 36, color: c.brand, background: c.surface)),
+                      ),
+                      const SizedBox(width: Khata.gap),
                       Expanded(child: Text(text, style: t.bodyStrong)),
                     ],
                   ),

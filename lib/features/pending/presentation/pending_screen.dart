@@ -443,7 +443,7 @@ class _List extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LedgerPanel(
-      dividerIndent: Sp.lg + 40 + Sp.md + 2,
+      dividerIndent: Khata.textX,
       children: [
         for (final e in entries)
           ...switch (e) {

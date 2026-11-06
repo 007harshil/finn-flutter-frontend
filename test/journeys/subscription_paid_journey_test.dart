@@ -19,9 +19,8 @@ void main() {
     await env.pumpApp(tester);
     await tester.pumpAndSettle();
 
-    // Menu → Subscriptions → Cult.fit Elite.
-    await openMenu(tester);
-    await scrollAndTap(tester, inDrawer(find.text('Subscriptions')));
+    // Home "More" grid → Subscriptions → Cult.fit Elite.
+    await scrollAndTap(tester, find.byKey(const ValueKey('quick-tile:Subscriptions')));
     await scrollAndTap(tester, find.descendant(of: find.byKey(ValueKey(sub.id)), matching: find.text(sub.name)));
     expect(find.textContaining(DateFormats.dayMonthYear.format(sub.nextDueDate)), findsWidgets);
 
@@ -56,6 +55,9 @@ void main() {
     final txRow = find.byKey(ValueKey(newTx.single.id));
     await scrollTo(tester, txRow);
     expect(txRow, findsOneWidget);
+    // Subscriptions was opened from the home grid, so it sits on the Home
+    // stack: the first tap returns to it, the second to the dashboard.
+    await tapTab(tester, 'Home');
     await tapTab(tester, 'Home');
     await showHero(tester);
     expect(inHero(rupees(after.balance.available)), findsOneWidget);

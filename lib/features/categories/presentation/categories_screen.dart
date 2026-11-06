@@ -45,7 +45,7 @@ class _CategoriesScreenState extends ConsumerState<CategoriesScreen> {
     final group = data[_type]!;
     final noun = _type.label.toLowerCase();
     // Panels share one divider inset: well (40) + gap.
-    const indent = Sp.lg + 40 + Sp.md + 2;
+    const indent = Khata.textX;
     Widget panel(List<TransactionCategory> list, {bool dim = false}) => LedgerPanel(
       dividerIndent: indent,
       children: [

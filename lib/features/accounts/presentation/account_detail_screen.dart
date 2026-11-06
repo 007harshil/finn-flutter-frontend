@@ -227,7 +227,7 @@ class _BodyState extends ConsumerState<_Body> {
                     children: [
                       LedgerPanel(
                         khata: true,
-                        dividerIndent: 70,
+                        dividerIndent: Khata.textX,
                         children: [
                           for (final m in visible)
                             if (m.tx != null)

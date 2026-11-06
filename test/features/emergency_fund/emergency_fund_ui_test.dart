@@ -39,7 +39,7 @@ void main() {
       final s = (await env.snapshot()).emergency;
       expect(s.level, EmergencyFundLevel.building);
       expect(find.text('Plan'), findsOneWidget);
-      expect(find.text('Monthly expenses'), findsOneWidget);
+      expect(find.text('Monthly expenses'), findsNothing);
       expect(find.text('Edit plan'), findsWidgets);
       expect(find.text('Add money'), findsOneWidget);
       expect(find.text('Withdraw'), findsOneWidget);
