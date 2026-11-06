@@ -69,14 +69,14 @@ void main() {
   });
 
   test('settling more than the outstanding amount is rejected', () async {
-    final v = await item('Concert tickets'); // ₹3,200 with ₹1,200 settled → ₹2,000 outstanding
-    expect(v.outstanding, const Money.rupees(2000));
+    final v = await item('Cab to airport'); // private, ₹780 I owe Rahul
+    final left = v.outstanding;
     final txBefore = (await env.snapshot()).transactions.length;
 
     final outcome = await _run(
       container,
       const SettlePendingAction(),
-      SettlePendingInput(pendingId: v.payment.id, amount: const Money.rupees(2500), date: testNow),
+      SettlePendingInput(pendingId: v.payment.id, amount: left + const Money.rupees(1), date: testNow),
       key: 'too-much',
     );
 
@@ -85,7 +85,7 @@ void main() {
     expect(failure.code, FailureCode.validation);
     expect(failure.fieldErrors.keys, contains('amount'));
     expect((await env.snapshot()).transactions.length, txBefore);
-    expect((await item('Concert tickets')).outstanding, const Money.rupees(2000));
+    expect((await item('Cab to airport')).outstanding, left);
   });
 
   test('recordCashMovement false settles without creating a transaction', () async {
@@ -126,12 +126,18 @@ void main() {
       await env.pumpWidget(tester, PendingDetailScreen(id: v.payment.id));
       await tester.pumpAndSettle();
       expect(find.text('Waiting'), findsOneWidget);
-      expect(find.text('Settle'), findsOneWidget);
+      // Shared, and Rahul is owed: only he can settle.
+      expect(find.text('Only Rahul can settle'), findsOneWidget);
       expect(find.textContaining('Creating this did not change your balance'), findsNothing);
       expect(find.text('₹2,000 left'), findsOneWidget, reason: 'remaining after the settlement');
       expect(tester.takeException(), isNull);
 
       await env.pumpWidget(tester, SettlePendingSheet(pendingId: v.payment.id));
+      await tester.pumpAndSettle();
+      expect(find.text('Only Rahul can settle this'), findsOneWidget);
+
+      final cab = await item('Cab to airport'); // private, I owe Rahul
+      await env.pumpWidget(tester, SettlePendingSheet(pendingId: cab.payment.id));
       await tester.pumpAndSettle();
       expect(find.textContaining('Other open items with Rahul Verma'), findsOneWidget);
       expect(tester.takeException(), isNull);

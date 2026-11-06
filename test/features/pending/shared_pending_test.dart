@@ -246,6 +246,14 @@ void main() {
         );
         expect((off as ActionRejected).failure.code, FailureCode.notPermitted);
 
+        final settle = await _run(
+          container,
+          const SettlePendingAction(),
+          SettlePendingInput(pendingId: p.id, amount: concert.outstanding, date: testNow),
+          key: 'settle-owe',
+        );
+        expect((settle as ActionRejected).failure.code, FailureCode.notPermitted);
+
         final ananya = await item(
           'Emergency cash',
         ); // I created it, she owes me
@@ -262,6 +270,58 @@ void main() {
         );
       },
     );
+
+    test('only the person owed settles, even when the payer created the item', () async {
+      final created = await _run(
+        container,
+        const CreatePendingAction(),
+        PendingInput(
+          counterparty: 'ramesh',
+          direction: PendingDirection.iOwe,
+          kind: PendingKind.borrowed,
+          amount: const Money.rupees(12000),
+          purpose: 'Rent help',
+          createdDate: testNow,
+          linkedUserId: 'u_ramesh',
+        ),
+        key: 'owe-ramesh',
+      );
+      final p = (created as ActionCompleted<PendingPayment>).value;
+      expect(p.link!.createdByMe, isTrue);
+      expect(p.canSettle, isFalse);
+      final settle = await _run(
+        container,
+        const SettlePendingAction(),
+        SettlePendingInput(pendingId: p.id, amount: const Money.rupees(12000), date: testNow),
+        key: 'owe-ramesh-settle',
+      );
+      expect((settle as ActionRejected).failure.code, FailureCode.notPermitted);
+      expect((await mirrorFor(p))!.view(testNow).outstanding, const Money.rupees(12000));
+    });
+
+    test('a private item I owe can still be settled', () async {
+      final created = await _run(
+        container,
+        const CreatePendingAction(),
+        PendingInput(
+          counterparty: 'Dhobi',
+          direction: PendingDirection.iOwe,
+          kind: PendingKind.other,
+          amount: const Money.rupees(200),
+          purpose: 'Ironing',
+          createdDate: testNow,
+        ),
+        key: 'private-owe',
+      );
+      final p = (created as ActionCompleted<PendingPayment>).value;
+      final settle = await _run(
+        container,
+        const SettlePendingAction(),
+        SettlePendingInput(pendingId: p.id, amount: const Money.rupees(200), date: testNow),
+        key: 'private-owe-settle',
+      );
+      expect(settle, isA<ActionCompleted<PendingSettlement>>());
+    });
 
     test('deleting a shared item removes it from both accounts', () async {
       final created = await _run(

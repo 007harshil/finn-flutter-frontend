@@ -57,7 +57,8 @@ class PendingLink {
   final String sharedId;
 
   /// True when this account created the item. Only the creator can edit
-  /// the details or delete it; either person can record a settlement.
+  /// the details or delete it; only the person who is owed can record a
+  /// settlement or write it off, whoever created it.
   final bool createdByMe;
 
   PendingLink flipped({required String myUserId, required String myHandle}) =>

@@ -405,7 +405,14 @@ class _List extends StatelessWidget {
       title: '${v.payment.counterparty}, ${v.payment.purpose}',
       items: [
         if (v.status.isActive)
-          FinnMenuItem(value: 0, label: owe ? 'Settle, I paid' : 'Settle, I received', icon: LucideIcons.circleCheck),
+          FinnMenuItem(
+            value: 0,
+            label: v.payment.canSettle
+                ? (owe ? 'Settle, I paid' : 'Settle, I received')
+                : 'Settle (only ${v.payment.counterparty.split(' ').first} can, they are owed)',
+            icon: LucideIcons.circleCheck,
+            enabled: v.payment.canSettle,
+          ),
         const FinnMenuItem(value: 1, label: 'Open details', icon: LucideIcons.arrowUpRight),
         if (v.status.isActive && !owe) const FinnMenuItem(value: 2, label: 'Send a reminder', icon: LucideIcons.send),
       ],
@@ -428,7 +435,7 @@ class _List extends StatelessWidget {
       grouped: grouped,
       inSplit: inSplit,
       onTap: () => context.push(AppRoutes.pendingItem(v.payment.id)),
-      onSettle: () => context.push(AppRoutes.settlePending(v.payment.id)),
+      onSettle: v.payment.canSettle ? () => context.push(AppRoutes.settlePending(v.payment.id)) : null,
       onLongPress: () => _quickActions(context, v),
     ),
   );

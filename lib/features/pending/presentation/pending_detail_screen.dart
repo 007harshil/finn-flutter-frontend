@@ -39,9 +39,9 @@ class _PendingDetailScreenState extends ConsumerState<PendingDetailScreen> {
     final p = v.payment;
     final first = p.counterparty.split(' ').first;
     // Shared items: only the creator edits or deletes; only the person who
-    // is owed can write it off.
+    // is owed can settle or write it off.
     final otherCreated = p.link != null && !p.link!.createdByMe;
-    final canWriteOff = !(p.isShared && p.direction.isOwe);
+    final canWriteOff = p.canSettle;
     final choice = await showFinnActionMenu<_Menu>(
       context,
       title: p.purpose,
@@ -217,10 +217,10 @@ class _Hero extends StatelessWidget {
             children: [
               Expanded(
                 child: LedgerButton(
-                  label: 'Settle',
+                  label: p.canSettle ? 'Settle' : 'Only ${p.counterparty.split(' ').first} can settle',
                   icon: LucideIcons.circleCheck,
                   expand: true,
-                  onPressed: () => pushThenLeave(context, AppRoutes.settlePending(p.id)),
+                  onPressed: p.canSettle ? () => pushThenLeave(context, AppRoutes.settlePending(p.id)) : null,
                 ),
               ),
               if (!p.direction.isOwe) ...[

@@ -80,6 +80,11 @@ class PendingPayment {
   bool get isShared => link != null;
   bool get isSplit => split != null;
 
+  /// Only the person who is owed can settle or write off a shared item, so
+  /// the payer can never clear it without the lender knowing. Private items
+  /// have no other side in FiNN, so the user settles them either way.
+  bool get canSettle => !(isShared && direction == PendingDirection.iOwe);
+
   PendingPayment copyWith({
     String? counterparty,
     PendingKind? kind,

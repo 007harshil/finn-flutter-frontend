@@ -493,7 +493,7 @@ class UpdatePendingAction extends FinancialAction<UpdatePendingInput, PendingPay
     final link = v.payment.link;
     if (link != null && !link.createdByMe) {
       return Result.err(AppFailure(FailureCode.notPermitted,
-          'Only ${v.payment.counterparty} can change the details of this shared item. You can still record a settlement.'));
+          'Only ${v.payment.counterparty} can change the details of this shared item.'));
     }
     if (link != null && input.data.linkedUserId != null && input.data.linkedUserId != link.userId) {
       return const Result.err(AppFailure(FailureCode.notPermitted, 'The person on a shared item cannot change.'));
@@ -632,6 +632,10 @@ class SettlePendingAction extends FinancialAction<SettlePendingInput, PendingSet
     if (!v.status.isActive) {
       return Result.err(AppFailure.validation('This item is already ${v.status.label.toLowerCase()}.'));
     }
+    if (!v.payment.canSettle) {
+      return Result.err(AppFailure(FailureCode.notPermitted,
+          'This is shared with ${v.payment.counterparty}, who is owed the money. Only they can settle it.'));
+    }
     final e = <String, String>{};
     if (!input.amount.isPositive) e['amount'] = 'Enter an amount greater than zero.';
     if (input.amount > v.outstanding) e['amount'] = 'Only ${v.outstanding.format()} is outstanding.';
@@ -749,7 +753,7 @@ class CancelPendingAction extends FinancialAction<PendingIdInput, PendingPayment
     final v = s.pendingView(input.id);
     if (v == null) return const Result.err(AppFailure.notFound('This item no longer exists.'));
     if (!v.status.isActive) return const Result.err(AppFailure.validation('This item is already closed.'));
-    if (v.payment.isShared && v.payment.direction == PendingDirection.iOwe) {
+    if (!v.payment.canSettle) {
       return Result.err(AppFailure(FailureCode.notPermitted,
           'This is shared with ${v.payment.counterparty}, who is owed the money. Only they can write it off.'));
     }

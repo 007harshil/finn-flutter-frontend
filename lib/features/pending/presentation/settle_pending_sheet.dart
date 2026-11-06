@@ -114,6 +114,7 @@ class _SettlePendingSheetState extends ConsumerState<SettlePendingSheet> {
       _amount.text = MoneyFormatter.editable(v.outstanding);
     }
     if (!v.status.isActive) return _Closed(view: v);
+    if (!v.payment.canSettle) return _OnlyLender(view: v);
 
     final today = ref.watch(todayProvider);
     final p = v.payment;
@@ -337,6 +338,27 @@ class _QuickAmounts extends StatelessWidget {
       ],
       selected: selected,
       onChanged: (i) => onPick(options[i].$2),
+    );
+  }
+}
+
+/// Shared item the user owes: only the person who is owed settles it.
+class _OnlyLender extends StatelessWidget {
+  const _OnlyLender({required this.view});
+
+  final PendingView view;
+
+  @override
+  Widget build(BuildContext context) {
+    final first = view.payment.counterparty.split(' ').first;
+    return FinnSheetScaffold(
+      title: 'Settle',
+      child: LedgerEmpty(
+        icon: LucideIcons.lock,
+        title: 'Only $first can settle this',
+        actionLabel: 'Close',
+        onAction: () => Navigator.of(context).maybePop(),
+      ),
     );
   }
 }
